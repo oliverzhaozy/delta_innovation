@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Ops Portal{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    {# Neutral brand everywhere — no unit name, pre- or post-login (CLAUDE.md). #}
+    <span class="brand">Ops Portal</span>
+    {% if current_user.is_authenticated %}
+      <nav class="topnav">
+        <a href="{{ url_for('main.dashboard') }}">Home</a>
+        <a href="{{ url_for('auth.change_password') }}">Password</a>
+        <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="linklike">Sign out</button>
+        </form>
+      </nav>
+    {% endif %}
+  </header>
+  <main class="content">
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      <p class="flash flash-{{ category }}">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

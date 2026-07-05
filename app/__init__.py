@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 
 from app.extensions import csrf, db, limiter, login_manager, migrate
 from config import get_config
@@ -23,16 +23,24 @@ def create_app(config_class=None):
     register_cli(app)
 
     from app.blueprints.auth import bp as auth_bp
+    from app.blueprints.main import bp as main_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(main_bp)
+
+    from app.domain import policy
+
+    @app.context_processor
+    def inject_policy():
+        # Templates condition nav/content on the same predicates routes enforce.
+        return {"policy": policy}
+
+    @app.errorhandler(403)
+    def forbidden(error):
+        return render_template("errors/403.html"), 403
 
     @app.route("/health")
     def health():
         return {"status": "ok"}
-
-    @app.route("/")
-    def index():
-        # Placeholder until the dashboard lands in P0.5.
-        return "Ops Portal is up."
 
     return app

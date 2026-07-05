@@ -21,7 +21,7 @@ def _safe_next(default):
 @limiter.limit("10 per minute", methods=["POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("index"))
+        return redirect(url_for("main.dashboard"))
     form = LoginForm()
     if form.validate_on_submit():
         person = (
@@ -36,7 +36,7 @@ def login():
         else:
             session.clear()  # rotate the session at the auth boundary (fixation)
             login_user(person, remember=form.remember.data)
-            return redirect(_safe_next(url_for("index")))
+            return redirect(_safe_next(url_for("main.dashboard")))
     return render_template("auth/login.html", form=form)
 
 
@@ -52,7 +52,7 @@ def change_password():
             current_user.must_change_pw = False
             db.session.commit()
             flash("Password updated.", "success")
-            return redirect(url_for("index"))
+            return redirect(url_for("main.dashboard"))
     return render_template("auth/change_password.html", form=form)
 
 

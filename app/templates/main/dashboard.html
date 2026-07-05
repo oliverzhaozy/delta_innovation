@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>{{ current_user.display_name }}</h1>
+<p class="muted">
+  {{ current_user.rank.value }} · {{ current_user.appointment.value }}
+  {%- if current_user.platoon %} · Platoon {{ current_user.platoon }}{% endif %}
+  {%- if current_user.company_role %} · {{ current_user.company_role.value }}{% endif %}
+</p>
+
+<section class="card">
+  <h2>Your tools</h2>
+  {# Role-aware placeholders; each becomes a real link as its phase ships. #}
+  <ul>
+    <li>Leave requests — Phase 1</li>
+    {% if policy.is_pc(current_user) %}
+      <li>Platoon {{ current_user.platoon }} approvals — Phase 1</li>
+    {% endif %}
+    {% if policy.can_final_approve(current_user) %}
+      <li>Final approvals — Phase 1</li>
+    {% endif %}
+    {% if policy.can_manage_ledger(current_user) %}
+      <li>OFF/OIL ledger — Phase 1</li>
+    {% endif %}
+    {% if policy.can_manage_people(current_user) %}
+      <li>People admin — Phase 1</li>
+    {% endif %}
+    {% if policy.can_view_arctic(current_user) %}
+      <li>ARCTIC FOE calendar — Phase 2</li>
+    {% endif %}
+    {% if policy.can_manage_meals(current_user) %}
+      <li>Meal counts — Phase 3</li>
+    {% endif %}
+    {% if policy.can_manage_roster(current_user) %}
+      <li>Duty roster — Phase 4</li>
+    {% endif %}
+  </ul>
+</section>
+{% endblock %}

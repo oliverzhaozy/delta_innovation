@@ -10,8 +10,10 @@ def test_health(client):
     assert resp.get_json() == {"status": "ok"}
 
 
-def test_index_serves(client):
-    assert client.get("/").status_code == 200
+def test_index_requires_login(client):
+    resp = client.get("/")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
 
 
 def test_prod_refuses_placeholder_secret(monkeypatch):
