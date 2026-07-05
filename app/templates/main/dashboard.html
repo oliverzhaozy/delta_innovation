@@ -27,7 +27,7 @@
       <li><span>OFF/OIL ledger</span><span class="tag">Phase 1</span></li>
     {% endif %}
     {% if policy.can_manage_people(current_user) %}
-      <li><span>People admin</span><span class="tag">Phase 1</span></li>
+      <li><a href="{{ url_for('admin.people') }}">People admin</a><span class="tag">Live</span></li>
     {% endif %}
     {% if policy.can_view_arctic(current_user) %}
       <li><span>ARCTIC FOE calendar</span><span class="tag">Phase 2</span></li>

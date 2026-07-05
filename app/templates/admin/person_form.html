@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ person.display_name if person else "Add person" }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ person.display_name if person else "Add person" }}</h1>
+  {% if person %}<p class="muted">@{{ person.username }}</p>{% endif %}
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.username.label }}{{ form.username() }}</p>
+  <p>{{ form.display_name.label }}{{ form.display_name() }}</p>
+  <p>{{ form.rank.label }}{{ form.rank() }}</p>
+  <p>{{ form.appointment.label }}{{ form.appointment() }}</p>
+  <p>{{ form.company_role.label }}{{ form.company_role() }}</p>
+  <p>{{ form.platoon.label }}{{ form.platoon() }}</p>
+  <p>{{ form.service.label }}{{ form.service() }}</p>
+  <p class="check">{{ form.stay_out() }} {{ form.stay_out.label }}</p>
+  <p class="check">{{ form.is_admin() }} {{ form.is_admin.label }}</p>
+  <p class="check">{{ form.is_active() }} {{ form.is_active.label }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Save</button>
+</form>
+
+{% if person %}
+<section class="card">
+  <h2>Account</h2>
+  <form action="{{ url_for('admin.person_reset_password', person_id=person.id) }}" method="post" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn secondary">Reset password</button>
+  </form>
+  <p class="muted" style="margin-top:0.6rem">Issues a temporary password (shown once) and forces a change at next login.</p>
+</section>
+{% endif %}
+{% endblock %}

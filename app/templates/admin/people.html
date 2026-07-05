@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>People</h1>
+  <p class="muted">{{ people | selectattr("is_active") | list | length }} active · total strength tracks this list.</p>
+</div>
+
+<p><a class="btn" href="{{ url_for('admin.person_new') }}">Add person</a></p>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr><th>Name</th><th>Rank</th><th>Appt</th><th>Pl</th><th>Role</th><th>Flags</th></tr>
+      </thead>
+      <tbody>
+        {% for p in people %}
+        <tr>
+          <td><a href="{{ url_for('admin.person_edit', person_id=p.id) }}">{{ p.display_name }}</a></td>
+          <td>{{ p.rank.value }}</td>
+          <td>{{ p.appointment.label }}</td>
+          <td>{{ p.platoon or "—" }}</td>
+          <td>{{ p.company_role.value if p.company_role else "—" }}</td>
+          <td>
+            {% if not p.is_active %}<span class="badge cancelled">Inactive</span>{% endif %}
+            {% if p.stay_out %}<span class="badge pending">Stay out</span>{% endif %}
+            {% if p.is_admin %}<span class="badge approved">Admin</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
