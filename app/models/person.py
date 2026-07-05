@@ -2,7 +2,7 @@ from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.domain.types import Appointment, CompanyRole, Rank, Service
-from app.extensions import db
+from app.extensions import db, login_manager
 
 
 def _values(enum_cls):
@@ -45,3 +45,8 @@ class Person(UserMixin, db.Model):
 
     def __repr__(self):
         return f"<Person {self.username} {self.rank.value} {self.appointment.value}>"
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(Person, int(user_id))

@@ -1,6 +1,6 @@
 from flask import Flask
 
-from app.extensions import db, migrate
+from app.extensions import csrf, db, limiter, login_manager, migrate
 from config import get_config
 
 
@@ -13,11 +13,18 @@ def create_app(config_class=None):
 
     db.init_app(app)
     migrate.init_app(app, db)
+    login_manager.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     from app import models  # noqa: F401  register tables with SQLAlchemy metadata
     from app.cli import register_cli
 
     register_cli(app)
+
+    from app.blueprints.auth import bp as auth_bp
+
+    app.register_blueprint(auth_bp)
 
     @app.route("/health")
     def health():
