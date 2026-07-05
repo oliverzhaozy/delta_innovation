@@ -47,6 +47,10 @@ class Appointment(str, enum.Enum):
     DET_COMD = "DET_COMD"
     OPR = "OPR"
 
+    @property
+    def label(self) -> str:
+        return {"DET_COMD": "Det Comd", "OPR": "Opr"}.get(self.value, self.value)
+
 
 COMMAND_TEAM = frozenset({
     Appointment.OC,

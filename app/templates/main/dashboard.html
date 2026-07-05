@@ -1,38 +1,42 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>{{ current_user.display_name }}</h1>
-<p class="muted">
-  {{ current_user.rank.value }} · {{ current_user.appointment.value }}
-  {%- if current_user.platoon %} · Platoon {{ current_user.platoon }}{% endif %}
-  {%- if current_user.company_role %} · {{ current_user.company_role.value }}{% endif %}
-</p>
+<div class="page-head">
+  <h1>{{ current_user.display_name }}</h1>
+  <div class="chips">
+    <span class="chip">{{ current_user.rank.value }}</span>
+    <span class="chip">{{ current_user.appointment.label }}</span>
+    {% if current_user.platoon %}<span class="chip plain">Platoon {{ current_user.platoon }}</span>{% endif %}
+    {% if current_user.company_role %}<span class="chip plain">{{ current_user.company_role.value }}</span>{% endif %}
+    {% if current_user.is_admin %}<span class="chip plain">Admin</span>{% endif %}
+  </div>
+</div>
 
 <section class="card">
   <h2>Your tools</h2>
   {# Role-aware placeholders; each becomes a real link as its phase ships. #}
-  <ul>
-    <li>Leave requests — Phase 1</li>
+  <ul class="toollist">
+    <li><span>Leave requests</span><span class="tag">Phase 1</span></li>
     {% if policy.is_pc(current_user) %}
-      <li>Platoon {{ current_user.platoon }} approvals — Phase 1</li>
+      <li><span>Platoon {{ current_user.platoon }} approvals</span><span class="tag">Phase 1</span></li>
     {% endif %}
     {% if policy.can_final_approve(current_user) %}
-      <li>Final approvals — Phase 1</li>
+      <li><span>Final approvals</span><span class="tag">Phase 1</span></li>
     {% endif %}
     {% if policy.can_manage_ledger(current_user) %}
-      <li>OFF/OIL ledger — Phase 1</li>
+      <li><span>OFF/OIL ledger</span><span class="tag">Phase 1</span></li>
     {% endif %}
     {% if policy.can_manage_people(current_user) %}
-      <li>People admin — Phase 1</li>
+      <li><span>People admin</span><span class="tag">Phase 1</span></li>
     {% endif %}
     {% if policy.can_view_arctic(current_user) %}
-      <li>ARCTIC FOE calendar — Phase 2</li>
+      <li><span>ARCTIC FOE calendar</span><span class="tag">Phase 2</span></li>
     {% endif %}
     {% if policy.can_manage_meals(current_user) %}
-      <li>Meal counts — Phase 3</li>
+      <li><span>Meal counts</span><span class="tag">Phase 3</span></li>
     {% endif %}
     {% if policy.can_manage_roster(current_user) %}
-      <li>Duty roster — Phase 4</li>
+      <li><span>Duty roster</span><span class="tag">Phase 4</span></li>
     {% endif %}
   </ul>
 </section>

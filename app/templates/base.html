@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1b4d33">
   <title>{% block title %}Ops Portal{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
   <header class="topbar">
     {# Neutral brand everywhere — no unit name, pre- or post-login (CLAUDE.md). #}
-    <span class="brand">Ops Portal</span>
+    <span class="brand"><span class="mark">OP</span>Ops Portal</span>
     {% if current_user.is_authenticated %}
       <nav class="topnav">
         <a href="{{ url_for('main.dashboard') }}">Home</a>
@@ -21,7 +22,7 @@
       </nav>
     {% endif %}
   </header>
-  <main class="content">
+  <main class="content {% block main_class %}{% endblock %}">
     {% for category, message in get_flashed_messages(with_categories=true) %}
       <p class="flash flash-{{ category }}">{{ message }}</p>
     {% endfor %}
