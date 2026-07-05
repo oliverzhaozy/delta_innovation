@@ -1,5 +1,6 @@
 from flask import Flask
 
+from app.extensions import db, migrate
 from config import get_config
 
 
@@ -9,6 +10,9 @@ def create_app(config_class=None):
     app = Flask(__name__)
     app.config.from_object(config_class)
     config_class.validate(app)
+
+    db.init_app(app)
+    migrate.init_app(app, db)
 
     @app.route("/health")
     def health():
