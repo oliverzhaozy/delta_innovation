@@ -1,9 +1,10 @@
-from flask import abort, flash, redirect, render_template, url_for
+from flask import abort, flash, redirect, render_template, request as http_request, url_for
 from flask_login import current_user, login_required
 
+from app.authz import require
 from app.blueprints.leave import bp
 from app.blueprints.leave.forms import LeaveRequestForm
-from app.domain import routing
+from app.domain import policy, routing
 from app.domain.types import (
     BalanceKind,
     DayPart,
@@ -12,8 +13,9 @@ from app.domain.types import (
     RequestStatus,
 )
 from app.extensions import db
-from app.models import LeaveRequest
-from app.services import leave_service, ledger_service
+from app.models import LeaveRequest, Person
+from app.services import approval_service, leave_service, ledger_service
+from app.services.approval_service import NegativeBalanceUnconfirmed, TransitionError
 
 
 def _require_requester():
@@ -75,6 +77,159 @@ def new():
         form=form,
         balances=ledger_service.balances(current_user.id),
     )
+
+
+def _may_view(request_row):
+    return (
+        request_row.person_id == current_user.id
+        or policy.can_final_approve(current_user)
+        or policy.can_manage_ledger(current_user)
+        or (
+            policy.is_pc(current_user)
+            and request_row.person.platoon is not None
+            and request_row.person.platoon == current_user.platoon
+        )
+    )
+
+
+@bp.route("/queue/pc")
+@require(policy.is_pc)
+def pc_queue():
+    pending = (
+        db.session.query(LeaveRequest)
+        .join(Person, LeaveRequest.person_id == Person.id)
+        .filter(
+            LeaveRequest.status == RequestStatus.PENDING_PC,
+            Person.platoon == current_user.platoon,
+        )
+        .order_by(LeaveRequest.created_at)
+        .all()
+    )
+    return render_template(
+        "leave/queue.html", pending=pending, title=f"Platoon {current_user.platoon} approvals"
+    )
+
+
+@bp.route("/queue/oc")
+@require(policy.can_final_approve)
+def oc_queue():
+    pending = (
+        db.session.query(LeaveRequest)
+        .filter(LeaveRequest.status == RequestStatus.PENDING_OC)
+        .order_by(LeaveRequest.created_at)
+        .all()
+    )
+    return render_template("leave/queue.html", pending=pending, title="Final approvals")
+
+
+@bp.route("/<int:request_id>")
+@login_required
+def detail(request_id):
+    request_row = db.session.get(LeaveRequest, request_id) or abort(404)
+    if not _may_view(request_row):
+        abort(403)
+    cost = leave_service.deduction_half_days(request_row)
+    balances = ledger_service.balances(request_row.person_id)
+    projected = None
+    if request_row.type.value in BalanceKind.__members__ and cost:
+        projected = balances[BalanceKind(request_row.type.value)] - cost
+    overlaps = leave_service.overlapping_requests(
+        request_row.person_id,
+        request_row.start_date,
+        request_row.end_date,
+        exclude_id=request_row.id,
+    )
+    can_act_pc = (
+        request_row.status is RequestStatus.PENDING_PC
+        and policy.can_approve_as_pc(current_user, request_row.person.platoon)
+        and request_row.person_id != current_user.id
+    )
+    can_act_oc = (
+        request_row.status is RequestStatus.PENDING_OC
+        and policy.can_final_approve(current_user)
+        and request_row.person_id != current_user.id
+    )
+    return render_template(
+        "leave/detail.html",
+        r=request_row,
+        balances=balances,
+        deduction_note=leave_service.deduction_note(request_row),
+        projected=projected,
+        overlaps=overlaps,
+        can_act_pc=can_act_pc,
+        can_act_oc=can_act_oc,
+    )
+
+
+def _act(request_id, expected_status, platoon_scoped):
+    """Shared guard for the four action endpoints; returns the request row."""
+    request_row = db.session.get(LeaveRequest, request_id) or abort(404)
+    if platoon_scoped and not policy.can_approve_as_pc(current_user, request_row.person.platoon):
+        abort(403)
+    return request_row
+
+
+@bp.route("/<int:request_id>/pc-approve", methods=["POST"])
+@require(policy.is_pc)
+def pc_approve(request_id):
+    request_row = _act(request_id, RequestStatus.PENDING_PC, platoon_scoped=True)
+    try:
+        approval_service.pc_approve(request_row, current_user)
+        flash("Endorsed — now with the OC.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
+
+
+@bp.route("/<int:request_id>/pc-reject", methods=["POST"])
+@require(policy.is_pc)
+def pc_reject(request_id):
+    request_row = _act(request_id, RequestStatus.PENDING_PC, platoon_scoped=True)
+    remark = (http_request.form.get("remark") or "").strip()
+    if not remark:
+        flash("A short remark is required when rejecting.", "error")
+        return redirect(url_for("leave.detail", request_id=request_id))
+    try:
+        approval_service.pc_reject(request_row, current_user, remark)
+        flash("Rejected.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
+
+
+@bp.route("/<int:request_id>/oc-approve", methods=["POST"])
+@require(policy.can_final_approve)
+def oc_approve(request_id):
+    request_row = _act(request_id, RequestStatus.PENDING_OC, platoon_scoped=False)
+    confirm_negative = http_request.form.get("confirm_negative") == "1"
+    try:
+        approval_service.oc_approve(request_row, current_user, confirm_negative=confirm_negative)
+        flash("Approved — plotted and deducted in one step.", "success")
+    except NegativeBalanceUnconfirmed as exc:
+        flash(
+            f"This would take the balance to {exc.projected_half_days / 2:g}. "
+            "Tick 'approve anyway' to confirm a negative balance.",
+            "warning",
+        )
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
+
+
+@bp.route("/<int:request_id>/oc-reject", methods=["POST"])
+@require(policy.can_final_approve)
+def oc_reject(request_id):
+    request_row = _act(request_id, RequestStatus.PENDING_OC, platoon_scoped=False)
+    remark = (http_request.form.get("remark") or "").strip()
+    if not remark:
+        flash("A short remark is required when rejecting.", "error")
+        return redirect(url_for("leave.detail", request_id=request_id))
+    try:
+        approval_service.oc_reject(request_row, current_user, remark)
+        flash("Rejected.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
 
 
 @bp.route("/<int:request_id>/cancel", methods=["POST"])

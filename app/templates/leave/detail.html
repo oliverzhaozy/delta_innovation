@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Request — {{ r.person.display_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ r.person.display_name }}</h1>
+  <div class="chips">
+    <span class="chip">{{ r.type.value }}</span>
+    <span class="chip plain">{{ r.when_label }}</span>
+    <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+  </div>
+</div>
+
+<section class="card">
+  <h2>Request</h2>
+  <ul class="toollist">
+    <li><span class="muted">Submitted</span><span>{{ r.created_at.strftime("%d %b %Y, %H:%M") }}</span></li>
+    {% if r.reason %}<li><span class="muted">Reason</span><span>{{ r.reason }}</span></li>{% endif %}
+    {% if r.pc_actor %}<li><span class="muted">PC step</span><span>{{ r.pc_actor.display_name }} · {{ r.pc_at.strftime("%d %b %H:%M") }}</span></li>{% endif %}
+    {% if r.oc_actor %}<li><span class="muted">OC step</span><span>{{ r.oc_actor.display_name }} · {{ r.oc_at.strftime("%d %b %H:%M") }}</span></li>{% endif %}
+    {% if r.remarks %}<li><span class="muted">Remarks</span><span>{{ r.remarks }}</span></li>{% endif %}
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Balance check</h2>
+  <ul class="toollist">
+    <li><span class="muted">Current OFF</span><span>{{ balances[BalanceKind.OFF] | days }}</span></li>
+    <li><span class="muted">Current OIL</span><span>{{ balances[BalanceKind.OIL] | days }}</span></li>
+    <li><span class="muted">This request</span><span>{{ deduction_note }}</span></li>
+    {% if projected is not none %}
+    <li><span class="muted">After approval</span>
+        <span {% if projected < 0 %}class="neg"{% endif %}>{{ projected | days }}</span></li>
+    {% endif %}
+  </ul>
+</section>
+
+{% if overlaps %}
+<section class="card">
+  <h2>Overlapping requests</h2>
+  <ul class="toollist">
+    {% for o in overlaps %}
+    <li><span>{{ o.type.value }} · {{ o.when_label }}</span>
+        <span class="badge {{ o.status.badge }}">{{ o.status.label }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if can_act_pc or can_act_oc %}
+<section class="card">
+  <h2>Decision</h2>
+  {% set approve_url = url_for('leave.pc_approve', request_id=r.id) if can_act_pc else url_for('leave.oc_approve', request_id=r.id) %}
+  {% set reject_url = url_for('leave.pc_reject', request_id=r.id) if can_act_pc else url_for('leave.oc_reject', request_id=r.id) %}
+  <form action="{{ approve_url }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if can_act_oc and projected is not none and projected < 0 %}
+      <p class="check">
+        <input type="checkbox" name="confirm_negative" value="1" id="confirm_negative">
+        <label for="confirm_negative">Approve anyway — balance goes negative ({{ projected | days }})</label>
+      </p>
+    {% endif %}
+    <button type="submit">{{ "Endorse to OC" if can_act_pc else "Approve — plot & deduct" }}</button>
+  </form>
+  <form action="{{ reject_url }}" method="post" style="margin-top:0.9rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p><label for="remark">Rejection remark</label>
+       <input type="text" name="remark" id="remark" maxlength="300" placeholder="Required if rejecting"></p>
+    <button type="submit" class="btn danger">Reject</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ pending | length }} awaiting your decision.</p>
+</div>
+
+<section class="card">
+  {% if pending %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Who</th><th>When</th><th>Type</th><th>Submitted</th></tr></thead>
+      <tbody>
+        {% for r in pending %}
+        <tr>
+          <td><a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.person.display_name }}</a></td>
+          <td>{{ r.when_label }}</td>
+          <td>{{ r.type.value }}</td>
+          <td class="muted">{{ r.created_at.strftime("%d %b %H:%M") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Queue is clear.</p>
+  {% endif %}
+</section>
+{% endblock %}

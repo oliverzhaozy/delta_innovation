@@ -40,6 +40,36 @@ def create_app(config_class=None):
         # Templates condition nav/content on the same predicates routes enforce.
         return {"policy": policy, "routing": routing, "BalanceKind": BalanceKind}
 
+    @app.context_processor
+    def inject_pending_badge():
+        # No notifications by design — the nav badge is how approvers find work.
+        from flask_login import current_user
+
+        from app.domain.types import RequestStatus
+        from app.models import LeaveRequest, Person
+
+        if not current_user.is_authenticated:
+            return {}
+        if policy.is_pc(current_user):
+            count = (
+                db.session.query(LeaveRequest.id)
+                .join(Person, LeaveRequest.person_id == Person.id)
+                .filter(
+                    LeaveRequest.status == RequestStatus.PENDING_PC,
+                    Person.platoon == current_user.platoon,
+                )
+                .count()
+            )
+        elif policy.can_final_approve(current_user):
+            count = (
+                db.session.query(LeaveRequest.id)
+                .filter(LeaveRequest.status == RequestStatus.PENDING_OC)
+                .count()
+            )
+        else:
+            return {}
+        return {"pending_approvals": count}
+
     @app.errorhandler(403)
     def forbidden(error):
         return render_template("errors/403.html"), 403

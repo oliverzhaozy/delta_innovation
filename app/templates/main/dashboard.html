@@ -20,10 +20,10 @@
       <li><a href="{{ url_for('leave.index') }}">Leave requests</a><span class="tag">Live</span></li>
     {% endif %}
     {% if policy.is_pc(current_user) %}
-      <li><span>Platoon {{ current_user.platoon }} approvals</span><span class="tag">Phase 1</span></li>
+      <li><a href="{{ url_for('leave.pc_queue') }}">Platoon {{ current_user.platoon }} approvals</a><span class="tag">Live</span></li>
     {% endif %}
     {% if policy.can_final_approve(current_user) %}
-      <li><span>Final approvals</span><span class="tag">Phase 1</span></li>
+      <li><a href="{{ url_for('leave.oc_queue') }}">Final approvals</a><span class="tag">Live</span></li>
     {% endif %}
     {% if policy.can_manage_ledger(current_user) %}
       <li><span>OFF/OIL ledger</span><span class="tag">Phase 1</span></li>
