@@ -41,6 +41,11 @@ def create_app(config_class=None):
     def forbidden(error):
         return render_template("errors/403.html"), 403
 
+    @app.template_filter("days")
+    def fmt_half_days(half_days):
+        # Ledger stores integer half-days; people think in days: 5 -> "2.5".
+        return f"{half_days / 2:g}"
+
     @app.route("/health")
     def health():
         return {"status": "ok"}

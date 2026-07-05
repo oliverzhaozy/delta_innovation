@@ -67,6 +67,72 @@ class CompanyRole(str, enum.Enum):
     S4 = "S4"  # logistics
 
 
+class LeaveType(str, enum.Enum):
+    OFF = "OFF"
+    OIL = "OIL"
+    LL = "LL"  # local leave
+    OL = "OL"  # overseas leave
+
+
+# Only OFF and OIL carry an in-app balance; LL/OL are recorded as absences only
+# (owner decision (a) in TECH_PLAN).
+BALANCE_TRACKED = frozenset({LeaveType.OFF, LeaveType.OIL})
+
+
+class DayPart(str, enum.Enum):
+    FULL = "FULL"
+    AM = "AM"
+    PM = "PM"
+
+
+class RequestStatus(str, enum.Enum):
+    PENDING_PC = "PENDING_PC"
+    PENDING_OC = "PENDING_OC"
+    APPROVED = "APPROVED"
+    REJECTED_PC = "REJECTED_PC"
+    REJECTED_OC = "REJECTED_OC"
+    CANCELLED = "CANCELLED"
+
+    @property
+    def label(self) -> str:
+        return {
+            "PENDING_PC": "Pending PC",
+            "PENDING_OC": "Pending OC",
+            "APPROVED": "Approved",
+            "REJECTED_PC": "Rejected (PC)",
+            "REJECTED_OC": "Rejected (OC)",
+            "CANCELLED": "Cancelled",
+        }[self.value]
+
+    @property
+    def badge(self) -> str:
+        if self in (RequestStatus.PENDING_PC, RequestStatus.PENDING_OC):
+            return "pending"
+        if self is RequestStatus.APPROVED:
+            return "approved"
+        if self is RequestStatus.CANCELLED:
+            return "cancelled"
+        return "rejected"
+
+
+PENDING_STATUSES = frozenset({RequestStatus.PENDING_PC, RequestStatus.PENDING_OC})
+# Statuses that occupy calendar days (for overlap checks and derived absence).
+OCCUPYING_STATUSES = frozenset(
+    {RequestStatus.PENDING_PC, RequestStatus.PENDING_OC, RequestStatus.APPROVED}
+)
+
+
+class BalanceKind(str, enum.Enum):
+    OFF = "OFF"
+    OIL = "OIL"
+
+
+class LedgerSource(str, enum.Enum):
+    LEAVE_APPROVAL = "LEAVE_APPROVAL"
+    MANUAL = "MANUAL"
+    REVERSAL = "REVERSAL"
+
+
 class Service(str, enum.Enum):
     NSF = "NSF"
     REGULAR = "REGULAR"
