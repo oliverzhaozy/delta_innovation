@@ -6,9 +6,10 @@ from app.authz import require
 from app.blueprints.admin import bp
 from app.blueprints.admin.forms import PersonForm
 from app.domain import policy
-from app.domain.types import Appointment, CompanyRole, Rank, Service
+from app.domain.dates import today_sgt
+from app.domain.types import Appointment, CompanyRole, PENDING_STATUSES, Rank, RequestStatus, Service
 from app.extensions import db
-from app.models import Person
+from app.models import LeaveRequest, Person
 
 
 def _apply_form(person, form):
@@ -86,7 +87,24 @@ def person_edit(person_id):
             db.session.commit()
             flash("Saved.", "success")
             return redirect(url_for("admin.people"))
-    return render_template("admin/person_form.html", form=form, person=person)
+    # Surface what deactivation would strand: pending requests and future
+    # approved leave need voiding/cancelling first (TECH_PLAN P1.1).
+    open_items = (
+        db.session.query(LeaveRequest)
+        .filter(
+            LeaveRequest.person_id == person.id,
+            db.or_(
+                LeaveRequest.status.in_(PENDING_STATUSES),
+                db.and_(
+                    LeaveRequest.status == RequestStatus.APPROVED,
+                    LeaveRequest.end_date >= today_sgt(),
+                ),
+            ),
+        )
+        .order_by(LeaveRequest.start_date)
+        .all()
+    )
+    return render_template("admin/person_form.html", form=form, person=person, open_items=open_items)
 
 
 @bp.route("/people/<int:person_id>/reset-password", methods=["POST"])

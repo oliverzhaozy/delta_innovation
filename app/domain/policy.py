@@ -62,3 +62,8 @@ def can_manage_roster(person) -> bool:
 
 def can_admin_accounts(person) -> bool:
     return is_admin(person)
+
+
+def can_cancel_approved_leave(person) -> bool:
+    # Reversing the ledger is S3's or the OC's call, never the requester's.
+    return can_manage_ledger(person) or can_final_approve(person)

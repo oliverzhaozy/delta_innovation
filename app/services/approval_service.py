@@ -82,6 +82,38 @@ def oc_reject(request, actor, remark):
     db.session.commit()
 
 
+def cancel_approved(request, actor):
+    """Cancel APPROVED leave: status flip + compensating REVERSAL credit in one
+    transaction. The ledger is append-only — the original debit stays, the
+    reversal explains itself, and the balance is whole again.
+    """
+    _claim(request.id, RequestStatus.APPROVED, status=RequestStatus.CANCELLED)
+    try:
+        from app.models import LedgerEntry  # local import to avoid cycle at module load
+
+        originals = (
+            db.session.query(LedgerEntry)
+            .filter_by(leave_request_id=request.id, source=LedgerSource.LEAVE_APPROVAL)
+            .all()
+        )
+        for entry in originals:
+            ledger_service.post_entry(
+                person_id=entry.person_id,
+                kind=entry.kind,
+                delta_half_days=-entry.delta_half_days,
+                reason=f"Cancelled: {request.type.value} {request.when_label}",
+                source=LedgerSource.REVERSAL,
+                created_by_id=actor.id,
+                leave_request_id=request.id,
+            )
+        db.session.commit()
+    except TransitionError:
+        raise
+    except Exception:
+        db.session.rollback()
+        raise
+
+
 def oc_approve(request, actor, confirm_negative=False):
     """Final approval: status + ledger in one transaction."""
     _forbid_self_action(request, actor)

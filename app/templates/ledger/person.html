@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Ledger — {{ person.display_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ person.display_name }}</h1>
+  <div class="chips">
+    <span class="chip">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
+    <span class="chip">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
+  </div>
+</div>
+
+<p><a class="btn" href="{{ url_for('ledger.adjust', person_id=person.id) }}">Add / deduct</a></p>
+
+<section class="card">
+  <h2>History</h2>
+  {% if entries %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>When</th><th>Kind</th><th>Δ days</th><th>Reason</th><th>By</th></tr></thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td class="muted">{{ e.created_at.strftime("%d %b %y") }}</td>
+          <td>{{ e.kind.value }}</td>
+          <td {% if e.delta_half_days < 0 %}class="neg"{% endif %}>{{ "%+g" | format(e.delta_half_days / 2) }}</td>
+          <td>
+            {{ e.reason }}
+            {% if e.leave_request_id %}
+              · <a href="{{ url_for('leave.detail', request_id=e.leave_request_id) }}">request</a>
+            {% endif %}
+          </td>
+          <td class="muted">{{ e.created_by.display_name }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No entries yet — set an opening balance with “Add / deduct”.</p>
+  {% endif %}
+</section>
+{% endblock %}

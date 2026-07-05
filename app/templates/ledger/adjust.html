@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Adjust — {{ person.display_name }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Adjust balance</h1>
+  <p class="muted">{{ person.display_name }} — every adjustment is a permanent ledger line with your name on it.</p>
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.kind.label }}{{ form.kind() }}</p>
+  <p>{{ form.direction.label }}{{ form.direction() }}</p>
+  <p>{{ form.days.label }}{{ form.days(step="0.5", min="0.5", type="number") }}</p>
+  <p>{{ form.reason.label }}{{ form.reason(placeholder="e.g. Awarded for exercise support") }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Record</button>
+</form>
+{% endblock %}

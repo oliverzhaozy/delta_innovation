@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}OFF/OIL ledger{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>OFF/OIL balances</h1>
+  <p class="muted">Every number is the sum of an append-only ledger — click a name for the full history.</p>
+</div>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Name</th><th>Pl</th><th>OFF</th><th>OIL</th></tr></thead>
+      <tbody>
+        {% for p in people %}
+        {% set b = all_balances.get(p.id, {}) %}
+        {% set off = b.get(BalanceKind.OFF, 0) %}
+        {% set oil = b.get(BalanceKind.OIL, 0) %}
+        <tr>
+          <td><a href="{{ url_for('ledger.person', person_id=p.id) }}">{{ p.display_name }}</a></td>
+          <td>{{ p.platoon or "—" }}</td>
+          <td {% if off < 0 %}class="neg"{% endif %}>{{ off | days }}</td>
+          <td {% if oil < 0 %}class="neg"{% endif %}>{{ oil | days }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -25,11 +25,13 @@ def create_app(config_class=None):
     from app.blueprints.admin import bp as admin_bp
     from app.blueprints.auth import bp as auth_bp
     from app.blueprints.leave import bp as leave_bp
+    from app.blueprints.ledger import bp as ledger_bp
     from app.blueprints.main import bp as main_bp
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(leave_bp)
+    app.register_blueprint(ledger_bp)
     app.register_blueprint(main_bp)
 
     from app.domain import policy, routing

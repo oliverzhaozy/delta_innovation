@@ -47,6 +47,17 @@
 </section>
 {% endif %}
 
+{% if r.status.value == "APPROVED" and policy.can_cancel_approved_leave(current_user) %}
+<section class="card">
+  <h2>Cancel approved leave</h2>
+  <form action="{{ url_for('leave.cancel_approved', request_id=r.id) }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn danger">Cancel &amp; reverse deduction</button>
+  </form>
+  <p class="muted" style="margin-top:0.6rem">Writes a compensating credit and removes the absence from every view.</p>
+</section>
+{% endif %}
+
 {% if can_act_pc or can_act_oc %}
 <section class="card">
   <h2>Decision</h2>

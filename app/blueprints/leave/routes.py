@@ -232,6 +232,18 @@ def oc_reject(request_id):
     return redirect(url_for("leave.detail", request_id=request_id))
 
 
+@bp.route("/<int:request_id>/cancel-approved", methods=["POST"])
+@require(policy.can_cancel_approved_leave)
+def cancel_approved(request_id):
+    request_row = db.session.get(LeaveRequest, request_id) or abort(404)
+    try:
+        approval_service.cancel_approved(request_row, current_user)
+        flash("Cancelled — the deduction was reversed and the absence unplotted.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
+
+
 @bp.route("/<int:request_id>/cancel", methods=["POST"])
 @login_required
 def cancel(request_id):

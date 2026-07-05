@@ -25,6 +25,21 @@
   <button type="submit">Save</button>
 </form>
 
+{% if person and open_items %}
+<section class="card">
+  <h2>Open leave items</h2>
+  <p class="muted">Resolve these before deactivating — deactivation does not cancel them.</p>
+  <ul class="toollist">
+    {% for r in open_items %}
+    <li>
+      <a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.type.value }} · {{ r.when_label }}</a>
+      <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if person %}
 <section class="card">
   <h2>Account</h2>
