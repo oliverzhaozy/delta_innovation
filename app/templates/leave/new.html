@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Request time off{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Request time off</h1>
+  <div class="chips">
+    <span class="chip">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
+    <span class="chip">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
+  </div>
+  <p class="muted">Goes to {{ "the OC" if current_user.appointment.value == "PC" else "your PC, then the OC" }}.
+     Weekends and public holidays inside the range don't consume balance.</p>
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.type.label }}{{ form.type() }}</p>
+  <p>{{ form.start_date.label }}{{ form.start_date() }}</p>
+  <p>{{ form.end_date.label }}{{ form.end_date() }}</p>
+  <p>{{ form.day_part.label }}{{ form.day_part() }}</p>
+  <p>{{ form.reason.label }}{{ form.reason() }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Submit request</button>
+</form>
+{% endblock %}

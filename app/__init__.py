@@ -24,18 +24,21 @@ def create_app(config_class=None):
 
     from app.blueprints.admin import bp as admin_bp
     from app.blueprints.auth import bp as auth_bp
+    from app.blueprints.leave import bp as leave_bp
     from app.blueprints.main import bp as main_bp
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(leave_bp)
     app.register_blueprint(main_bp)
 
-    from app.domain import policy
+    from app.domain import policy, routing
+    from app.domain.types import BalanceKind
 
     @app.context_processor
     def inject_policy():
         # Templates condition nav/content on the same predicates routes enforce.
-        return {"policy": policy}
+        return {"policy": policy, "routing": routing, "BalanceKind": BalanceKind}
 
     @app.errorhandler(403)
     def forbidden(error):

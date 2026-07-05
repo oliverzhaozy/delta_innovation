@@ -16,7 +16,9 @@
   <h2>Your tools</h2>
   {# Role-aware placeholders; each becomes a real link as its phase ships. #}
   <ul class="toollist">
-    <li><span>Leave requests</span><span class="tag">Phase 1</span></li>
+    {% if routing.can_request(current_user) %}
+      <li><a href="{{ url_for('leave.index') }}">Leave requests</a><span class="tag">Live</span></li>
+    {% endif %}
     {% if policy.is_pc(current_user) %}
       <li><span>Platoon {{ current_user.platoon }} approvals</span><span class="tag">Phase 1</span></li>
     {% endif %}

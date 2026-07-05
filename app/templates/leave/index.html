@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}My leave{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>My leave</h1>
+  <div class="chips">
+    <span class="chip {% if balances[BalanceKind.OFF] < 0 %}plain{% endif %}">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
+    <span class="chip {% if balances[BalanceKind.OIL] < 0 %}plain{% endif %}">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
+  </div>
+</div>
+
+<p><a class="btn" href="{{ url_for('leave.new') }}">Request time off</a></p>
+
+<section class="card">
+  <h2>Requests</h2>
+  {% if requests %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>When</th><th>Type</th><th>Status</th><th>Deduction</th><th></th></tr></thead>
+      <tbody>
+        {% for r in requests %}
+        <tr>
+          <td>{{ r.when_label }}</td>
+          <td>{{ r.type.value }}</td>
+          <td>
+            <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+            {% if r.remarks %}<div class="muted" style="font-size:0.85rem">{{ r.remarks }}</div>{% endif %}
+          </td>
+          <td class="muted" style="font-size:0.88rem">{{ deduction_note(r) }}</td>
+          <td>
+            {% if r.status.value.startswith("PENDING") %}
+            <form action="{{ url_for('leave.cancel', request_id=r.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="linklike" style="color:var(--danger)">Cancel</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No requests yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
