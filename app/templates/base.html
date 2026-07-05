@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#1b4d33">
   <title>{% block title %}Ops Portal{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -14,6 +15,7 @@
     {% if current_user.is_authenticated %}
       <nav class="topnav">
         <a href="{{ url_for('main.dashboard') }}">Home</a>
+        <a href="{{ url_for('parade.away') }}">Away</a>
         {% if routing.can_request(current_user) %}
           <a href="{{ url_for('leave.index') }}">Leave</a>
         {% endif %}

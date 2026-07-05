@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Away board{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Away board</h1>
+  <div class="chips">
+    <span class="chip plain">Total {{ summary.total }}</span>
+    <span class="chip">{{ summary.away_full }} full-day away</span>
+    {% if summary.away_partial %}<span class="chip">{{ summary.away_partial }} half-day</span>{% endif %}
+  </div>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('parade.away', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
+    <strong>{{ day.strftime("%A, %d %B %Y") }}</strong>
+    <a href="{{ url_for('parade.away', date=next_day.isoformat()) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Away{% if not summary.groups %} — nobody{% endif %}</h2>
+  {% for group, rows in summary.groups.items() %}
+    <h2 style="margin-top:1rem">{{ group }}</h2>
+    <ul class="toollist">
+      {% for r in rows %}
+      <li>
+        <span>{{ r.person.display_name }}</span>
+        <span class="chip plain">{{ r.type.value }}{% if r.day_part.value != "FULL" %} · {{ r.day_part.value }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Copy as text</h2>
+  <pre id="awaytext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ text }}</pre>
+  <button type="button" class="btn secondary" data-copy="#awaytext">Copy</button>
+</section>
+{% endblock %}

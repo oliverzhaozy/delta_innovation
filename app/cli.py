@@ -1,11 +1,13 @@
 import csv
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 import click
 
-from app.domain.types import Appointment, CompanyRole, Rank, Service
+from app.domain.types import Appointment, BalanceKind, CompanyRole, LedgerSource, Rank, Service
 from app.extensions import db
-from app.models import Person, PublicHoliday
+from app.models import LedgerEntry, Person, PublicHoliday
+from app.services import ledger_service
 
 REQUIRED_COLUMNS = {
     "username",
@@ -90,3 +92,49 @@ def register_cli(app):
                 created += 1
         db.session.commit()
         click.echo(f"Seeded {created} holidays ({skipped} already existed).")
+
+    @app.cli.command("seed-balances")
+    @click.argument("csv_path", type=click.Path(exists=True))
+    @click.option("--by", "by_username", required=True, help="Username recorded as the entering S3/admin.")
+    def seed_balances(csv_path, by_username):
+        """Load opening OFF/OIL balances (CSV: username,off_days,oil_days).
+
+        Skips anyone who already has ledger entries — this is a rollout tool,
+        not a correction tool (use the ledger UI for corrections).
+        """
+        actor = db.session.query(Person).filter_by(username=by_username.lower()).first()
+        if actor is None:
+            raise click.ClickException(f"No such user: {by_username}")
+        created = skipped = 0
+        with open(csv_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or {"username", "off_days", "oil_days"} - set(reader.fieldnames):
+                raise click.ClickException("CSV must have username,off_days,oil_days columns")
+            for lineno, row in enumerate(reader, start=2):
+                username = (row.get("username") or "").strip().lower()
+                person = db.session.query(Person).filter_by(username=username).first()
+                if person is None:
+                    raise click.ClickException(f"Row {lineno}: no such user {username!r}")
+                if db.session.query(LedgerEntry.id).filter_by(person_id=person.id).first():
+                    skipped += 1
+                    continue
+                for column, kind in (("off_days", BalanceKind.OFF), ("oil_days", BalanceKind.OIL)):
+                    raw = (row.get(column) or "0").strip()
+                    try:
+                        days = Decimal(raw)
+                    except InvalidOperation:
+                        raise click.ClickException(f"Row {lineno}: bad number {raw!r} in {column}")
+                    if days % Decimal("0.5") != 0:
+                        raise click.ClickException(f"Row {lineno}: {column} must be a multiple of 0.5")
+                    if days:
+                        ledger_service.post_entry(
+                            person_id=person.id,
+                            kind=kind,
+                            delta_half_days=int(days * 2),
+                            reason="Opening balance (rollout)",
+                            source=LedgerSource.MANUAL,
+                            created_by_id=actor.id,
+                        )
+                created += 1
+        db.session.commit()
+        click.echo(f"Opening balances set for {created} people ({skipped} skipped — already had entries).")

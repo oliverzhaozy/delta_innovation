@@ -19,6 +19,7 @@
     {% if routing.can_request(current_user) %}
       <li><a href="{{ url_for('leave.index') }}">Leave requests</a><span class="tag">Live</span></li>
     {% endif %}
+    <li><a href="{{ url_for('parade.away') }}">Away board</a><span class="tag">Live</span></li>
     {% if policy.is_pc(current_user) %}
       <li><a href="{{ url_for('leave.pc_queue') }}">Platoon {{ current_user.platoon }} approvals</a><span class="tag">Live</span></li>
     {% endif %}
