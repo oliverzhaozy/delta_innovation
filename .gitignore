@@ -1,5 +1,8 @@
 # Python tooling cruft only — .env, seed CSVs, and the SQLite DB are
 # deliberately committed (owner decision, see CLAUDE.md "Git workflow").
+# SQLite WAL sidecars are transient; the .db itself IS committed (checkpoint first).
+*.db-wal
+*.db-shm
 .venv/
 venv/
 __pycache__/
