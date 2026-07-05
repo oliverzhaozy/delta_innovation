@@ -296,6 +296,14 @@ table.list td {
   vertical-align: top;
 }
 
+table.list a {
+  color: var(--green-800);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+table.list a:hover { text-decoration: underline; }
+
 /* ---------- Status badges ---------- */
 
 .badge {
