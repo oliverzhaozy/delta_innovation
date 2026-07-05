@@ -14,6 +14,11 @@ def create_app(config_class=None):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    from app import models  # noqa: F401  register tables with SQLAlchemy metadata
+    from app.cli import register_cli
+
+    register_cli(app)
+
     @app.route("/health")
     def health():
         return {"status": "ok"}

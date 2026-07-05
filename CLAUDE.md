@@ -27,12 +27,15 @@ Commit and push to GitHub **regularly as you work** so status and work are never
 
 Owner's decision (2026-07-05): seed CSVs (including real personnel data), `.env`/secrets, and the SQLite database MAY be committed — this repo doubles as the backup of record. Because of that, the GitHub repo MUST stay private; never change its visibility or mirror its contents elsewhere.
 
-## Planned commands (valid once P0.1–P0.2 land)
+## Commands
 
-- Run dev server: `flask run`
-- Migrations: `flask db upgrade` (Alembic via Flask-Migrate)
-- Tests: `pytest` (single test: `pytest tests/test_x.py::test_name`)
-- Seed people: CSV seed script under `seed/` (created in P0.3)
+Python lives in the repo venv — use `.venv/Scripts/python` (Windows) directly:
+
+- Dev server: `.venv/Scripts/python -m flask run` (FLASK_APP set by `.flaskenv`)
+- Tests: `.venv/Scripts/python -m pytest -q`; single test: `.venv/Scripts/python -m pytest tests/test_x.py::test_name`
+- Migrations: `.venv/Scripts/python -m flask db migrate -m "..."` then `... -m flask db upgrade`
+- Seed people: `.venv/Scripts/python -m flask seed-people seed/people.csv` (skips existing usernames; default password `ChangeMe123!` with forced change at first login)
+- Before committing `instance/delta.db`, checkpoint the WAL so the file is current: `.venv/Scripts/python -c "import sqlite3; sqlite3.connect('instance/delta.db').execute('PRAGMA wal_checkpoint(TRUNCATE)')"`
 
 ## Architecture (see TECH_PLAN.md for full detail)
 
