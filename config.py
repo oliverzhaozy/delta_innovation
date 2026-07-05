@@ -12,6 +12,8 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     REMEMBER_COOKIE_HTTPONLY = True
+    # Flask-Login's default is no SameSite attribute at all — set it explicitly.
+    REMEMBER_COOKIE_SAMESITE = "Lax"
     # Why 30 days: most access is from phones; frequent re-login kills adoption.
     REMEMBER_COOKIE_DURATION = timedelta(days=30)
 
@@ -50,4 +52,11 @@ CONFIGS = {"dev": DevConfig, "test": TestConfig, "prod": ProdConfig}
 
 
 def get_config(name=None):
-    return CONFIGS[(name or os.environ.get("APP_CONFIG", "dev")).lower()]
+    # Fail CLOSED: an unset APP_CONFIG means prod semantics, so a host with a
+    # missing/partial environment hits ProdConfig.validate and refuses to boot
+    # instead of silently serving with the placeholder key. Dev gets
+    # APP_CONFIG=dev from .flaskenv via the flask CLI.
+    name = (name or os.environ.get("APP_CONFIG") or "prod").lower()
+    if name not in CONFIGS:
+        raise RuntimeError(f"Unknown APP_CONFIG {name!r}; expected one of {sorted(CONFIGS)}")
+    return CONFIGS[name]

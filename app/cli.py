@@ -6,6 +6,17 @@ from app.domain.types import Appointment, CompanyRole, Rank, Service
 from app.extensions import db
 from app.models import Person
 
+REQUIRED_COLUMNS = {
+    "username",
+    "display_name",
+    "rank",
+    "appointment",
+    "company_role",
+    "platoon",
+    "service",
+    "stay_out",
+}
+
 
 def register_cli(app):
     @app.cli.command("seed-people")
@@ -19,27 +30,37 @@ def register_cli(app):
     def seed_people(csv_path, default_password):
         """Load people from a CSV, skipping usernames that already exist."""
         created = skipped = 0
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                username = row["username"].strip().lower()
+        # utf-8-sig: Excel's "CSV UTF-8" export prefixes a BOM that would
+        # otherwise glue itself onto the first header name.
+        with open(csv_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
+            if missing:
+                raise click.ClickException(f"CSV is missing columns: {sorted(missing)}")
+            for lineno, row in enumerate(reader, start=2):
+                def col(name):
+                    return (row.get(name) or "").strip()
+
+                username = col("username").lower()
+                if not username:
+                    raise click.ClickException(f"Row {lineno} is malformed (no username)")
                 if db.session.query(Person.id).filter_by(username=username).first():
                     skipped += 1
                     continue
-                person = Person(
-                    username=username,
-                    display_name=row["display_name"].strip(),
-                    rank=Rank(row["rank"].strip()),
-                    appointment=Appointment(row["appointment"].strip()),
-                    company_role=(
-                        CompanyRole(row["company_role"].strip())
-                        if row["company_role"].strip()
-                        else None
-                    ),
-                    platoon=int(row["platoon"]) if row["platoon"].strip() else None,
-                    service=Service(row["service"].strip()),
-                    stay_out=row["stay_out"].strip() == "1",
-                    is_admin=row.get("is_admin", "").strip() == "1",
-                )
+                try:
+                    person = Person(
+                        username=username,
+                        display_name=col("display_name"),
+                        rank=Rank(col("rank")),
+                        appointment=Appointment(col("appointment")),
+                        company_role=CompanyRole(col("company_role")) if col("company_role") else None,
+                        platoon=int(col("platoon")) if col("platoon") else None,
+                        service=Service(col("service")),
+                        stay_out=col("stay_out") == "1",
+                        is_admin=col("is_admin") == "1",
+                    )
+                except ValueError as exc:
+                    raise click.ClickException(f"Row {lineno} ({username}): {exc}")
                 person.set_password(default_password)
                 db.session.add(person)
                 created += 1

@@ -59,8 +59,12 @@ def change_password():
 @bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
-    logout_user()
+    # Clear BEFORE logout_user(): logout_user() plants a '_remember': 'clear'
+    # marker in the session that the after-request hook needs in order to
+    # expire the remember-me cookie. Clearing afterwards wipes the marker and
+    # remember-me users would be silently re-authenticated on their next request.
     session.clear()
+    logout_user()
     return redirect(url_for("auth.login"))
 
 

@@ -15,7 +15,9 @@ migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 csrf = CSRFProtect()
-limiter = Limiter(key_func=get_remote_address)
+# memory:// is a deliberate choice at 40 users (per-worker counters accepted;
+# see TECH_PLAN deployment notes) — declared explicitly to silence the warning.
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 
 
 @event.listens_for(Engine, "connect")
