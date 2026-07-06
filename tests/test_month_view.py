@@ -81,6 +81,21 @@ def test_day_with_approved_leave_shows_one_away_and_other_days_show_none(app, cl
     assert b"0 away" not in resp.data
 
 
+def test_two_overlapping_requests_for_same_person_count_as_one_away(app, client, make_person):
+    # Overlaps are soft-warned, never blocked — the same person can hold two
+    # APPROVED requests covering one day. The cell counts people, not rows,
+    # matching away_summary's per-person dedupe on the board itself.
+    make_person(username="mv_double_guy", platoon=1)
+    login(client, make_person(username="mv_double_viewer"))
+    plant_leave(app, "mv_double_guy", date(2026, 7, 8))
+    plant_leave(app, "mv_double_guy", date(2026, 7, 8))
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert b"1 away" in resp.data
+    assert b"2 away" not in resp.data
+
+
 # ---------- Criterion 4: absences_on still delegates correctly ----------
 
 def test_absences_on_matches_absences_between_single_day(app, make_person):

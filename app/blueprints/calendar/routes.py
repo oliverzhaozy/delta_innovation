@@ -128,7 +128,9 @@ def month():
                     "in_month": in_month,
                     # Adjacent-month padding cells get no chips at all (TECH_PLAN cut).
                     "events": events_by_day.get(d, []) if in_month else [],
-                    "away": len(away_counts.get(d, [])) if in_month else 0,
+                    # Distinct people, not rows — overlapping approved requests
+                    # are allowed, and away_summary dedupes the board the same way.
+                    "away": len({r.person_id for r in away_counts.get(d, [])}) if in_month else 0,
                 }
             )
         weeks.append(cells)
