@@ -27,7 +27,7 @@
       {% for r in rows %}
       <li>
         <span>{{ r.person.display_name }}</span>
-        <span class="chip plain">{{ r.type.value }}{% if r.day_part.value != "FULL" %} · {{ r.day_part.value }}{% endif %}</span>
+        <span class="chip plain">{{ r.label }}{% if r.day_part.value != "FULL" %} · {{ r.day_part.value }}{% endif %}</span>
       </li>
       {% endfor %}
     </ul>
