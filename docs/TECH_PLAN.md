@@ -15,6 +15,7 @@ This plan was pressure-tested by a 5-critic review panel (ambiguity, edge cases,
 - **(c) PM off:** counts **present at night roll call** (expected back); stay-out personnel simply don't return that night and are counted under the normal stay-out rule.
 - **(d) Half-day vs duty:** anyone with any off/leave that day is **skipped by the roster auto-pick**, but the PS can assign manually with a warning.
 - **(e) Statuses:** MC/course/briefing/site-testing are **date-ranged records that auto-fill** every parade state they cover; the COS adds/ends/overrides, never re-keys.
+- **(f) Half-day clash boundary (2026-07-06):** AM off covers up to **12:00**, PM off starts at 12:00. Clash checks compare time windows, so an AM off vs a 1400 conduct is no clash.
 - **Hosting:** undecided — plan targets a small Linux VPS + Caddy; decide before task P0.8.
 - **Formats:** real sanitized samples of the 3 parade states, RO, and manning list will be pasted when Phases 3/5/6 need them.
 
@@ -163,6 +164,34 @@ Eligibility ∧ availability feeds auto-pick; humans always confirm; manual assi
 **P1.11** Presence service v1 + absence board: `absences_on(date)` with day-part tags (requests + direct absences), simple copyable list. *Done:* approved leave appears for the right dates; cancelled leave doesn't.
 **P1.12** E2E test: request → PC → OC → ledger → absence board via the Flask test client.
 **P1.13** Rollout: S3 keys opening balances (UI or CSV command), 1–2 week parallel run against TimeTree, hard cutover date, rollout checklist.
+
+## Phase 2 task breakdown (one task at a time)
+
+> Added 2026-07-06 after P1 completed. Scope identical to the P2 line under "Build phases" — now decomposed. Two P1 discoveries shape the order: the ledger unique constraint `uq_ledger_request_source_kind` forbids a second REVERSAL row per request (but early-return-then-cancel legitimately needs two), and `cancel_approved` credits by mirroring the *original* debit, which would over-credit after a partial reversal — so ledger groundwork (P2.9) must land before early return (P2.10).
+
+**P2.1** Overseas declarations: `OverseasDeclaration` model (person_id, start_date, end_date, destination, created_at, cancelled_at) + migration, everyone-can-declare form, "my declarations" list with retract (sets cancelled_at; rows never deleted), S3 upcoming view, nav links. *Why first: a small independent slice that starts accumulating the data P6 manning needs the moment the app deploys.* *Done:* Opr declares → S3 sees it upcoming; retract leaves the cancelled row visible with its timestamp.
+
+**P2.2** Event + EventParticipant models: `Calendar` (TP/ARCTIC) and `ParticipantCategory` (NSF/REGULAR/COMMAND_TEAM/PLATOON_1/2/3) enums in `domain/types.py`; `event` (calendar, title, start_dt, end_dt, notes, created_by; ck end_dt > start_dt; `ix_event_range`); `event_participant` with person-XOR-category check constraint, include/exclude flag, unique(event, person) and unique(event, category); migration. *Done:* migration applies; XOR and uniqueness violations rejected in tests.
+
+**P2.3** Pure `domain/participants.py`: resolve(rows, roster) = union(included categories) − union(excluded categories), then person rows override (include adds, exclude removes), intersected with the active roster; categories resolve at query time; no rows ⇒ nobody involved (whole company = tag NSF+REGULAR). *Done:* unit tests — person-exclude beats category-include, person-include beats category-exclude, inactive dropped, "Platoon 2 except X plus Y" resolves.
+
+**P2.4** Calendar blueprint + event CRUD: `DateTimeLocalField` start/end, per-calendar list; TP list any logged-in user, ARCTIC list `@require(can_view_arctic)`, create/edit/delete `@require(can_edit_events)` with POST+CSRF delete; Calendar nav in base.html; dashboard's "Phase 2" ARCTIC placeholder goes live. *Done:* Opr lists TP but 403s on the ARCTIC list and every mutating URL.
+
+**P2.5** Participant picker + resolved detail: form gains category checkboxes plus "also include"/"except" person multi-selects (no JS; person listed both ways rejected server-side); `event_service.resolve_participants(event)` joins the roster onto P2.3; detail page shows resolved names with category chips. *Done:* "Platoon 2 except X plus Y" shows exactly the right names via the test client.
+
+**P2.6** Month view: server-rendered 7-column grid with prev/next nav; one range query per layer expanded into a {day: chips} map; TP + (gated) ARCTIC chips repeated in every day cell they cover; per-day away-count chip from a new `presence_service.absences_between(start, end)`; chips link to event detail, day number to the away board. *Why repeated chips, not spanning bars: correct with zero CSS/JS gymnastics and reads best at phone width.* *Done:* a 3-day event appears in all 3 cells; ARCTIC chips absent for an Opr; sane at phone width.
+
+**P2.7** Pure `domain/clash.py`: named `DAY_PART_BOUNDARY = time(12, 0)` (owner-confirmed 2026-07-06, decision f) + `day_part_window(day, day_part)` half-open [start, end) windows + a leave-vs-event overlap predicate. *Done:* AM off vs 1400 conduct = no clash; boundary-touching = no clash; FULL day vs any same-day event = clash; multi-day both sides; a test pins the constant so changing it is deliberate.
+
+**P2.8** Clash panel wiring: `event_service.clashes_for(request)` (events overlapping the window whose resolved participants include the requester); submission flash warns the requester (existing overlap-flash pattern); PC/OC detail gains a panel listing tagged conducts + projected away-count per requested day via `absences_between`. *Done:* approver sees the clash; a warn-only test proves nothing is auto-rejected.
+
+**P2.9** Ledger groundwork for amendment: migration replaces `uq_ledger_request_source_kind` with a partial unique index on `(leave_request_id, kind) WHERE source='LEAVE_APPROVAL'`; `cancel_approved` reworked to credit the **net outstanding** per kind (−SUM of all ledger rows for the request; posts nothing at zero). *Why one task: the old constraint masks the over-credit bug as a crash — relaxing it without the net-credit fix would turn a 500 into silent balance drift.* *Done:* simulated partial REVERSAL then cancel credits only the remainder; double-debit still violates the index; double-cancel still dies at the claim.
+
+**P2.10** Early return: S3/OC (reuse `can_cancel_approved_leave` — same trust boundary) amend end_date of an APPROVED full-day multi-day request to start ≤ new_end < old_end via conditional claim `UPDATE … WHERE status='APPROVED' AND end_date=:old_end`, then REVERSAL credit = max(0, net outstanding debit − recomputed deduction for the shortened range), reason recording old→new, one commit; form on the leave detail page. *Why net-from-ledger, not recompute-the-original: a PH-table edit since approval must not skew the credit.* *Done:* Thu–Mon OFF returned after Thu credits 2 days; a second amendment and a cancel-after-amendment each leave the balance exactly whole; no ledger row ever edited.
+
+**P2.11** E2E + rollout: test-client walk — ARCTIC event with "Platoon 2 except X plus Y" → member submits overlapping leave → PC and OC both see the clash panel → approve → early return → ledger, balances, away board all correct; `docs/ROLLOUT.md` gains the TP/ARCTIC cutover step (app authoritative, TimeTree read-only). *Done:* test green; ROLLOUT.md updated.
+
+**Deliberately cut from P2** (so they aren't re-litigated): spanning multi-day event bars / any JS calendar widget; a bespoke day-detail page (event detail + away board cover it); category-*exclude* in the picker UI (schema + pure function support it; the form offers include-categories + person exceptions only); pre-submit clash preview (needs JS; the post-submit flash + approver panel cover the decision-makers); event soft-delete/edit history (parade snapshots protect the documents that matter); overseas-declaration editing (retract + re-declare keeps the trace); per-person leave names in month cells (counts only; 36 names destroy a phone-width grid).
 
 ## Risks & open decisions
 
