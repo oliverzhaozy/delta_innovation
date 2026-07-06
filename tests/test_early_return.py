@@ -29,6 +29,7 @@ from tests.conftest import login
 # Thu 13 – Mon 17 Aug 2026: 3 working days (Thu, Fri, Mon) = 6 half-days.
 THU = date(2026, 8, 13)
 FRI = date(2026, 8, 14)
+SUN = date(2026, 8, 16)  # non-working; Sat 15 + Sun 16 both fall inside Thu–Sun
 MON = date(2026, 8, 17)
 WED = date(2026, 8, 12)  # before start
 TUE_NEXT = date(2026, 8, 18)  # after end
@@ -94,6 +95,10 @@ def test_returned_after_thu_credits_two_days(app, make_person):
         rev = _reversals(req.id)
         assert len(rev) == 1 and rev[0].delta_half_days == 4  # 2 days credited
         assert "OFF" in rev[0].reason  # reason records the amendment
+        # Fix 1: the amendment ALSO leaves an audit trace on the request row.
+        req_after = db.session.get(LeaveRequest, req.id)
+        assert "Early return by" in req_after.remarks
+        assert "end 17 Aug -> 13 Aug" in req_after.remarks
 
 
 # --- Criterion 2: composability — amend, amend, cancel; balance stays whole ---
@@ -266,10 +271,40 @@ def test_ll_amendment_posts_no_ledger_row(app, make_person):
     with app.app_context():
         pid, actor_id = _pid("er_ll"), _pid("er_ll_s3")
         req = _approved(pid, type=LeaveType.LL)  # LL: absence only, no ledger
+        req.remarks = "Prior note"  # a pre-existing remark must be preserved
         db.session.commit()
         early_return(req, db.session.get(Person, actor_id), THU)  # must not crash
-        assert db.session.get(LeaveRequest, req.id).end_date == THU
+        req_after = db.session.get(LeaveRequest, req.id)
+        assert req_after.end_date == THU
         assert db.session.query(LedgerEntry).filter_by(leave_request_id=req.id).all() == []
+        # Fix 1: LL credits nothing, but the amendment still records who/what.
+        assert req_after.remarks.startswith("Prior note; Early return by")
+        assert "end 17 Aug -> 13 Aug" in req_after.remarks
+
+
+# --- Fix 1: zero prorated credit (dropped days non-working) still traces -------
+
+def test_zero_credit_off_still_records_trace(app, make_person):
+    """Approve Thu–Sun (Sat/Sun non-working), return to Fri: the only days dropped
+    are the weekend, so the prorated credit is 0 — no REVERSAL row. The amendment
+    must still shorten the absence AND leave an audit trace on the request row."""
+    make_person(username="er_zc")
+    make_person(username="er_zc_s3", company_role="S3")
+    with app.app_context():
+        pid, actor_id = _pid("er_zc"), _pid("er_zc_s3")
+        actor = db.session.get(Person, actor_id)
+        req = _approved(pid, start=THU, end=SUN)  # Thu–Sun; only Thu+Fri are working
+        _debit(pid, req.id, actor_id, -4)  # 2 working days = 4 half-days
+        db.session.commit()
+
+        early_return(req, actor, FRI)  # drop Sat+Sun only -> credit max(0, 4-4) = 0
+
+        req_after = db.session.get(LeaveRequest, req.id)
+        assert req_after.end_date == FRI  # absence shortened
+        assert _reversals(req.id) == []  # zero credit -> no REVERSAL row
+        assert ledger_service.balance(pid, BalanceKind.OFF) == -4  # balance untouched
+        assert "Early return by" in req_after.remarks
+        assert "end 16 Aug -> 14 Aug" in req_after.remarks
 
 
 # --- Criterion 6: route authz + the away board shortens end-to-end -----------
@@ -367,7 +402,10 @@ def test_route_double_submit_no_second_credit(app, client, make_person):
 
     login(client, "ds_s3")
     client.post(f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()}, follow_redirects=True)
-    # Second identical submit: end_date already advanced, so it loses cleanly.
+    # Second identical submit: end_date is now THU, so the range guard
+    # (new_end < end is false, THU < THU) rejects it before the conditional
+    # claim ever runs. (The claim-predicate path — a stale in-memory end_date
+    # while the row moved — is covered by test_concurrent_amendment_loses_at_claim.)
     client.post(f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()}, follow_redirects=True)
     with app.app_context():
         assert ledger_service.balance(_pid("ds_opr"), BalanceKind.OFF) == -2

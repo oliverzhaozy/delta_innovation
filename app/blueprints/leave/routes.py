@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from flask import abort, flash, redirect, render_template, request as http_request, url_for
+from flask import abort, current_app, flash, redirect, render_template, request as http_request, url_for
 from flask_login import current_user, login_required
 
 from app.authz import require
@@ -75,15 +75,22 @@ def new():
         else:
             flash("Request submitted.", "success")
         # Informational only — clash info never blocks or reroutes a request
-        # (CLAUDE.md: the app proposes, a human decides).
-        clashes = event_service.clashes_for(
-            request_row, include_arctic=policy.can_view_arctic(current_user)
-        )
-        if clashes:
-            titles = ", ".join(c.title for c in clashes)
-            flash(
-                f"You're tagged in {len(clashes)} conduct(s) on those dates: {titles}.",
-                "warning",
+        # (CLAUDE.md: the app proposes, a human decides). Wrapped because this
+        # runs AFTER the commit: warn-only decoration must never break the
+        # transaction it decorates (a clash-lookup error can't 500 a saved request).
+        try:
+            clashes = event_service.clashes_for(
+                request_row, include_arctic=policy.can_view_arctic(current_user)
+            )
+            if clashes:
+                titles = ", ".join(c.title for c in clashes)
+                flash(
+                    f"You're tagged in {len(clashes)} conduct(s) on those dates: {titles}.",
+                    "warning",
+                )
+        except Exception:
+            current_app.logger.warning(
+                "clash flash failed for request %s", request_row.id, exc_info=True
             )
         return redirect(url_for("leave.index"))
     return render_template(
@@ -159,15 +166,21 @@ def detail(request_id):
         request_row, include_arctic=policy.can_view_arctic(current_user)
     )
     away_counts = presence_service.absences_between(request_row.start_date, request_row.end_date)
-    away_rows = [
-        {
-            "day": d,
-            # Distinct people, not rows — matches the P2.6 month cell's dedupe
-            # so the two surfaces never disagree on who's away.
-            "count": len({r.person_id for r in away_counts.get(d, [])}),
-        }
-        for d in iter_days(request_row.start_date, request_row.end_date)
-    ]
+    away_rows = []
+    for d in iter_days(request_row.start_date, request_row.end_date):
+        # Distinct people, not rows — matches the P2.6 month cell's dedupe
+        # so the two surfaces never disagree on who's away.
+        already = {r.person_id for r in away_counts.get(d, [])}
+        away_rows.append(
+            {
+                "day": d,
+                "count": len(already),
+                # Projected away-count if approved (TECH_PLAN): already-away
+                # UNION the requester. Person-id sets mean an already-away
+                # requester (via another approved leave) is never double-counted.
+                "projected": len(already | {request_row.person_id}),
+            }
+        )
     can_act_pc = (
         request_row.status is RequestStatus.PENDING_PC
         and policy.can_approve_as_pc(current_user, request_row.person.platoon)

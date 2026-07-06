@@ -100,6 +100,28 @@ def test_person_in_both_include_and_except_rerenders_with_error(app, client, mak
         assert db.session.query(Event).filter_by(title="Should not save").count() == 0
 
 
+# ---------- Fix 3: crafted duplicate participant id -> one row, no 500 ----------
+
+def test_duplicate_include_id_is_deduped_to_one_row(app, client, make_person):
+    """The checkbox UI can't produce duplicates, but a hand-built POST can. Two
+    identical include ids must dedupe to one row rather than 500 on
+    uq_participant_event_person."""
+    login(client, make_person(**make_pc()))
+    make_person(username="p2_dupinc", display_name="Dup Include", rank=Rank.PTE, platoon=2)
+    with app.app_context():
+        dup_id = db.session.query(Person.id).filter_by(username="p2_dupinc").scalar()
+
+    resp = create_event(
+        client,
+        title="Dup include event",
+        include_people=[str(dup_id), str(dup_id)],  # crafted duplicate
+    )
+    assert resp.status_code == 200  # saved, no IntegrityError 500
+    event_id = event_id_for(app, "Dup include event")
+    assert event_id is not None
+    assert participant_count(app, event_id) == 1  # one row, not two
+
+
 # ---------- Criterion 3: editing replaces rows, no duplicates across two edits ----------
 
 def test_editing_event_replaces_participant_rows_without_duplicates(app, client, make_person):

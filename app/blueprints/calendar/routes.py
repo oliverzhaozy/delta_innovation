@@ -40,8 +40,11 @@ def _participant_rows_from(form):
     # Wholesale replacement, not a diff — the delete-orphan cascade on
     # Event.participants makes `event.participants = [...]` safe (P2.2).
     rows = [EventParticipant(category=ParticipantCategory(v), include=True) for v in form.categories.data]
-    rows += [EventParticipant(person_id=pid, include=True) for pid in form.include_people.data]
-    rows += [EventParticipant(person_id=pid, include=False) for pid in form.except_people.data]
+    # Dedupe person ids with set(): the checkbox UI can't produce duplicates,
+    # but a hand-built POST can, and two rows for one person would violate
+    # uq_participant_event_person (a 500 instead of a clean save).
+    rows += [EventParticipant(person_id=pid, include=True) for pid in set(form.include_people.data)]
+    rows += [EventParticipant(person_id=pid, include=False) for pid in set(form.except_people.data)]
     return rows
 
 

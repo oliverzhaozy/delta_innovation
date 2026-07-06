@@ -8,7 +8,7 @@ the absence and decrements the balance, atomically.
 """
 from sqlalchemy import func, update
 
-from app.domain.dates import now_sgt
+from app.domain.dates import now_sgt, today_sgt
 from app.domain.types import BalanceKind, DayPart, LedgerSource, RequestStatus
 from app.extensions import db
 from app.models import LeaveRequest
@@ -39,10 +39,12 @@ def _claim(request_id, from_status, **values):
         raise TransitionError("This request was already actioned by someone else.")
 
 
-def _claim_end_date(request_id, old_end, new_end):
+def _claim_end_date(request_id, old_end, new_end, remarks):
     """Sibling of _claim for early return: pins end_date as well as status, so a
     concurrent or repeated amendment (the row already moved) matches 0 rows and
-    loses cleanly instead of double-crediting."""
+    loses cleanly instead of double-crediting. Writes `remarks` in the SAME claim
+    so the amendment always leaves an audit trace — even when the prorated credit
+    is 0 and no ledger row is posted (LL/OL, weekend-only shortenings)."""
     result = db.session.execute(
         update(LeaveRequest)
         .where(
@@ -50,7 +52,7 @@ def _claim_end_date(request_id, old_end, new_end):
             LeaveRequest.status == RequestStatus.APPROVED,
             LeaveRequest.end_date == old_end,
         )
-        .values(end_date=new_end)
+        .values(end_date=new_end, remarks=remarks)
     )
     if result.rowcount != 1:
         db.session.rollback()
@@ -167,7 +169,15 @@ def early_return(request, actor, new_end_date):
         )
 
     old_end = request.end_date
-    _claim_end_date(request.id, old_end, new_end_date)
+    # Record the amendment unconditionally, in the same claim, so a zero-credit
+    # early return (LL/OL, or a shortening that only drops non-working days)
+    # still leaves a trace of who shortened the leave and from what.
+    note = (
+        f"Early return by {actor.display_name} {today_sgt().strftime('%d %b %Y')}: "
+        f"end {old_end.strftime('%d %b')} -> {new_end_date.strftime('%d %b')}"
+    )
+    new_remarks = f"{request.remarks}; {note}" if request.remarks else note
+    _claim_end_date(request.id, old_end, new_end_date, new_remarks)
     try:
         from app.models import LedgerEntry  # local import to avoid cycle at module load
 

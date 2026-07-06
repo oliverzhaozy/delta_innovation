@@ -211,5 +211,28 @@ def test_already_away_rows_show_distinct_person_count_per_day(app, client, make_
     login(client, "cp_viewer_oc6")
 
     resp = client.get(f"/leave/{req_id}")
+    # Already-away counts (distinct persons): only 7 Jul has someone away.
     assert resp.data.count(b"1 away") == 1
     assert resp.data.count(b"0 away") == 2
+    # Fix 5: projected = already-away UNION the requester (one more person).
+    assert resp.data.count(b"2 if approved") == 1  # 7 Jul: cp_other6 + requester
+    assert resp.data.count(b"1 if approved") == 2  # 6 & 8 Jul: just the requester
+
+
+# ---------- Fix 5: projected must not double-count an already-away requester ----------
+
+def test_projected_does_not_double_count_requester_already_away(app, client, make_person):
+    make_person(username="cp_req_nd", appointment=Appointment.OPR, platoon=1, service=Service.NSF)
+    requester_id = person_id_of(app, "cp_req_nd")
+    # The requester is ALREADY away on 9 Jul via a separate APPROVED leave.
+    plant_leave(app, requester_id, date(2026, 7, 9))
+    # ...and this pending request also covers 9 Jul.
+    req_id = plant_request(app, requester_id, date(2026, 7, 9), date(2026, 7, 9))
+    make_person(username="cp_viewer_oc_nd", rank=Rank.CPT, appointment=Appointment.OC, platoon=None)
+    login(client, "cp_viewer_oc_nd")
+
+    resp = client.get(f"/leave/{req_id}")
+    # Requester is the only one away and approving adds no NEW person: projected == already.
+    assert resp.data.count(b"1 away") == 1
+    assert resp.data.count(b"1 if approved") == 1
+    assert b"2 if approved" not in resp.data  # not double-counted

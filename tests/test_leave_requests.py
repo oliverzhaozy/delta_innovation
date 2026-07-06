@@ -105,3 +105,31 @@ def test_cannot_cancel_someone_elses_request(app, client, make_person):
         req_id = db.session.query(LeaveRequest.id).scalar()
     login(client, make_person(username="opr_attacker"))
     assert client.post(f"/leave/{req_id}/cancel").status_code == 403
+
+
+def test_clash_flash_error_does_not_break_submit(app, client, make_person, monkeypatch):
+    """Fix 2: the warn-only clash flash runs AFTER the commit. If it raises, the
+    submit must still succeed and redirect — a decoration can't 500 the request
+    it decorates."""
+    from app.services import event_service
+
+    login(client, make_person(username="opr_clashboom"))
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("clash lookup exploded")
+
+    monkeypatch.setattr(event_service, "clashes_for", boom)
+
+    data = {
+        "type": "OFF",
+        "start_date": WED.isoformat(),
+        "end_date": WED.isoformat(),
+        "day_part": "FULL",
+        "reason": "",
+    }
+    resp = client.post("/leave/new", data=data, follow_redirects=False)
+    assert resp.status_code in (302, 303)  # redirected, not a 500
+    followed = client.get(resp.headers["Location"])
+    assert b"Request submitted." in followed.data  # success flash survived
+    with app.app_context():
+        assert db.session.query(LeaveRequest).count() == 1  # row was committed

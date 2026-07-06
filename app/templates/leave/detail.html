@@ -37,7 +37,7 @@
 
 <section class="card">
   <h2>Conducts &amp; presence on these dates</h2>
-  <h3>Conducts on these dates</h3>
+  <h3>Conducts</h3>
   {% if clashes %}
   <div class="table-wrap">
     <table class="list">
@@ -56,10 +56,10 @@
   {% else %}
   <p class="muted">No tagged conducts on these dates.</p>
   {% endif %}
-  <h3>Already away on requested days</h3>
+  <h3>Projected away on requested days</h3>
   <ul class="toollist">
     {% for row in away_rows %}
-    <li><span class="muted">{{ row.day.strftime("%a %d %b") }}</span><span>{{ row.count }} away</span></li>
+    <li><span class="muted">{{ row.day.strftime("%a %d %b") }}</span><span>{{ row.count }} away &rarr; {{ row.projected }} if approved</span></li>
     {% endfor %}
   </ul>
 </section>
