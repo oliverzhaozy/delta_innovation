@@ -19,10 +19,28 @@
 </section>
 
 <section class="card">
-  <h2>Participants</h2>
-  {# P2.5 adds the category/person picker and resolved names — deliberately
-     not faked here; an event created in this task simply has none yet. #}
-  <p class="muted">Not set up yet — the participant picker lands in P2.5.</p>
+  <h2>Who's involved</h2>
+  {% if event.participants %}
+  <div class="chips">
+    {% for row in event.participants if row.category is not none and row.include %}
+    <span class="chip">{{ row.category.label }}</span>
+    {% endfor %}
+    {% for row in event.participants if row.person_id is not none and row.include %}
+    <span class="chip plain">+ {{ row.person.display_name }}</span>
+    {% endfor %}
+    {% for row in event.participants if row.person_id is not none and not row.include %}
+    <span class="chip plain">&minus; {{ row.person.display_name }}</span>
+    {% endfor %}
+  </div>
+  <p class="muted" style="margin-top:0.7rem">{{ resolved | length }} {{ "person" if resolved | length == 1 else "people" }}</p>
+  <ul class="toollist">
+    {% for person in resolved %}
+    <li><span>{{ person.rank.value }} {{ person.display_name }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nobody tagged.</p>
+  {% endif %}
 </section>
 
 {% if policy.can_edit_events(current_user) %}

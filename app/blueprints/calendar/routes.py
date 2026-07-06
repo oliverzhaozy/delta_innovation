@@ -5,9 +5,10 @@ from app.authz import require
 from app.blueprints.calendar import bp
 from app.blueprints.calendar.forms import EventForm
 from app.domain import policy
-from app.domain.types import Calendar
+from app.domain.types import Calendar, ParticipantCategory
 from app.extensions import db
-from app.models import Event
+from app.models import Event, EventParticipant
+from app.services import event_service
 
 
 def _events_for(calendar):
@@ -21,6 +22,35 @@ def _events_for(calendar):
 
 def _list_endpoint(calendar):
     return "calendar.arctic_list" if calendar is Calendar.ARCTIC else "calendar.tp_list"
+
+
+def _set_people_choices(form):
+    # Request-time roster, not class-level — who's active/what platoon
+    # changes day to day, unlike the fixed category choices.
+    choices = [(p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()]
+    form.include_people.choices = choices
+    form.except_people.choices = choices
+
+
+def _participant_rows_from(form):
+    # Wholesale replacement, not a diff — the delete-orphan cascade on
+    # Event.participants makes `event.participants = [...]` safe (P2.2).
+    rows = [EventParticipant(category=ParticipantCategory(v), include=True) for v in form.categories.data]
+    rows += [EventParticipant(person_id=pid, include=True) for pid in form.include_people.data]
+    rows += [EventParticipant(person_id=pid, include=False) for pid in form.except_people.data]
+    return rows
+
+
+def _populate_participant_fields(form, event):
+    form.categories.data = [
+        r.category.value for r in event.participants if r.category is not None and r.include
+    ]
+    form.include_people.data = [
+        r.person_id for r in event.participants if r.person_id is not None and r.include
+    ]
+    form.except_people.data = [
+        r.person_id for r in event.participants if r.person_id is not None and not r.include
+    ]
 
 
 @bp.route("/tp")
@@ -48,13 +78,16 @@ def detail(event_id):
     # URL just because the route itself only requires login.
     if event.calendar is Calendar.ARCTIC and not policy.can_view_arctic(current_user):
         abort(403)
-    return render_template("calendar/detail.html", event=event)
+    return render_template(
+        "calendar/detail.html", event=event, resolved=event_service.resolve_participants(event)
+    )
 
 
 @bp.route("/new", methods=["GET", "POST"])
 @require(policy.can_edit_events)
 def new():
     form = EventForm()
+    _set_people_choices(form)
     if form.validate_on_submit():
         event = Event(
             calendar=Calendar(form.calendar.data),
@@ -64,6 +97,7 @@ def new():
             notes=(form.notes.data or "").strip() or None,
             created_by_id=current_user.id,
         )
+        event.participants = _participant_rows_from(form)
         db.session.add(event)
         db.session.commit()
         flash("Event created.", "success")
@@ -76,16 +110,19 @@ def new():
 def edit(event_id):
     event = db.session.get(Event, event_id) or abort(404)
     form = EventForm(obj=event)
+    _set_people_choices(form)
     if not form.is_submitted():
         # obj= fills the calendar SelectField with the enum instance; it
         # needs the plain string value (same pattern as admin/person_edit).
         form.calendar.data = event.calendar.value
+        _populate_participant_fields(form, event)
     if form.validate_on_submit():
         event.calendar = Calendar(form.calendar.data)
         event.title = form.title.data.strip()
         event.start_dt = form.start_dt.data
         event.end_dt = form.end_dt.data
         event.notes = (form.notes.data or "").strip() or None
+        event.participants = _participant_rows_from(form)
         db.session.commit()
         flash("Event updated.", "success")
         return redirect(url_for("calendar.detail", event_id=event.id))
