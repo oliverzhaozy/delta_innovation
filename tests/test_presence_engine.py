@@ -1,0 +1,276 @@
+from datetime import date
+from types import SimpleNamespace
+
+from app.domain import presence
+from app.domain.presence import PresenceState, Resolution
+from app.domain.types import DayPart, Service
+
+D = date(2026, 7, 10)
+
+
+# --- fakes (duck-typed rows; the engine returns the caller's own objects) ---
+
+def person(is_active=True, stay_out=False, service=Service.NSF):
+    return SimpleNamespace(is_active=is_active, stay_out=stay_out, service=service)
+
+
+def absence(start=D, end=D, day_part=DayPart.FULL, kind="leave"):
+    """Leave / direct-absence shaped row: dates + day_part, always out of camp."""
+    return SimpleNamespace(start_date=start, end_date=end, day_part=day_part, kind=kind)
+
+
+def status(start=D, end=D, day_part=DayPart.FULL, in_camp=False, kind="mc"):
+    return SimpleNamespace(
+        start_date=start, end_date=end, day_part=day_part, in_camp=in_camp, kind=kind
+    )
+
+
+def duty(start=D, end=D):
+    return SimpleNamespace(start_date=start, end_date=end)
+
+
+# --- covers (criterion 6) ------------------------------------------------
+
+def test_covers_inclusive_boundaries():
+    r = absence(start=date(2026, 7, 10), end=date(2026, 7, 12))
+    assert presence.covers(r, date(2026, 7, 10))  # start day
+    assert presence.covers(r, date(2026, 7, 11))  # inside
+    assert presence.covers(r, date(2026, 7, 12))  # end day
+    assert not presence.covers(r, date(2026, 7, 9))   # day before
+    assert not presence.covers(r, date(2026, 7, 13))  # day after
+
+
+def test_covers_single_day():
+    r = absence(start=D, end=D)
+    assert presence.covers(r, D)
+    assert not presence.covers(r, date(2026, 7, 9))
+
+
+def test_non_covering_rows_appear_nowhere():
+    before = absence(start=date(2026, 7, 1), end=date(2026, 7, 5))
+    after = status(start=date(2026, 7, 20), end=date(2026, 7, 25), in_camp=True)
+    res = presence.resolve(person(stay_out=True), D, leaves=[before], statuses=[after])
+    assert res.state is PresenceState.STAY_OUT
+    assert res.row is None
+    assert res.partial_rows == ()
+    assert res.in_camp_rows == ()
+    assert res.conflicts == ()
+
+
+# --- absent_for_day (criterion 7) ----------------------------------------
+
+def test_absent_for_day_full_and_am_absent_pm_present():
+    # Decision (i): FULL/AM count absent for the day; PM stays present.
+    assert presence.absent_for_day(DayPart.FULL) is True
+    assert presence.absent_for_day(DayPart.AM) is True
+    assert presence.absent_for_day(DayPart.PM) is False
+
+
+# --- adjacent precedence pairs (criterion 1) -----------------------------
+
+def test_deactivated_beats_leave():
+    lv = absence()
+    res = presence.resolve(person(is_active=False), D, leaves=[lv])
+    assert res.state is PresenceState.DEACTIVATED
+    assert res.row is None
+    assert lv in res.conflicts  # surfaced, never silently dropped
+
+
+def test_leave_beats_out_of_camp_status():
+    lv = absence(kind="leave")
+    st = status(in_camp=False, kind="mc")
+    res = presence.resolve(person(), D, leaves=[lv], statuses=[st])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is lv
+    assert res.conflicts == (st,)
+
+
+def test_direct_absence_beats_out_of_camp_status():
+    da = absence(kind="direct")
+    st = status(in_camp=False, kind="course")
+    res = presence.resolve(person(), D, direct_absences=[da], statuses=[st])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is da
+    assert res.conflicts == (st,)
+
+
+def test_leave_beats_direct_absence():
+    lv = absence(kind="leave")
+    da = absence(kind="direct")
+    res = presence.resolve(person(), D, leaves=[lv], direct_absences=[da])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is lv
+    assert res.conflicts == (da,)
+
+
+def test_out_of_camp_status_beats_duty():
+    st = status(in_camp=False)
+    res = presence.resolve(person(), D, statuses=[st], duties=[duty()])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is st
+
+
+def test_duty_beats_stay_out():
+    res = presence.resolve(person(stay_out=True), D, duties=[duty()])
+    assert res.state is PresenceState.DUTY
+    assert res.row is None
+
+
+def test_duty_beats_present():
+    res = presence.resolve(person(), D, duties=[duty()])
+    assert res.state is PresenceState.DUTY
+
+
+def test_stay_out_beats_present():
+    res = presence.resolve(person(stay_out=True), D)
+    assert res.state is PresenceState.STAY_OUT
+
+
+# --- AM / PM day-part semantics (criterion 2) ----------------------------
+
+def test_am_leave_makes_absent():
+    lv = absence(day_part=DayPart.AM)
+    res = presence.resolve(person(), D, leaves=[lv])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is lv
+    assert res.partial_rows == ()
+
+
+def test_pm_leave_is_present_partial():
+    lv = absence(day_part=DayPart.PM)
+    res = presence.resolve(person(), D, leaves=[lv])
+    assert res.state is PresenceState.PRESENT
+    assert res.row is None
+    assert res.partial_rows == (lv,)
+    assert res.conflicts == ()
+
+
+def test_am_status_makes_absent():
+    st = status(day_part=DayPart.AM, in_camp=False)
+    res = presence.resolve(person(), D, statuses=[st])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is st
+
+
+def test_pm_status_is_present_partial():
+    st = status(day_part=DayPart.PM, in_camp=False)
+    res = presence.resolve(person(), D, statuses=[st])
+    assert res.state is PresenceState.PRESENT
+    assert res.partial_rows == (st,)
+
+
+# --- stay-out / present defaults (criterion 3) ---------------------------
+
+def test_regular_defaults_to_stay_out():
+    res = presence.resolve(person(service=Service.REGULAR), D)
+    assert res.state is PresenceState.STAY_OUT
+
+
+def test_nsf_stay_out_flag_stays_out():
+    res = presence.resolve(person(service=Service.NSF, stay_out=True), D)
+    assert res.state is PresenceState.STAY_OUT
+
+
+def test_nsf_default_present():
+    res = presence.resolve(person(service=Service.NSF, stay_out=False), D)
+    assert res.state is PresenceState.PRESENT
+
+
+# --- in-camp statuses are annotations, never absences (criterion 4) ------
+
+def test_stay_out_regular_with_in_camp_briefing_still_stay_out():
+    # Subtle case: night documents show STAY OUT; the briefing surfaces only as
+    # an in-camp annotation (morning parade OTHERS IN CAMP), never an absence.
+    p = person(service=Service.REGULAR)  # regular → default stay-out
+    briefing = status(in_camp=True, kind="briefing")
+    res = presence.resolve(p, D, statuses=[briefing])
+    assert res.state is PresenceState.STAY_OUT
+    assert res.in_camp_rows == (briefing,)
+    assert res.conflicts == ()
+    assert res.partial_rows == ()
+    assert res.row is None
+
+
+def test_in_camp_status_alone_is_present_annotation():
+    briefing = status(in_camp=True, kind="briefing")
+    res = presence.resolve(person(), D, statuses=[briefing])
+    assert res.state is PresenceState.PRESENT
+    assert res.in_camp_rows == (briefing,)
+    assert res.row is None
+    assert res.conflicts == ()
+    assert res.partial_rows == ()
+
+
+def test_in_camp_status_collected_even_when_absent():
+    lv = absence()
+    briefing = status(in_camp=True, kind="briefing")
+    res = presence.resolve(person(), D, leaves=[lv], statuses=[briefing])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is lv
+    assert res.in_camp_rows == (briefing,)
+    assert briefing not in res.conflicts
+
+
+def test_in_camp_pm_status_is_annotation_not_partial():
+    briefing = status(in_camp=True, day_part=DayPart.PM, kind="briefing")
+    res = presence.resolve(person(), D, statuses=[briefing])
+    assert res.in_camp_rows == (briefing,)
+    assert res.partial_rows == ()
+
+
+# --- MC while on leave (criterion 5) -------------------------------------
+
+def test_mc_while_on_leave_surfaces_conflict():
+    lv = absence(kind="leave")
+    mc = status(in_camp=False, kind="mc")
+    res = presence.resolve(person(), D, leaves=[lv], statuses=[mc])
+    assert res.state is PresenceState.ABSENT
+    assert res.row is lv
+    assert res.conflicts == (mc,)
+
+
+# --- conflict ordering & deactivated classification ----------------------
+
+def test_conflicts_preserve_precedence_order():
+    lv = absence(kind="leave")
+    da = absence(kind="direct")
+    mc = status(in_camp=False, kind="mc")
+    res = presence.resolve(person(), D, leaves=[lv], direct_absences=[da], statuses=[mc])
+    assert res.row is lv
+    assert res.conflicts == (da, mc)  # leave wins; then direct, then out-of-camp status
+
+
+def test_deactivated_still_classifies_all_rows():
+    full_leave = absence(day_part=DayPart.FULL, kind="leave")
+    pm_off = absence(day_part=DayPart.PM, kind="off")
+    mc = status(in_camp=False, kind="mc")
+    briefing = status(in_camp=True, kind="briefing")
+    res = presence.resolve(
+        person(is_active=False), D, leaves=[full_leave, pm_off], statuses=[mc, briefing]
+    )
+    assert res.state is PresenceState.DEACTIVATED
+    assert res.row is None
+    # No winner when deactivated: every absent-making row is a conflict.
+    assert res.conflicts == (full_leave, mc)
+    assert res.partial_rows == (pm_off,)
+    assert res.in_camp_rows == (briefing,)
+
+
+def test_duty_state_still_collects_partials():
+    pm_off = absence(day_part=DayPart.PM, kind="off")
+    res = presence.resolve(person(), D, duties=[duty()], leaves=[pm_off])
+    assert res.state is PresenceState.DUTY
+    assert res.partial_rows == (pm_off,)
+
+
+# --- Resolution shape ----------------------------------------------------
+
+def test_resolution_is_frozen():
+    res = presence.resolve(person(), D)
+    assert isinstance(res, Resolution)
+    try:
+        res.state = PresenceState.ABSENT
+    except Exception as exc:  # frozen dataclass raises FrozenInstanceError
+        assert exc.__class__.__name__ == "FrozenInstanceError"
+    else:
+        raise AssertionError("Resolution should be immutable")
