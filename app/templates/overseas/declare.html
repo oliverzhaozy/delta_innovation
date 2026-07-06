@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Declare overseas travel{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Declare overseas travel</h1>
+  <p class="muted">Anyone can declare — this isn't leave and doesn't touch your OFF/OIL balance.
+     Backdated entries are fine; the app just records what happened.</p>
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.start_date.label }}{{ form.start_date() }}</p>
+  <p>{{ form.end_date.label }}{{ form.end_date() }}</p>
+  <p>{{ form.destination.label }}{{ form.destination() }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Declare</button>
+</form>
+{% endblock %}

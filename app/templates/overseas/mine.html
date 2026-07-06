@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}My overseas declarations{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>My overseas declarations</h1>
+</div>
+
+<p><a class="btn" href="{{ url_for('overseas.declare') }}">Declare travel</a></p>
+
+<section class="card">
+  <h2>Declarations</h2>
+  {% if declarations %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>When</th><th>Destination</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for d in declarations %}
+        <tr>
+          <td>{{ d.when_label }}</td>
+          <td>{{ d.destination }}</td>
+          <td>
+            {% if d.cancelled_at %}
+              <span class="badge cancelled">Retracted</span>
+              <div class="muted" style="font-size:0.85rem">{{ d.cancelled_at.strftime("%d %b %Y, %H:%M") }}</div>
+            {% else %}
+              <span class="badge approved">Active</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if not d.cancelled_at %}
+            <form action="{{ url_for('overseas.retract', declaration_id=d.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="linklike" style="color:var(--danger)">Retract</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No declarations yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

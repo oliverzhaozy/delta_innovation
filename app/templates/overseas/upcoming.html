@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Upcoming overseas travel{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Upcoming overseas travel</h1>
+  <p class="muted">Active declarations ending today or later — retracted and past entries are omitted.</p>
+</div>
+
+<section class="card">
+  {% if declarations %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Name</th><th>Rank</th><th>Pl</th><th>Dates</th><th>Destination</th></tr></thead>
+      <tbody>
+        {% for d in declarations %}
+        <tr>
+          <td>{{ d.person.display_name }}</td>
+          <td>{{ d.person.rank.value }}</td>
+          <td>{{ d.person.platoon or "—" }}</td>
+          <td>{{ d.when_label }}</td>
+          <td>{{ d.destination }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nothing upcoming.</p>
+  {% endif %}
+</section>
+{% endblock %}
