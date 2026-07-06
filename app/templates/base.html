@@ -16,6 +16,7 @@
       <nav class="topnav">
         <a href="{{ url_for('main.dashboard') }}">Home</a>
         <a href="{{ url_for('parade.away') }}">Away</a>
+        <a href="{{ url_for('parade.morning') }}">Morning parade</a>
         {% if policy.can_key_parade(current_user) %}
           <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
         {% endif %}

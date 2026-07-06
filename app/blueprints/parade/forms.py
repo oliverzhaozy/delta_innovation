@@ -43,6 +43,17 @@ class StatusEntryForm(FlaskForm):
             raise ValidationError("A half-day entry must be a single day.")
 
 
+class FpQuickAddForm(FlaskForm):
+    """Not-joining-FP quick-add form (P3a.7): person + a required reason. The
+    viewed date rides along as a plain hidden input in the template, not a
+    form field here — it is route state (which day's page posted this), not
+    user input to validate.
+    """
+
+    person_id = SelectField("Person", coerce=int)
+    reason = StringField("Reason", validators=[DataRequired(), Length(max=300)])
+
+
 class DirectAbsenceForm(FlaskForm):
     person_id = SelectField("Person", coerce=int)
     type = SelectField("Type", choices=[(t.value, t.label) for t in DirectAbsenceType])

@@ -5,13 +5,30 @@ from flask_login import current_user, login_required
 
 from app.authz import require
 from app.blueprints.parade import bp
-from app.blueprints.parade.forms import DirectAbsenceForm, StatusEntryForm
+from app.blueprints.parade.forms import DirectAbsenceForm, FpQuickAddForm, StatusEntryForm
 from app.domain import policy
+from app.domain import parade as parade_domain
 from app.domain.dates import today_sgt
-from app.domain.types import DayPart, DirectAbsenceType, STATUS_IN_CAMP_DEFAULT, Service, StatusType
+from app.domain.types import (
+    DayPart,
+    DirectAbsenceType,
+    LeaveType,
+    STATUS_IN_CAMP_DEFAULT,
+    Service,
+    StatusType,
+)
 from app.extensions import db
 from app.models import DirectAbsence, Person, StatusEntry
 from app.services import event_service, presence_service
+
+
+def _set_status_person_choices(form):
+    # Request-time roster, not class-level, same reasoning as calendar's
+    # _set_people_choices — who's active changes day to day. Shared by the
+    # statuses form and the morning-parade quick-add (both key a StatusEntry).
+    form.person_id.choices = [
+        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
+    ]
 
 
 @bp.route("/away")
@@ -33,15 +50,157 @@ def away():
     )
 
 
+def _parse_day(raw: str) -> date:
+    # Shared away/morning convention: a bad or missing ?date= falls back to
+    # today rather than 400ing — the page must always render something.
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return today_sgt()
+
+
+def _row_label(row) -> str:
+    # Same discrimination domain.parade._absent_category uses (the enum class
+    # of `row.type` is the one attribute every absence-making row shares):
+    # LeaveType has no .label (OFF/OIL/LL/OL already read fine as bare values),
+    # everything else exposes .label.
+    kind = row.type
+    return kind.value if isinstance(kind, LeaveType) else kind.label
+
+
+def _row_range(row) -> str:
+    start = row.start_date.strftime("%d %b")
+    if row.end_date == row.start_date:
+        return start
+    return f"{start} – {row.end_date.strftime('%d %b')}"
+
+
+def _conflict_lines(pairs):
+    """One line per shadowed row, across every person whose resolution carries
+    conflicts — the presence engine never drops a covering absence-making row,
+    so the keyer must see what it hid behind the winner (plan: surfaced,
+    never silently resolved).
+    """
+    lines = []
+    for person, resolution in pairs:
+        for shadowed in resolution.conflicts:
+            lines.append(
+                {
+                    "person": person,
+                    "winner_label": _row_label(resolution.row),
+                    "winner_range": _row_range(resolution.row),
+                    "shadow_label": _row_label(shadowed),
+                    "shadow_range": _row_range(shadowed),
+                }
+            )
+    return lines
+
+
+def _fp_rows(day):
+    # Defined by shape (OTHER + in_camp + single-day + start==end==day), not a
+    # hidden flag — a quick-add IS just a StatusEntry of this shape, so the
+    # list is a read of the same table the document itself reads.
+    return (
+        db.session.query(StatusEntry)
+        .join(Person, StatusEntry.person_id == Person.id)
+        .filter(
+            StatusEntry.type == StatusType.OTHER,
+            StatusEntry.in_camp.is_(True),
+            StatusEntry.start_date == day,
+            StatusEntry.end_date == day,
+        )
+        .order_by(Person.platoon.nulls_first(), Person.display_name)
+        .all()
+    )
+
+
+@bp.route("/morning")
+@login_required
+def morning():
+    day = _parse_day(request.args.get("date", ""))
+    pairs = presence_service.presence_inputs(day)
+    conflicts = _conflict_lines(pairs)
+
+    text = None
+    imbalance = None
+    try:
+        doc = parade_domain.categorize(day, pairs, "morning")
+        text = parade_domain.render_morning(doc)
+    except parade_domain.ParadeImbalance as exc:
+        # A wrong document is worse than none (plan) — render the page with
+        # an error card and no <pre>/copy button at all.
+        imbalance = str(exc)
+
+    fp_form = None
+    fp_rows = ()
+    if policy.can_key_parade(current_user):
+        fp_form = FpQuickAddForm()
+        _set_status_person_choices(fp_form)
+        fp_rows = _fp_rows(day)
+
+    return render_template(
+        "parade/morning.html",
+        day=day,
+        today=today_sgt(),
+        prev_day=day - timedelta(days=1),
+        next_day=day + timedelta(days=1),
+        text=text,
+        imbalance=imbalance,
+        conflicts=conflicts,
+        fp_form=fp_form,
+        fp_rows=fp_rows,
+    )
+
+
+@bp.route("/morning/fp", methods=["POST"])
+@require(policy.can_key_parade)
+def morning_fp_new():
+    day = _parse_day(request.form.get("date", ""))
+    form = FpQuickAddForm()
+    _set_status_person_choices(form)
+    if form.validate_on_submit():
+        row = StatusEntry(
+            person_id=form.person_id.data,
+            type=StatusType.OTHER,
+            start_date=day,
+            end_date=day,
+            day_part=DayPart.FULL,
+            in_camp=True,
+            remarks=form.reason.data.strip(),
+            created_by_id=current_user.id,
+        )
+        db.session.add(row)
+        db.session.commit()
+        flash("Added.", "success")
+    else:
+        flash("Could not add — check the person and reason.", "error")
+    return redirect(url_for("parade.morning", date=day.isoformat()))
+
+
+@bp.route("/morning/fp/<int:entry_id>/remove", methods=["POST"])
+@require(policy.can_key_parade)
+def morning_fp_remove(entry_id):
+    day = _parse_day(request.form.get("date", ""))
+    row = db.session.get(StatusEntry, entry_id)
+    # Guard: only a same-shaped quick-add row for the page the keyer is
+    # actually viewing may be hard-deleted here — this is a same-morning
+    # correction of a seconds-old slip, not general status deletion (P3a.8's
+    # snapshots protect finalized documents; this route never touches those).
+    is_quick_add = (
+        row is not None
+        and row.type is StatusType.OTHER
+        and row.in_camp
+        and row.start_date == row.end_date == day
+    )
+    if not is_quick_add:
+        abort(404)
+    db.session.delete(row)
+    db.session.commit()
+    flash("Removed.", "success")
+    return redirect(url_for("parade.morning", date=day.isoformat()))
+
+
 # --- Statuses (MC/course/briefing/site-testing/other) -----------------------
-
-def _set_status_person_choices(form):
-    # Request-time roster, not class-level, same reasoning as calendar's
-    # _set_people_choices — who's active changes day to day.
-    form.person_id.choices = [
-        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
-    ]
-
 
 def _resolve_in_camp(type_value, in_camp_choice):
     if in_camp_choice == "IN":

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Morning parade{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Morning parade</h1>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('parade.morning', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
+    <a href="{{ url_for('parade.morning', date=today.isoformat()) }}">Today</a>
+    <a href="{{ url_for('parade.morning', date=next_day.isoformat()) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  </div>
+</section>
+
+{% if conflicts %}
+<section class="card">
+  <h2>Conflicts</h2>
+  <ul class="toollist">
+    {% for c in conflicts %}
+    <li>{{ c.person.display_name }}: {{ c.winner_label }} ({{ c.winner_range }}) is showing on the parade; {{ c.shadow_label }} ({{ c.shadow_range }}) is also keyed for this day and is not shown.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if imbalance %}
+<section class="card">
+  <p class="error">Parade state out of balance — refusing to render; check keyed data</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>Copy as text</h2>
+  <pre id="paradetext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ text }}</pre>
+  <button type="button" class="btn secondary" data-copy="#paradetext">Copy</button>
+</section>
+{% endif %}
+
+{% if fp_form %}
+<section class="card">
+  <h2>Not joining FP</h2>
+  <form method="post" action="{{ url_for('parade.morning_fp_new') }}">
+    {{ fp_form.hidden_tag() }}
+    <input type="hidden" name="date" value="{{ day.isoformat() }}">
+    <p>{{ fp_form.person_id.label }}{{ fp_form.person_id() }}</p>
+    <p>{{ fp_form.reason.label }}{{ fp_form.reason() }}</p>
+    {% for field in fp_form if field.errors %}
+      {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+    {% endfor %}
+    <button type="submit">Add</button>
+  </form>
+
+  {% if fp_rows %}
+  <ul class="toollist" style="margin-top:1rem">
+    {% for row in fp_rows %}
+    <li>
+      <span>{{ row.person.rank.value }} {{ row.person.display_name }} ({{ row.remarks }})</span>
+      <form method="post" action="{{ url_for('parade.morning_fp_remove', entry_id=row.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="date" value="{{ day.isoformat() }}">
+        <button type="submit" class="linklike">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
