@@ -122,6 +122,45 @@ OCCUPYING_STATUSES = frozenset(
 )
 
 
+class StatusType(str, enum.Enum):
+    MC = "MC"
+    COURSE = "COURSE"
+    BRIEFING = "BRIEFING"
+    SITE_TESTING = "SITE_TESTING"
+    OTHER = "OTHER"
+
+    @property
+    def label(self) -> str:
+        return {
+            "MC": "MC",
+            "COURSE": "On course",
+            "BRIEFING": "Briefing",
+            "SITE_TESTING": "Site testing",
+            "OTHER": "Other",
+        }[self.value]
+
+
+# Convenience default for the P3a.5 keying form, not a rule: BRIEFING is
+# usually in-camp and the rest usually aren't, but any row can override it
+# (e.g. an out-of-camp briefing, or an in-camp "not joining FP" OTHER).
+STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
+    StatusType.MC: False,
+    StatusType.COURSE: False,
+    StatusType.BRIEFING: True,
+    StatusType.SITE_TESTING: False,
+    StatusType.OTHER: False,
+}
+
+
+class DirectAbsenceType(str, enum.Enum):
+    LEAVE = "LEAVE"
+    OTHER = "OTHER"
+
+    @property
+    def label(self) -> str:
+        return {"LEAVE": "Leave", "OTHER": "Other"}[self.value]
+
+
 class BalanceKind(str, enum.Enum):
     OFF = "OFF"
     OIL = "OIL"
