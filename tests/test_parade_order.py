@@ -72,12 +72,16 @@ def test_format_ddmmyy():
 
 # --- done-criterion 5: purity ------------------------------------------------
 
-def test_parade_module_imports_only_stdlib_and_domain_types():
+def test_parade_module_imports_only_stdlib_and_domain():
+    # P3a.6 widened parade.py to import sibling pure domain modules
+    # (presence, dates) — still no flask/services/models: stdlib + app.domain.*.
     source = Path("app/domain/parade.py").read_text()
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            assert node.module == "app.domain.types", node.module
+            assert not node.module.startswith("flask"), node.module
+            if node.module.startswith("app"):
+                assert node.module.startswith("app.domain"), node.module
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 assert not alias.name.startswith("app."), alias.name
