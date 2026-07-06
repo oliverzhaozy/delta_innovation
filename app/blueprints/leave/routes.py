@@ -5,6 +5,7 @@ from app.authz import require
 from app.blueprints.leave import bp
 from app.blueprints.leave.forms import LeaveRequestForm
 from app.domain import policy, routing
+from app.domain.dates import iter_days
 from app.domain.types import (
     BalanceKind,
     DayPart,
@@ -14,7 +15,7 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import LeaveRequest, Person
-from app.services import approval_service, leave_service, ledger_service
+from app.services import approval_service, event_service, leave_service, ledger_service, presence_service
 from app.services.approval_service import NegativeBalanceUnconfirmed, TransitionError
 
 
@@ -71,6 +72,17 @@ def new():
             )
         else:
             flash("Request submitted.", "success")
+        # Informational only — clash info never blocks or reroutes a request
+        # (CLAUDE.md: the app proposes, a human decides).
+        clashes = event_service.clashes_for(
+            request_row, include_arctic=policy.can_view_arctic(current_user)
+        )
+        if clashes:
+            titles = ", ".join(c.title for c in clashes)
+            flash(
+                f"You're tagged in {len(clashes)} conduct(s) on those dates: {titles}.",
+                "warning",
+            )
         return redirect(url_for("leave.index"))
     return render_template(
         "leave/new.html",
@@ -139,6 +151,21 @@ def detail(request_id):
         request_row.end_date,
         exclude_id=request_row.id,
     )
+    # Same viewer rule for everyone on this page (requester, PC, OC, S3):
+    # ARCTIC rows only surface for ARCTIC-cleared viewers.
+    clashes = event_service.clashes_for(
+        request_row, include_arctic=policy.can_view_arctic(current_user)
+    )
+    away_counts = presence_service.absences_between(request_row.start_date, request_row.end_date)
+    away_rows = [
+        {
+            "day": d,
+            # Distinct people, not rows — matches the P2.6 month cell's dedupe
+            # so the two surfaces never disagree on who's away.
+            "count": len({r.person_id for r in away_counts.get(d, [])}),
+        }
+        for d in iter_days(request_row.start_date, request_row.end_date)
+    ]
     can_act_pc = (
         request_row.status is RequestStatus.PENDING_PC
         and policy.can_approve_as_pc(current_user, request_row.person.platoon)
@@ -156,6 +183,8 @@ def detail(request_id):
         deduction_note=leave_service.deduction_note(request_row),
         projected=projected,
         overlaps=overlaps,
+        clashes=clashes,
+        away_rows=away_rows,
         can_act_pc=can_act_pc,
         can_act_oc=can_act_oc,
     )

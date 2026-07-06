@@ -35,6 +35,35 @@
   </ul>
 </section>
 
+<section class="card">
+  <h2>Conducts &amp; presence on these dates</h2>
+  <h3>Conducts on these dates</h3>
+  {% if clashes %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Conduct</th><th>Calendar</th><th>When</th></tr></thead>
+      <tbody>
+        {% for c in clashes %}
+        <tr>
+          <td><a href="{{ url_for('calendar.detail', event_id=c.id) }}">{{ c.title }}</a></td>
+          <td>{{ c.calendar.label }}</td>
+          <td>{{ c.start_dt.strftime("%d %b %H:%M") }} &ndash; {{ c.end_dt.strftime("%d %b %H:%M") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No tagged conducts on these dates.</p>
+  {% endif %}
+  <h3>Already away on requested days</h3>
+  <ul class="toollist">
+    {% for row in away_rows %}
+    <li><span class="muted">{{ row.day.strftime("%a %d %b") }}</span><span>{{ row.count }} away</span></li>
+    {% endfor %}
+  </ul>
+</section>
+
 {% if overlaps %}
 <section class="card">
   <h2>Overlapping requests</h2>
