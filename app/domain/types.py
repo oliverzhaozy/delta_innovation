@@ -161,6 +161,25 @@ class DirectAbsenceType(str, enum.Enum):
         return {"LEAVE": "Leave", "OTHER": "Other"}[self.value]
 
 
+class ParadeVariant(str, enum.Enum):
+    """Which of the 3 WhatsApp parade documents a ParadeSnapshot freezes.
+    Distinct from the lowercase "morning"/"roll_call" strings domain.parade's
+    compute pipeline takes — that's an internal compute-shape switch; this is
+    the persisted, human-labelled kind of document that was finalized."""
+
+    COS_MESSAGE = "COS_MESSAGE"
+    ROLL_CALL = "ROLL_CALL"
+    MORNING = "MORNING"
+
+    @property
+    def label(self) -> str:
+        return {
+            "COS_MESSAGE": "COS message",
+            "ROLL_CALL": "Roll call state",
+            "MORNING": "Morning parade state",
+        }[self.value]
+
+
 class BalanceKind(str, enum.Enum):
     OFF = "OFF"
     OIL = "OIL"

@@ -34,6 +34,13 @@
   <h2>Copy as text</h2>
   <pre id="paradetext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ text }}</pre>
   <button type="button" class="btn secondary" data-copy="#paradetext">Copy</button>
+  {% if policy.can_key_parade(current_user) %}
+  <form method="post" action="{{ url_for('parade.morning_finalize') }}" style="margin-top:0.8rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="date" value="{{ day.isoformat() }}">
+    <button type="submit" class="btn">Finalize &amp; copy</button>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 

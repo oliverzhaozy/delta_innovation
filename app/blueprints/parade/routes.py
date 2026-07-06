@@ -13,13 +13,14 @@ from app.domain.types import (
     DayPart,
     DirectAbsenceType,
     LeaveType,
+    ParadeVariant,
     STATUS_IN_CAMP_DEFAULT,
     Service,
     StatusType,
 )
 from app.extensions import db
-from app.models import DirectAbsence, Person, StatusEntry
-from app.services import event_service, presence_service
+from app.models import DirectAbsence, ParadeSnapshot, Person, StatusEntry
+from app.services import event_service, parade_service, presence_service
 
 
 def _set_status_person_choices(form):
@@ -198,6 +199,43 @@ def morning_fp_remove(entry_id):
     db.session.commit()
     flash("Removed.", "success")
     return redirect(url_for("parade.morning", date=day.isoformat()))
+
+
+@bp.route("/morning/finalize", methods=["POST"])
+@require(policy.can_key_parade)
+def morning_finalize():
+    day = _parse_day(request.form.get("date", ""))
+    # Recompute server-side from the same pipeline the GET page uses — never
+    # trust the posted body for the archival record, or a tampered hidden
+    # field could falsify what the app actually finalized.
+    pairs = presence_service.presence_inputs(day)
+    try:
+        doc = parade_domain.categorize(day, pairs, "morning")
+        text = parade_domain.render_morning(doc)
+    except parade_domain.ParadeImbalance as exc:
+        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+        return redirect(url_for("parade.morning", date=day.isoformat()))
+    snap = parade_service.finalize(day, ParadeVariant.MORNING, text, current_user)
+    flash("Finalized and copied.", "success")
+    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
+
+
+# --- Snapshots (append-only finalize archive) --------------------------------
+
+@bp.route("/snapshots")
+@login_required
+def snapshots_list():
+    # Any logged-in user may view the archive — it's a read of history, not a
+    # keying surface.
+    rows = parade_service.snapshots()
+    return render_template("parade/snapshots.html", rows=rows)
+
+
+@bp.route("/snapshots/<int:snapshot_id>")
+@login_required
+def snapshot_view(snapshot_id):
+    snap = db.session.get(ParadeSnapshot, snapshot_id) or abort(404)
+    return render_template("parade/snapshot_detail.html", snap=snap)
 
 
 # --- Statuses (MC/course/briefing/site-testing/other) -----------------------

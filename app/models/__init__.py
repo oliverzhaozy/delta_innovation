@@ -5,6 +5,7 @@ from app.models.ledger import LedgerEntry
 from app.models.leave import LeaveRequest
 from app.models.overseas import OverseasDeclaration
 from app.models.person import Person
+from app.models.snapshot import ParadeSnapshot
 from app.models.status import StatusEntry
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "LeaveRequest",
     "LedgerEntry",
     "OverseasDeclaration",
+    "ParadeSnapshot",
     "Person",
     "PublicHoliday",
     "StatusEntry",

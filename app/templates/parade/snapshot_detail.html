@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Snapshot — {{ snap.variant.label }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ snap.variant.label }} — {{ snap.date.strftime('%d%m%y') }}</h1>
+</div>
+
+<section class="card">
+  <h2>Copy as text</h2>
+  <pre id="snapshottext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ snap.rendered_text }}</pre>
+  <button type="button" class="btn secondary" data-copy="#snapshottext">Copy</button>
+  <p class="muted" style="margin-top:0.8rem">Finalized by {{ snap.finalized_by.display_name }} at {{ snap.finalized_at.strftime('%d %b %y, %H:%M') }}</p>
+</section>
+
+<p><a href="{{ url_for('parade.snapshots_list') }}">&larr; All snapshots</a></p>
+{% endblock %}
