@@ -31,9 +31,18 @@ class LedgerEntry(db.Model):
     leave_request = db.relationship("LeaveRequest", foreign_keys=[leave_request_id])
 
     __table_args__ = (
-        # Backstop against double-deduction: one approval row per request+kind.
-        # (NULL request ids are distinct in SQLite, so MANUAL entries are unlimited.)
-        db.UniqueConstraint("leave_request_id", "source", "kind", name="uq_ledger_request_source_kind"),
+        # Backstop against double-deduction: one APPROVAL debit per request+kind.
+        # Scoped to LEAVE_APPROVAL so REVERSAL rows may legitimately repeat — an
+        # amendment (early return) posts a partial reversal, and a later cancel
+        # posts another. (MANUAL rows have a NULL request id, so they never match
+        # this partial index and stay unlimited.)
+        db.Index(
+            "uq_ledger_request_approval_kind",
+            "leave_request_id",
+            "kind",
+            unique=True,
+            sqlite_where=db.text("source = 'LEAVE_APPROVAL'"),
+        ),
     )
 
     def __repr__(self):

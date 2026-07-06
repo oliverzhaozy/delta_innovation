@@ -6,7 +6,7 @@ approval writes status flip + ledger debit in ONE transaction — commit or
 nothing. This function IS the product's core promise: approving is what plots
 the absence and decrements the balance, atomically.
 """
-from sqlalchemy import update
+from sqlalchemy import func, update
 
 from app.domain.dates import now_sgt
 from app.domain.types import BalanceKind, LedgerSource, RequestStatus
@@ -86,26 +86,39 @@ def cancel_approved(request, actor):
     """Cancel APPROVED leave: status flip + compensating REVERSAL credit in one
     transaction. The ledger is append-only — the original debit stays, the
     reversal explains itself, and the balance is whole again.
+
+    Credit the NET OUTSTANDING per kind, not a mirror of the original debit: an
+    earlier amendment (early return) may already have posted a partial reversal,
+    so we only restore what is still deducted (net = SUM of every row for this
+    request). Mirroring the debit would over-credit and drift the balance.
     """
     _claim(request.id, RequestStatus.APPROVED, status=RequestStatus.CANCELLED)
     try:
         from app.models import LedgerEntry  # local import to avoid cycle at module load
 
-        originals = (
-            db.session.query(LedgerEntry)
-            .filter_by(leave_request_id=request.id, source=LedgerSource.LEAVE_APPROVAL)
+        outstanding = (
+            db.session.query(
+                LedgerEntry.person_id,
+                LedgerEntry.kind,
+                func.sum(LedgerEntry.delta_half_days),
+            )
+            .filter_by(leave_request_id=request.id)
+            .group_by(LedgerEntry.person_id, LedgerEntry.kind)
             .all()
         )
-        for entry in originals:
-            ledger_service.post_entry(
-                person_id=entry.person_id,
-                kind=entry.kind,
-                delta_half_days=-entry.delta_half_days,
-                reason=f"Cancelled: {request.type.value} {request.when_label}",
-                source=LedgerSource.REVERSAL,
-                created_by_id=actor.id,
-                leave_request_id=request.id,
-            )
+        for person_id, kind, net in outstanding:
+            # net < 0 means half-days are still deducted; credit exactly that
+            # remainder. net == 0 (fully reversed already) posts nothing.
+            if net < 0:
+                ledger_service.post_entry(
+                    person_id=person_id,
+                    kind=kind,
+                    delta_half_days=-net,
+                    reason=f"Cancelled: {request.type.value} {request.when_label}",
+                    source=LedgerSource.REVERSAL,
+                    created_by_id=actor.id,
+                    leave_request_id=request.id,
+                )
         db.session.commit()
     except TransitionError:
         raise
