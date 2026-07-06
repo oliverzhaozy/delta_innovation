@@ -31,3 +31,8 @@ def is_working_day(d: date, holidays: frozenset = frozenset()) -> bool:
 def working_days(start: date, end: date, holidays: frozenset = frozenset()) -> int:
     """Working days in [start, end] — the only days that consume OFF/OIL balance."""
     return sum(1 for d in iter_days(start, end) if is_working_day(d, holidays))
+
+
+def format_ddmmyy(d: date) -> str:
+    # DDMMYY is the one date format every generated parade document uses (PARADE_FORMATS.md).
+    return d.strftime("%d%m%y")
