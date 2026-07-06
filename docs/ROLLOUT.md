@@ -33,6 +33,24 @@ earns trust in the first two weeks or never — hence the parallel run.
   old tracking stops. Any dispute is settled by the per-person ledger history.
 - Keep TimeTree read-only until Phase 3 replaces the parade-state workflow.
 
+## Phase 2 cutover — TP/ARCTIC
+
+Once Phase 2 is deployed and PCs/OC are keying TP and ARCTIC FOE conducts
+into the calendar, the same parallel-run-then-cutover shape applies to
+conducts as Phase 1 applied to OFF/OIL:
+
+- Before the cutover date, key every conduct already on TimeTree (TP and
+  ARCTIC) into the app so the clash panel isn't missing anything — it can
+  only warn about what's actually been entered.
+- Announce a hard date: from that day, the app is authoritative for TP and
+  ARCTIC — the event, its participants, and the leave clash panel are the
+  record.
+- TimeTree goes **read-only** for conducts from that date on; nobody enters
+  a new conduct there. It's kept only as the historical archive of anything
+  predating the cutover.
+- ARCTIC visibility doesn't change — command team only, same as it was on
+  TimeTree; this cutover is about which tool is authoritative, not who sees what.
+
 ## Ongoing habits
 
 - Someone ORDs/posts out → S3 deactivates the account the same week
