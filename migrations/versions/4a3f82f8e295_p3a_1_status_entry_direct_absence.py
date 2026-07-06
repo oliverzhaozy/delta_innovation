@@ -25,7 +25,6 @@ def upgrade():
     sa.Column('start_date', sa.Date(), nullable=False),
     sa.Column('end_date', sa.Date(), nullable=False),
     sa.Column('day_part', sa.Enum('FULL', 'AM', 'PM', name='day_part'), nullable=False),
-    sa.Column('in_camp', sa.Boolean(), nullable=False),
     sa.Column('remarks', sa.String(length=300), nullable=True),
     sa.Column('created_by_id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),

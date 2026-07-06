@@ -9,7 +9,9 @@ def _values(enum_cls):
 
 class DirectAbsence(db.Model):
     """S3-keyed absence for regulars (OC/SM/2IC/P2IC), who sit outside the
-    leave-request flow (owner decision (b)). No ledger effect.
+    leave-request flow (owner decision (b)). No ledger effect. No in_camp
+    flag — a direct absence is out of camp by definition; in-camp exceptions
+    are what status_entry's in_camp is for.
     """
 
     __tablename__ = "direct_absence"
@@ -27,7 +29,6 @@ class DirectAbsence(db.Model):
         nullable=False,
         default=DayPart.FULL,
     )
-    in_camp = db.Column(db.Boolean, nullable=False)
     # Nullable at the model level; the P3a.5 form makes this mandatory for
     # direct absences (UI concern, not schema).
     remarks = db.Column(db.String(300))
