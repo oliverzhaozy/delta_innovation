@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit event" if event else "New event" }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ "Edit event" if event else "New event" }}</h1>
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.calendar.label }}{{ form.calendar() }}</p>
+  <p>{{ form.title.label }}{{ form.title() }}</p>
+  <p>{{ form.start_dt.label }}{{ form.start_dt() }}</p>
+  <p>{{ form.end_dt.label }}{{ form.end_dt() }}</p>
+  <p>{{ form.notes.label }}{{ form.notes() }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

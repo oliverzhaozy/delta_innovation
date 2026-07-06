@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ event.title }}</h1>
+  <div class="chips">
+    <span class="chip">{{ event.calendar.label }}</span>
+  </div>
+</div>
+
+<section class="card">
+  <ul class="toollist">
+    <li><span class="muted">Start</span><span>{{ event.start_dt.strftime("%d %b %Y, %H:%M") }}</span></li>
+    <li><span class="muted">End</span><span>{{ event.end_dt.strftime("%d %b %Y, %H:%M") }}</span></li>
+    {% if event.notes %}<li><span class="muted">Notes</span><span>{{ event.notes }}</span></li>{% endif %}
+    <li><span class="muted">Created by</span><span>{{ event.created_by.display_name }}</span></li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Participants</h2>
+  {# P2.5 adds the category/person picker and resolved names — deliberately
+     not faked here; an event created in this task simply has none yet. #}
+  <p class="muted">Not set up yet — the participant picker lands in P2.5.</p>
+</section>
+
+{% if policy.can_edit_events(current_user) %}
+<section class="card">
+  <h2>Manage</h2>
+  <a class="btn secondary" href="{{ url_for('calendar.edit', event_id=event.id) }}">Edit</a>
+  <form action="{{ url_for('calendar.delete', event_id=event.id) }}" method="post" class="inline-form" style="margin-left:0.6rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn danger">Delete</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

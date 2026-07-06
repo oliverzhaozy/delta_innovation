@@ -36,8 +36,9 @@
     {% if policy.can_manage_people(current_user) %}
       <li><a href="{{ url_for('admin.people') }}">People admin</a><span class="tag">Live</span></li>
     {% endif %}
+    <li><a href="{{ url_for('calendar.tp_list') }}">TP calendar</a><span class="tag">Live</span></li>
     {% if policy.can_view_arctic(current_user) %}
-      <li><span>ARCTIC FOE calendar</span><span class="tag">Phase 2</span></li>
+      <li><a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE calendar</a><span class="tag">Live</span></li>
     {% endif %}
     {% if policy.can_manage_meals(current_user) %}
       <li><span>Meal counts</span><span class="tag">Phase 3</span></li>

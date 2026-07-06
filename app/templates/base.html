@@ -23,6 +23,10 @@
         {% if policy.can_manage_manning(current_user) %}
           <a href="{{ url_for('overseas.upcoming') }}">Overseas (upcoming)</a>
         {% endif %}
+        <a href="{{ url_for('calendar.tp_list') }}">Calendar</a>
+        {% if policy.can_view_arctic(current_user) %}
+          <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
+        {% endif %}
         {% if policy.is_pc(current_user) %}
           <a href="{{ url_for('leave.pc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
         {% elif policy.can_final_approve(current_user) %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ calendar.label }} calendar{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ calendar.label }}</h1>
+</div>
+
+{% if policy.can_edit_events(current_user) %}
+<p><a class="btn" href="{{ url_for('calendar.new') }}">New event</a></p>
+{% endif %}
+
+<section class="card">
+  {% if events %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Title</th><th>When</th><th>Notes</th></tr></thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td><a href="{{ url_for('calendar.detail', event_id=e.id) }}">{{ e.title }}</a></td>
+          <td>{{ e.start_dt.strftime("%d %b %H:%M") }} – {{ e.end_dt.strftime("%d %b %H:%M") }}</td>
+          <td class="muted" style="font-size:0.88rem">{{ (e.notes or "")[:60] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No events yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
