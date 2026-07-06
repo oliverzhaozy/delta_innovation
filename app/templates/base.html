@@ -17,6 +17,8 @@
         <a href="{{ url_for('main.dashboard') }}">Home</a>
         <a href="{{ url_for('parade.away') }}">Away</a>
         <a href="{{ url_for('parade.morning') }}">Morning parade</a>
+        <a href="{{ url_for('parade.cos_message') }}">COS message</a>
+        <a href="{{ url_for('parade.roll_call') }}">Roll call</a>
         <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
         {% if policy.can_key_parade(current_user) %}
           <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>

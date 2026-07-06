@@ -51,13 +51,34 @@ def away():
     )
 
 
-def _parse_day(raw: str) -> date:
-    # Shared away/morning convention: a bad or missing ?date= falls back to
-    # today rather than 400ing — the page must always render something.
+def _parse_day(raw: str, default: date = None) -> date:
+    # Shared away/morning convention: a bad or missing ?date= falls back to a
+    # page-specific default rather than 400ing — the page must always render
+    # something. `default` lets the COS message page fall back to tomorrow
+    # (compiled D-1, assumption 4) while every other page keeps falling back
+    # to today.
     try:
         return date.fromisoformat(raw)
     except ValueError:
-        return today_sgt()
+        return default if default is not None else today_sgt()
+
+
+def _validate_cos_person(raw, roster=None):
+    """Resolve a `cos=` id (query or posted) to an active Person, else
+    current_user. A keying mistake here costs one reload (P4's duty roster
+    will auto-fill this), so we never 400 — invalid/inactive falls back
+    silently, and the finalize route re-runs this same check server-side so a
+    tampered hidden field can't name someone who isn't on the active roster.
+    `roster` lets a caller that already fetched the active roster (the GET
+    page, for its selector) pass it in rather than querying twice.
+    """
+    try:
+        cos_id = int(raw)
+    except (TypeError, ValueError):
+        return current_user
+    roster = roster if roster is not None else event_service.active_roster()
+    person = next((p for p in roster if p.id == cos_id), None)
+    return person or current_user
 
 
 def _row_label(row) -> str:
@@ -216,6 +237,105 @@ def morning_finalize():
         flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
         return redirect(url_for("parade.morning", date=day.isoformat()))
     snap = parade_service.finalize(day, ParadeVariant.MORNING, text, current_user)
+    flash("Finalized and copied.", "success")
+    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
+
+
+@bp.route("/cos-message")
+@login_required
+def cos_message():
+    # Compiled the evening before, forecasting the next duty day (assumption
+    # 4) — the one page whose date default is tomorrow, not today.
+    day = _parse_day(request.args.get("date", ""), default=today_sgt() + timedelta(days=1))
+    roster = event_service.active_roster()
+    cos_person = _validate_cos_person(request.args.get("cos", ""), roster)
+    pairs = presence_service.presence_inputs(day)
+    conflicts = _conflict_lines(pairs)
+
+    text = None
+    imbalance = None
+    try:
+        doc = parade_domain.compute_cos_message(day, cos_person, pairs)
+        text = parade_domain.render_cos(doc)
+    except parade_domain.ParadeImbalance as exc:
+        # Same posture as morning: a wrong document is worse than none.
+        imbalance = str(exc)
+
+    return render_template(
+        "parade/cos_message.html",
+        day=day,
+        today=today_sgt(),
+        prev_day=day - timedelta(days=1),
+        next_day=day + timedelta(days=1),
+        cos_person=cos_person,
+        roster=roster,
+        text=text,
+        imbalance=imbalance,
+        conflicts=conflicts,
+    )
+
+
+@bp.route("/cos-message/finalize", methods=["POST"])
+@require(policy.can_key_parade)
+def cos_message_finalize():
+    day = _parse_day(request.form.get("date", ""), default=today_sgt() + timedelta(days=1))
+    # Re-validate the posted cos id against the active roster here too — never
+    # trust the hidden field, exactly like the recompute below never trusts
+    # posted text.
+    cos_person = _validate_cos_person(request.form.get("cos", ""))
+    pairs = presence_service.presence_inputs(day)
+    try:
+        doc = parade_domain.compute_cos_message(day, cos_person, pairs)
+        text = parade_domain.render_cos(doc)
+    except parade_domain.ParadeImbalance as exc:
+        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+        return redirect(url_for("parade.cos_message", date=day.isoformat(), cos=cos_person.id))
+    snap = parade_service.finalize(day, ParadeVariant.COS_MESSAGE, text, current_user)
+    flash("Finalized and copied.", "success")
+    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
+
+
+@bp.route("/roll-call")
+@login_required
+def roll_call():
+    day = _parse_day(request.args.get("date", ""))
+    pairs = presence_service.presence_inputs(day)
+    conflicts = _conflict_lines(pairs)
+
+    text = None
+    imbalance = None
+    try:
+        doc = parade_domain.categorize(day, pairs, "roll_call")
+        text = parade_domain.render_roll_call(doc)
+    except parade_domain.ParadeImbalance as exc:
+        imbalance = str(exc)
+
+    return render_template(
+        "parade/roll_call.html",
+        day=day,
+        today=today_sgt(),
+        prev_day=day - timedelta(days=1),
+        next_day=day + timedelta(days=1),
+        text=text,
+        imbalance=imbalance,
+        conflicts=conflicts,
+    )
+
+
+@bp.route("/roll-call/finalize", methods=["POST"])
+@require(policy.can_key_parade)
+def roll_call_finalize():
+    day = _parse_day(request.form.get("date", ""))
+    # Recompute server-side from the same pipeline the GET page uses (same
+    # posture as morning_finalize) — never trust the posted body.
+    pairs = presence_service.presence_inputs(day)
+    try:
+        doc = parade_domain.categorize(day, pairs, "roll_call")
+        text = parade_domain.render_roll_call(doc)
+    except parade_domain.ParadeImbalance as exc:
+        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+        return redirect(url_for("parade.roll_call", date=day.isoformat()))
+    snap = parade_service.finalize(day, ParadeVariant.ROLL_CALL, text, current_user)
     flash("Finalized and copied.", "success")
     return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 

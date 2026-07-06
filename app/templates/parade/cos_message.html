@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}COS message{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>COS message</h1>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('parade.cos_message', date=prev_day.isoformat(), cos=cos_person.id) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
+    <a href="{{ url_for('parade.cos_message', date=today.isoformat(), cos=cos_person.id) }}">Today</a>
+    <a href="{{ url_for('parade.cos_message', date=next_day.isoformat(), cos=cos_person.id) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>COS</h2>
+  {# Plain GET form, no JS/no persistence (P4's duty roster auto-fills this later) — a
+     keying mistake here costs one reload. #}
+  <form method="get" action="{{ url_for('parade.cos_message') }}" style="display:flex; gap:0.5rem; align-items:center">
+    <input type="hidden" name="date" value="{{ day.isoformat() }}">
+    <label for="cos-select">Set COS</label>
+    <select id="cos-select" name="cos">
+      {% for p in roster %}
+      <option value="{{ p.id }}" {% if p.id == cos_person.id %}selected{% endif %}>{{ p.rank.value }} {{ p.display_name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn secondary">Set</button>
+  </form>
+</section>
+
+{% if conflicts %}
+<section class="card">
+  <h2>Conflicts</h2>
+  <ul class="toollist">
+    {% for c in conflicts %}
+    <li>{{ c.person.display_name }}: {{ c.winner_label }} ({{ c.winner_range }}) is showing on the parade; {{ c.shadow_label }} ({{ c.shadow_range }}) is also keyed for this day and is not shown.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if imbalance %}
+<section class="card">
+  <p class="error">Parade state out of balance — refusing to render; check keyed data</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>Copy as text</h2>
+  <pre id="costext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ text }}</pre>
+  <button type="button" class="btn secondary" data-copy="#costext">Copy</button>
+  {% if policy.can_key_parade(current_user) %}
+  <form method="post" action="{{ url_for('parade.cos_message_finalize') }}" style="margin-top:0.8rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="date" value="{{ day.isoformat() }}">
+    <input type="hidden" name="cos" value="{{ cos_person.id }}">
+    <button type="submit" class="btn">Finalize &amp; copy</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
