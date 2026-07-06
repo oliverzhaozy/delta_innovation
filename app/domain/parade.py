@@ -134,6 +134,11 @@ class ParadeDoc:
         present = (self.current_strength, self.others_in_camp)
         if self.variant == "morning" and self.stay_out:
             raise ParadeImbalance("morning parade has no STAY OUT category")
+        # Symmetric to the above: in-camp promotion is morning-only, so roll call
+        # never has OTHERS IN CAMP people (its header is a literal 0). A doc that
+        # populates it is corrupt — refuse it, keeping the "(0)" header honest.
+        if self.variant == "roll_call" and self.others_in_camp:
+            raise ParadeImbalance("roll call has no OTHERS IN CAMP category")
         buckets = (*present, *self._not_present())
         covered = sum(len(b) for b in buckets)
         if covered != self.total:
@@ -256,6 +261,52 @@ def render_morning(doc: ParadeDoc) -> str:
         _category_block("OTHERS IN CAMP", doc.others_in_camp),
         "——",
         f"NOT PRESENT IN CAMP ({d}):",
+        _category_block("LEAVE", doc.leave),
+        _category_block("OFF/OIL", doc.off_oil),
+        _category_block("ON COURSE", doc.on_course),
+        _category_block("MC", doc.mc),
+        _category_block("OTHERS", doc.others),
+    ]
+    return "\n\n".join(sections)
+
+
+def render_roll_call(doc: ParadeDoc) -> str:
+    """Render the Message 2 roll call state byte-exact to PARADE_FORMATS.md.
+
+    Same section rhythm as morning (single blank line between sections; title +
+    date are one section), but the NIGHT document: STAY OUT is a real NOT-PRESENT
+    category (regulars/stay-outs are away tonight) and OTHERS IN CAMP is ALWAYS
+    header-only with a literal 0 — in-camp promotion is a morning-only rule, and
+    validate() guarantees `others_in_camp` is empty here. Validated first: the
+    app refuses to emit a document it knows is unbalanced.
+    """
+    doc.validate()
+    if doc.variant != "roll_call":
+        raise ValueError(f"render_roll_call expects a roll_call doc, got {doc.variant!r}")
+
+    a = len(doc.current_strength)
+    # PRESENT IN CAMP is exactly CURRENT STRENGTH: OTHERS IN CAMP is always 0.
+    c = a
+    d = (
+        len(doc.stay_out) + len(doc.leave) + len(doc.off_oil)
+        + len(doc.on_course) + len(doc.mc) + len(doc.others)
+    )
+    # B (absent strength) == D by definition; deriving it here keeps the header
+    # pair from ever drifting apart.
+    sections = [
+        f"DELTA ROLL CALL STATE:\n{format_ddmmyy(doc.day)}",
+        f"TOTAL STRENGTH: {doc.total}",
+        f"CURRENT STRENGTH: {a}",
+        f"ABSENT STRENGTH: {d}",
+        "——",
+        f"PRESENT IN CAMP ({c}):",
+        _category_block("CURRENT STRENGTH", doc.current_strength),
+        # Literal 0, header-only, by rule — not a _category_block on the (empty)
+        # tuple, to make the "roll call has no others-in-camp" invariant explicit.
+        "OTHERS IN CAMP (0):",
+        "——",
+        f"NOT PRESENT IN CAMP ({d}):",
+        _category_block("STAY OUT", doc.stay_out),
         _category_block("LEAVE", doc.leave),
         _category_block("OFF/OIL", doc.off_oil),
         _category_block("ON COURSE", doc.on_course),
