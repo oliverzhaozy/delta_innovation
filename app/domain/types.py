@@ -180,6 +180,18 @@ class ParadeVariant(str, enum.Enum):
         }[self.value]
 
 
+class Meal(str, enum.Enum):
+    """The three daily meals a manpower food order accounts for (P3b.5)."""
+
+    BREAKFAST = "BREAKFAST"
+    LUNCH = "LUNCH"
+    DINNER = "DINNER"
+
+    @property
+    def label(self) -> str:
+        return {"BREAKFAST": "Breakfast", "LUNCH": "Lunch", "DINNER": "Dinner"}[self.value]
+
+
 class BalanceKind(str, enum.Enum):
     OFF = "OFF"
     OIL = "OIL"

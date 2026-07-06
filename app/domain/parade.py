@@ -95,12 +95,16 @@ class ParadeImbalance(Exception):
 @dataclass(frozen=True)
 class ParadeDoc:
     """One parade document's finished category lists, as already-rendered line
-    bodies (the `RANK NAME`, plus `(REASON)` for OTHERS IN CAMP).
+    bodies (the `RANK NAME`, plus `(REASON)` for OTHERS IN CAMP) AND the parallel
+    tuple of source PERSON objects for each category (`*_people`).
 
-    Holding rendered bodies — not people — is deliberate: the header counts are
-    then `len()` of the very tuple that renders, so a count can never disagree
-    with the list beneath it. `total` is the input headcount; every balance
-    check compares category lengths back to it.
+    Holding rendered bodies is what the renderers read, so the header counts are
+    `len()` of the very tuple that renders and a count can never disagree with
+    the list beneath it. The parallel person tuples ride alongside for consumers
+    that need the people, not the strings — meals (P3b.5) counts CURRENT STRENGTH
+    and PRESENT IN CAMP persons and their NSF sub-set. Renderers ignore them, so
+    every existing golden stays byte-identical. `total` is the input headcount;
+    every balance check compares category lengths back to it.
 
     `stay_out` is populated for the roll_call variant only; on morning it is
     always empty (STAY OUT dissolves into CURRENT STRENGTH — Message 3 rule).
@@ -117,11 +121,33 @@ class ParadeDoc:
     mc: tuple = ()
     others: tuple = ()
     stay_out: tuple = ()
+    # Parallel person tuples (default empty so hand-built line-only docs still
+    # construct and validate). categorize() always populates them in lockstep
+    # with the line tuples above.
+    current_strength_people: tuple = ()
+    others_in_camp_people: tuple = ()
+    leave_people: tuple = ()
+    off_oil_people: tuple = ()
+    on_course_people: tuple = ()
+    mc_people: tuple = ()
+    others_people: tuple = ()
+    stay_out_people: tuple = ()
 
     def _not_present(self) -> tuple:
         # Morning has no STAY OUT category; roll call counts it under D.
         base = (self.leave, self.off_oil, self.on_course, self.mc, self.others)
         return base if self.variant == "morning" else (self.stay_out, *base)
+
+    def _people_buckets(self) -> tuple:
+        # Same variant-aware structure as the line buckets, over the person
+        # tuples — used for the person-identity dedup in validate().
+        present = (self.current_strength_people, self.others_in_camp_people)
+        base = (
+            self.leave_people, self.off_oil_people, self.on_course_people,
+            self.mc_people, self.others_people,
+        )
+        not_present = base if self.variant == "morning" else (self.stay_out_people, *base)
+        return (*present, *not_present)
 
     def validate(self) -> "ParadeDoc":
         """Raise ParadeImbalance unless the document balances, else return self.
@@ -145,9 +171,19 @@ class ParadeDoc:
             raise ParadeImbalance(
                 f"category headcount {covered} != total strength {self.total}"
             )
-        lines = [line for bucket in buckets for line in bucket]
-        if len(set(lines)) != len(lines):
-            raise ParadeImbalance("a person appears in more than one category")
+        # Exactly-once dedup keys on person identity (id), not the rendered line:
+        # two DISTINCT people who share rank+name render identical lines and must
+        # BOTH be allowed to stand (closes a P3a.6 minor). Falls back to line
+        # dedup for hand-built line-only docs, which carry no person tuples.
+        people = [p for bucket in self._people_buckets() for p in bucket]
+        if people:
+            ids = [p.id for p in people]
+            if len(set(ids)) != len(ids):
+                raise ParadeImbalance("a person appears in more than one category")
+        else:
+            lines = [line for bucket in buckets for line in bucket]
+            if len(set(lines)) != len(lines):
+                raise ParadeImbalance("a person appears in more than one category")
         return self
 
 
@@ -193,32 +229,38 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
     """
     if variant not in ("morning", "roll_call"):
         raise ValueError(f"unknown parade variant: {variant!r}")
-    buckets: dict[str, list] = {
-        name: []
-        for name in (
-            "current_strength", "others_in_camp", "leave", "off_oil",
-            "on_course", "mc", "others", "stay_out",
-        )
-    }
+    names = (
+        "current_strength", "others_in_camp", "leave", "off_oil",
+        "on_course", "mc", "others", "stay_out",
+    )
+    lines: dict[str, list] = {name: [] for name in names}
+    people: dict[str, list] = {name: [] for name in names}
     for person, resolution in pairs:
         state = resolution.state
         if state is PresenceState.DEACTIVATED:
             raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
-            buckets[_absent_category(resolution.row)].append(parade_line(person))
+            bucket = _absent_category(resolution.row)
+            line = parade_line(person)
         elif variant == "morning" and resolution.in_camp_rows:
             reason = _in_camp_reason(resolution.in_camp_rows[0])
-            buckets["others_in_camp"].append(f"{parade_line(person)} ({reason})")
+            bucket = "others_in_camp"
+            line = f"{parade_line(person)} ({reason})"
         elif variant == "roll_call" and state is PresenceState.STAY_OUT:
-            buckets["stay_out"].append(parade_line(person))
+            bucket = "stay_out"
+            line = parade_line(person)
         else:  # PRESENT / DUTY, and morning STAY_OUT → current strength
-            buckets["current_strength"].append(parade_line(person))
+            bucket = "current_strength"
+            line = parade_line(person)
+        lines[bucket].append(line)
+        people[bucket].append(person)
 
     doc = ParadeDoc(
         day=day,
         variant=variant,
         total=len(pairs),
-        **{name: tuple(lines) for name, lines in buckets.items()},
+        **{name: tuple(lines[name]) for name in names},
+        **{f"{name}_people": tuple(people[name]) for name in names},
     )
     return doc.validate()
 
