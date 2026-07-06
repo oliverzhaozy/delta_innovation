@@ -136,3 +136,32 @@ class LedgerSource(str, enum.Enum):
 class Service(str, enum.Enum):
     NSF = "NSF"
     REGULAR = "REGULAR"
+
+
+class Calendar(str, enum.Enum):
+    TP = "TP"
+    ARCTIC = "ARCTIC"
+
+    @property
+    def label(self) -> str:
+        return {"TP": "TP", "ARCTIC": "ARCTIC FOE"}[self.value]
+
+
+class ParticipantCategory(str, enum.Enum):
+    NSF = "NSF"
+    REGULAR = "REGULAR"
+    COMMAND_TEAM = "COMMAND_TEAM"
+    PLATOON_1 = "PLATOON_1"
+    PLATOON_2 = "PLATOON_2"
+    PLATOON_3 = "PLATOON_3"
+
+    @property
+    def label(self) -> str:
+        return {
+            "NSF": "NSF",
+            "REGULAR": "Regulars",
+            "COMMAND_TEAM": "Command team",
+            "PLATOON_1": "Platoon 1",
+            "PLATOON_2": "Platoon 2",
+            "PLATOON_3": "Platoon 3",
+        }[self.value]
