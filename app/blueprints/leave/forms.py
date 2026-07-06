@@ -28,3 +28,10 @@ class LeaveRequestForm(FlaskForm):
             and self.start_date.data != self.end_date.data
         ):
             raise ValidationError("A half-day off must be a single day.")
+
+
+class EarlyReturnForm(FlaskForm):
+    """Amend an APPROVED multi-day request to an earlier last day. The service
+    enforces the range (start ≤ new_end < old_end); this just parses the date."""
+
+    new_end_date = DateField("Early return — new last day", validators=[DataRequired()])

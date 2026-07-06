@@ -87,6 +87,20 @@
 </section>
 {% endif %}
 
+{% if r.status.value == "APPROVED" and r.day_part.value == "FULL" and r.start_date != r.end_date
+      and policy.can_cancel_approved_leave(current_user) %}
+<section class="card">
+  <h2>Early return</h2>
+  <form action="{{ url_for('leave.early_return', request_id=r.id) }}" method="post">
+    {{ early_return_form.hidden_tag() }}
+    <p>{{ early_return_form.new_end_date.label }}
+       {{ early_return_form.new_end_date(type="date", min=r.start_date.isoformat(), max=early_return_max.isoformat()) }}</p>
+    <button type="submit">Record early return &amp; credit balance</button>
+  </form>
+  <p class="muted" style="margin-top:0.6rem">Shortens the absence and credits the balance for the working days no longer taken.</p>
+</section>
+{% endif %}
+
 {% if can_act_pc or can_act_oc %}
 <section class="card">
   <h2>Decision</h2>

@@ -1,9 +1,11 @@
+from datetime import timedelta
+
 from flask import abort, flash, redirect, render_template, request as http_request, url_for
 from flask_login import current_user, login_required
 
 from app.authz import require
 from app.blueprints.leave import bp
-from app.blueprints.leave.forms import LeaveRequestForm
+from app.blueprints.leave.forms import EarlyReturnForm, LeaveRequestForm
 from app.domain import policy, routing
 from app.domain.dates import iter_days
 from app.domain.types import (
@@ -187,6 +189,10 @@ def detail(request_id):
         away_rows=away_rows,
         can_act_pc=can_act_pc,
         can_act_oc=can_act_oc,
+        early_return_form=EarlyReturnForm(),
+        # Last day the new_end may be: the day before the current end (native hint;
+        # the service is the real guard).
+        early_return_max=request_row.end_date - timedelta(days=1),
     )
 
 
@@ -268,6 +274,22 @@ def cancel_approved(request_id):
     try:
         approval_service.cancel_approved(request_row, current_user)
         flash("Cancelled — the deduction was reversed and the absence unplotted.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("leave.detail", request_id=request_id))
+
+
+@bp.route("/<int:request_id>/early-return", methods=["POST"])
+@require(policy.can_cancel_approved_leave)  # same trust boundary as cancel: both reverse the ledger
+def early_return(request_id):
+    request_row = db.session.get(LeaveRequest, request_id) or abort(404)
+    form = EarlyReturnForm()
+    if not form.validate_on_submit():
+        flash("Enter a valid new last day.", "error")
+        return redirect(url_for("leave.detail", request_id=request_id))
+    try:
+        approval_service.early_return(request_row, current_user, form.new_end_date.data)
+        flash("Early return recorded — the balance was credited for the days no longer taken.", "success")
     except TransitionError as exc:
         flash(str(exc), "error")
     return redirect(url_for("leave.detail", request_id=request_id))
