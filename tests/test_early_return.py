@@ -402,10 +402,11 @@ def test_route_double_submit_no_second_credit(app, client, make_person):
 
     login(client, "ds_s3")
     client.post(f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()}, follow_redirects=True)
-    # Second identical submit: end_date is now THU, so the range guard
-    # (new_end < end is false, THU < THU) rejects it before the conditional
-    # claim ever runs. (The claim-predicate path — a stale in-memory end_date
-    # while the row moved — is covered by test_concurrent_amendment_loses_at_claim.)
+    # Second identical submit: the request is now THU–THU (single-day), so the
+    # multi-day guard (end_date <= start_date) rejects it before the range check
+    # or the conditional claim ever run. (The claim-predicate path — a stale
+    # in-memory end_date while the row moved — is covered by
+    # test_concurrent_amendment_loses_at_claim.)
     client.post(f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()}, follow_redirects=True)
     with app.app_context():
         assert ledger_service.balance(_pid("ds_opr"), BalanceKind.OFF) == -2
