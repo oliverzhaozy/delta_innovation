@@ -23,7 +23,7 @@
         {% if policy.can_manage_manning(current_user) %}
           <a href="{{ url_for('overseas.upcoming') }}">Overseas (upcoming)</a>
         {% endif %}
-        <a href="{{ url_for('calendar.tp_list') }}">Calendar</a>
+        <a href="{{ url_for('calendar.month') }}">Calendar</a>
         {% if policy.can_view_arctic(current_user) %}
           <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
         {% endif %}

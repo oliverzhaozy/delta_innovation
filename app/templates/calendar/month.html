@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ month_start.strftime("%B %Y") }} calendar{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ month_start.strftime("%B %Y") }}</h1>
+  <div class="chips">
+    <a class="chip plain" href="{{ url_for('calendar.tp_list') }}">TP list</a>
+    {% if show_arctic %}
+    <a class="chip plain" href="{{ url_for('calendar.arctic_list') }}">ARCTIC list</a>
+    {% endif %}
+    {% if policy.can_edit_events(current_user) %}
+    <a class="chip plain" href="{{ url_for('calendar.new') }}">New event</a>
+    {% endif %}
+  </div>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('calendar.month', ym=prev_ym) }}">&larr; Prev</a>
+    <a href="{{ url_for('calendar.month', ym=today_ym) }}">Today</a>
+    <a href="{{ url_for('calendar.month', ym=next_ym) }}">Next &rarr;</a>
+  </div>
+</section>
+
+<section class="card">
+  <div class="month-grid-wrap">
+    <div class="month-grid">
+      {% for label in weekday_labels %}
+      <div class="month-grid-head">{{ label }}</div>
+      {% endfor %}
+      {% for week in weeks %}
+        {% for cell in week %}
+        <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}">
+          {% if cell.in_month %}
+          <a class="day-num" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
+          {% if cell.away %}<span class="chip plain">{{ cell.away }} away</span>{% endif %}
+          {% for event in cell.events %}
+          {# TP vs ARCTIC distinguished with the existing chip/plain-chip variants, not new CSS. #}
+          <a class="chip{% if event.calendar.value == 'ARCTIC' %} plain{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
+          {% endfor %}
+          {% else %}
+          <span class="day-num muted">{{ cell.date.day }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
