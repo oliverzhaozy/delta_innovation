@@ -263,3 +263,113 @@ def render_morning(doc: ParadeDoc) -> str:
         _category_block("OTHERS", doc.others),
     ]
     return "\n\n".join(sections)
+
+
+# --- COS message compute (P3b.1) -----------------------------------------
+#
+# Message 1 is a REQUEST, not a parade: it asks NSFs to report a status, so
+# clean (PRESENT/DUTY) people are omitted and there is no total-strength
+# invariant to balance — only the at-most-once guarantee. It reuses the exact
+# row-kind mapping (_absent_category) and block renderer (_category_block) the
+# morning document uses, so a category can never mean two different things.
+
+
+@dataclass(frozen=True)
+class CosDoc:
+    """Message 1 (COS request) category lists, as already-rendered line bodies.
+
+    Like ParadeDoc, it holds rendered `RANK NAME` bodies so a header count is
+    the `len()` of the very tuple it labels — count and list can never disagree.
+    Unlike ParadeDoc there is NO total/balance check: the message omits present
+    NSFs, so it legitimately covers only a subset of the company. `cos_person`
+    rides along for the greeting line; the six category order is the skeleton's.
+    """
+
+    day: date
+    cos_person: object
+    stay_out: tuple = ()
+    leave: tuple = ()
+    off_oil: tuple = ()
+    on_course: tuple = ()
+    mc: tuple = ()
+    others: tuple = ()
+
+    def validate(self) -> "CosDoc":
+        """Raise ParadeImbalance if anyone is listed twice, else return self.
+
+        The single-state resolution already puts each person in one category, so
+        compute can't produce a duplicate — but the invariant is enforced anyway
+        (a hand-built or future-miswired doc must never render two lines for one
+        person). No headcount check: Message 1 does not account for everyone.
+        """
+        buckets = (
+            self.stay_out, self.leave, self.off_oil,
+            self.on_course, self.mc, self.others,
+        )
+        lines = [line for bucket in buckets for line in bucket]
+        if len(set(lines)) != len(lines):
+            raise ParadeImbalance("a person appears in more than one category")
+        return self
+
+
+def compute_cos_message(day, cos_person, pairs) -> CosDoc:
+    """Build the Message 1 (COS request) doc from parade-sorted `(person,
+    resolution)` pairs for `day` (D, the NEXT duty day — the route owns picking
+    tomorrow, not this pure module). Order within a category follows the input.
+
+    Inclusion (a request, not a parade): ABSENT → its category by the SAME kind
+    mapping as `categorize` (`_absent_category`); STAY_OUT → STAY OUT (where
+    every regular lands by engine default unless an absence overrode it); a
+    ranged absence inherits purely by date coverage upstream in `resolve`.
+    PRESENT / DUTY are omitted entirely (clean NSFs aren't in this message).
+    `in_camp_rows` are ignored — Message 1 has no OTHERS IN CAMP, and single-day
+    in-camp artifacts on D-1 don't cover D anyway. DEACTIVATED must never reach
+    a parade document (presence_inputs is active-only) — we raise, not drop.
+    """
+    buckets: dict[str, list] = {
+        name: []
+        for name in ("stay_out", "leave", "off_oil", "on_course", "mc", "others")
+    }
+    for person, resolution in pairs:
+        state = resolution.state
+        if state is PresenceState.DEACTIVATED:
+            raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
+        if state is PresenceState.ABSENT:
+            buckets[_absent_category(resolution.row)].append(parade_line(person))
+        elif state is PresenceState.STAY_OUT:
+            buckets["stay_out"].append(parade_line(person))
+        # PRESENT / DUTY: omitted — this text requests statuses, not attendance.
+
+    doc = CosDoc(
+        day=day,
+        cos_person=cos_person,
+        **{name: tuple(lines) for name, lines in buckets.items()},
+    )
+    return doc.validate()
+
+
+def render_cos(doc: CosDoc) -> str:
+    """Render the Message 1 COS request byte-exact to PARADE_FORMATS.md.
+
+    Greeting line, then the six categories STAY OUT / LEAVE / OFF/OIL / ON
+    COURSE / MC / OTHERS, each a `_category_block` (the same helper morning
+    uses), joined by a single blank line — empty categories are header-only.
+    This message has NO "——" separators (only Messages 2 and 3 do). Validated
+    first: the app refuses to emit a document it knows lists someone twice.
+    """
+    doc.validate()
+    greeting = (
+        f"Hello all, {parade_line(doc.cos_person)} is the COS for "
+        f"{format_ddmmyy(doc.day)}. "
+        "Please indicate if you are on course/off/ma etc:"
+    )
+    sections = [
+        greeting,
+        _category_block("STAY OUT", doc.stay_out),
+        _category_block("LEAVE", doc.leave),
+        _category_block("OFF/OIL", doc.off_oil),
+        _category_block("ON COURSE", doc.on_course),
+        _category_block("MC", doc.mc),
+        _category_block("OTHERS", doc.others),
+    ]
+    return "\n\n".join(sections)
