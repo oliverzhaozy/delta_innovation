@@ -12,6 +12,7 @@ bug this app exists to kill. Semantics (precedence, day-part) live in
 """
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from app.domain import parade, presence
 from app.domain.dates import iter_days
@@ -171,9 +172,22 @@ def away_text(day, summary) -> str:
     return "\n".join(lines)
 
 
+class PersonPresence(NamedTuple):
+    """One parade line's inputs: the person and their resolved presence.
+
+    Paired here, NOT on the domain Resolution (its P3a.2 contract is fixed):
+    a Resolution alone can't say whose it is, and parade documents must never
+    zip resolutions back to people by list index.
+    """
+
+    person: object
+    resolution: presence.Resolution
+
+
 def presence_inputs(day):
-    """Every ACTIVE person's resolved presence for `day`, parade-sorted — the
-    one function every parade document reads (P3a.6+).
+    """Every ACTIVE person's resolved presence for `day` as parade-sorted
+    `PersonPresence(person, resolution)` pairs — the one function every parade
+    document reads (P3a.6+).
 
     Shares `_fetch_rows` with the away board (two views of one fetch); here ALL
     statuses are passed to the engine, so in-camp ones come back as annotations
@@ -194,12 +208,15 @@ def presence_inputs(day):
     people = db.session.query(Person).filter_by(is_active=True).all()
     people.sort(key=parade.parade_sort_key)  # parade display order (P3a.3)
     return [
-        presence.resolve(
-            person,
-            day,
-            leaves=by_leave.get(person.id, ()),
-            direct_absences=by_direct.get(person.id, ()),
-            statuses=by_status.get(person.id, ()),
+        PersonPresence(
+            person=person,
+            resolution=presence.resolve(
+                person,
+                day,
+                leaves=by_leave.get(person.id, ()),
+                direct_absences=by_direct.get(person.id, ()),
+                statuses=by_status.get(person.id, ()),
+            ),
         )
         for person in people
     ]

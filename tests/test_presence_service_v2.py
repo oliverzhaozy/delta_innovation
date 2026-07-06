@@ -286,8 +286,9 @@ def test_leave_panel_distinct_rule_holds_with_overlapping_status(app, client, ma
 # --- presence_inputs: the parade-document entry point --------------------
 
 def test_presence_inputs_resolves_each_active_person_parade_sorted(app, make_person):
-    # Parade order: OC (0) < PC (idx) < OPR (last). Distinct states let us map
-    # each Resolution back to its person and confirm the ordering at once.
+    # Parade order: OC (0) < PC (idx) < OPR (last). Each entry carries its
+    # person, so identity AND ordering are asserted directly — P3a.6 must never
+    # have to zip a resolution back to a person by index.
     make_person(username="pi_oc", rank=Rank.CPT, appointment=Appointment.OC, platoon=None,
                 service=Service.REGULAR)  # regular, nothing → STAY_OUT
     make_person(username="pi_pc", rank=Rank.TWO_LT, appointment=Appointment.PC, platoon=1,
@@ -298,24 +299,28 @@ def test_presence_inputs_resolves_each_active_person_parade_sorted(app, make_per
     plant_status(app, "pi_opr", type_=StatusType.BRIEFING, start=DAY, end=DAY, in_camp=True)
 
     with app.app_context():
-        res = presence_service.presence_inputs(DAY)
-        assert len(res) == 3
+        entries = presence_service.presence_inputs(DAY)
+        assert [e.person.username for e in entries] == ["pi_oc", "pi_pc", "pi_opr"]
 
-        # [0] the OC regular with nothing keyed: STAY_OUT, no rows attached.
-        assert res[0].state is PresenceState.STAY_OUT
-        assert res[0].row is None
-        assert res[0].in_camp_rows == ()
-        assert res[0].conflicts == ()
+        # [0] the OC regular with nothing keyed: (that person, STAY_OUT).
+        oc_person, oc_res = entries[0]  # NamedTuple: unpacks as (person, resolution)
+        assert oc_person.username == "pi_oc"
+        assert oc_res.state is PresenceState.STAY_OUT
+        assert oc_res.row is None
+        assert oc_res.in_camp_rows == ()
+        assert oc_res.conflicts == ()
 
         # [1] the PC on approved leave: ABSENT, leave is the winning row.
-        assert res[1].state is PresenceState.ABSENT
-        assert res[1].row.person.username == "pi_pc"
-        assert res[1].row.type is LeaveType.OFF  # original model row, not AbsenceRow
+        assert entries[1].person.username == "pi_pc"
+        assert entries[1].resolution.state is PresenceState.ABSENT
+        assert entries[1].resolution.row.person_id == entries[1].person.id
+        assert entries[1].resolution.row.type is LeaveType.OFF  # original model row
 
         # [2] the OPR with an in-camp briefing: present, briefing is an annotation.
-        assert res[2].state is PresenceState.PRESENT
-        assert len(res[2].in_camp_rows) == 1
-        assert res[2].in_camp_rows[0].person.username == "pi_opr"
+        assert entries[2].person.username == "pi_opr"
+        assert entries[2].resolution.state is PresenceState.PRESENT
+        assert len(entries[2].resolution.in_camp_rows) == 1
+        assert entries[2].resolution.in_camp_rows[0].person_id == entries[2].person.id
 
 
 def test_presence_inputs_passes_all_sources_so_conflicts_surface(app, make_person):
@@ -323,7 +328,9 @@ def test_presence_inputs_passes_all_sources_so_conflicts_surface(app, make_perso
     plant_leave(app, "pi_conf", start=DAY, end=DAY)
     plant_status(app, "pi_conf", type_=StatusType.MC, start=DAY, end=DAY, in_camp=False)
     with app.app_context():
-        (res,) = presence_service.presence_inputs(DAY)
+        (entry,) = presence_service.presence_inputs(DAY)
+        assert entry.person.username == "pi_conf"
+        res = entry.resolution
         assert res.state is PresenceState.ABSENT
         assert res.row.type is LeaveType.OFF          # leave wins
         assert len(res.conflicts) == 1
@@ -335,5 +342,5 @@ def test_presence_inputs_excludes_deactivated_people(app, make_person):
     make_person(username="pi_gone", appointment=Appointment.OPR, platoon=1, is_active=False)
     plant_leave(app, "pi_gone", start=DAY, end=DAY)  # even with leave, off the roster
     with app.app_context():
-        res = presence_service.presence_inputs(DAY)
-        assert len(res) == 1  # only the active person
+        entries = presence_service.presence_inputs(DAY)
+        assert [e.person.username for e in entries] == ["pi_active"]  # only the active person
