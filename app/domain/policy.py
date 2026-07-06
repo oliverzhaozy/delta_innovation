@@ -67,3 +67,14 @@ def can_admin_accounts(person) -> bool:
 def can_cancel_approved_leave(person) -> bool:
     # Reversing the ledger is S3's or the OC's call, never the requester's.
     return can_manage_ledger(person) or can_final_approve(person)
+
+
+def can_key_parade(person) -> bool:
+    # Fallback set until P4 resolves COS-of-day via duty_assignment.
+    return person.appointment is Appointment.PS or person.company_role is CompanyRole.S3 or is_admin(person)
+
+
+def can_key_direct_absence(person) -> bool:
+    # S3 keys regulars' absences (decision b) — not PS, who has no business
+    # keying the command team's exceptions.
+    return person.company_role is CompanyRole.S3 or is_admin(person)

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Direct absences{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Direct absences</h1>
+  <p class="muted">Regulars (OC/SM/2IC/P2IC) sit outside the leave-request flow — S3 keys their absences here. No ledger effect.</p>
+</div>
+
+<p><a class="btn" href="{{ url_for('parade.direct_absence_new') }}">Key an absence</a></p>
+
+<section class="card">
+  <h2>Active + upcoming{% if not rows %} — none{% endif %}</h2>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr><th>Person</th><th>Type</th><th>Dates</th><th>Day part</th><th>Remarks</th><th>Keyed by</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><a href="{{ url_for('parade.direct_absence_edit', entry_id=row.id) }}">{{ row.person.rank.value }} {{ row.person.display_name }}</a></td>
+          <td>{{ row.type.label }}</td>
+          <td>{{ row.start_date.strftime('%d %b') }}{% if row.start_date != row.end_date %} – {{ row.end_date.strftime('%d %b') }}{% endif %}</td>
+          <td>{{ row.day_part.value }}</td>
+          <td>{{ row.remarks or "" }}</td>
+          <td>{{ row.created_by.display_name }}</td>
+          <td>
+            {% if row.start_date <= today <= row.end_date %}
+            <form action="{{ url_for('parade.direct_absence_end_today', entry_id=row.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="linklike">End today</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No direct absences keyed.</p>
+  {% endif %}
+</section>
+{% endblock %}

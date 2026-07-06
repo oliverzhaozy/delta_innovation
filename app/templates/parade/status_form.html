@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit status" if row else "New status" }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ "Edit status" if row else "New status" }}</h1>
+</div>
+
+<form method="post" class="card">
+  {{ form.hidden_tag() }}
+  <p>{{ form.person_id.label }}{{ form.person_id() }}</p>
+  <p>{{ form.type.label }}{{ form.type() }}</p>
+  <p>{{ form.start_date.label }}{{ form.start_date() }}</p>
+  <p>{{ form.end_date.label }}{{ form.end_date() }}</p>
+  <p>{{ form.day_part.label }}{{ form.day_part() }}</p>
+  <p>{{ form.in_camp.label }}{{ form.in_camp() }}</p>
+  <p>{{ form.remarks.label }}{{ form.remarks() }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

@@ -16,6 +16,12 @@
       <nav class="topnav">
         <a href="{{ url_for('main.dashboard') }}">Home</a>
         <a href="{{ url_for('parade.away') }}">Away</a>
+        {% if policy.can_key_parade(current_user) %}
+          <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
+        {% endif %}
+        {% if policy.can_key_direct_absence(current_user) %}
+          <a href="{{ url_for('parade.direct_absences_list') }}">Direct absences</a>
+        {% endif %}
         {% if routing.can_request(current_user) %}
           <a href="{{ url_for('leave.index') }}">Leave</a>
         {% endif %}
