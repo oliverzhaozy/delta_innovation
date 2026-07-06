@@ -66,43 +66,49 @@ def _mixed_roster():
     ]
 
 
-GOLDEN_MIXED = """DELTA MORNING PARADE STATE:
-060726
-
-TOTAL STRENGTH: 7
-
-CURRENT STRENGTH: 3
-
-ABSENT STRENGTH: 3
-
-——
-
-PRESENT IN CAMP (4):
-
-CURRENT STRENGTH (3):
-1. CPT OSCAR ONG
-2. MSG MICHAEL TAN
-3. PTE AARON GOH
-
-OTHERS IN CAMP (1):
-1. 3SG OLIVER ZHAO (BDO)
-
-——
-
-NOT PRESENT IN CAMP (3):
-
-LEAVE (1):
-1. CPL JORDAN TEO
-
-OFF/OIL (1):
-1. CFC DANIEL LIM
-
-ON COURSE (0):
-
-MC (1):
-1. 3SG RAVI KUMAR
-
-OTHERS (0):"""
+# Built with "\n".join (not a triple-quoted literal) so the golden's line
+# endings are ALWAYS LF regardless of git's autocrlf checkout of this file —
+# render_morning emits LF, and a byte-exact test must not hinge on how the
+# source was checked out. "——" is two U+2014 em-dashes (PARADE_FORMATS.md).
+GOLDEN_MIXED = "\n".join([
+    "DELTA MORNING PARADE STATE:",
+    "060726",
+    "",
+    "TOTAL STRENGTH: 7",
+    "",
+    "CURRENT STRENGTH: 3",
+    "",
+    "ABSENT STRENGTH: 3",
+    "",
+    "——",
+    "",
+    "PRESENT IN CAMP (4):",
+    "",
+    "CURRENT STRENGTH (3):",
+    "1. CPT OSCAR ONG",
+    "2. MSG MICHAEL TAN",
+    "3. PTE AARON GOH",
+    "",
+    "OTHERS IN CAMP (1):",
+    "1. 3SG OLIVER ZHAO (BDO)",
+    "",
+    "——",
+    "",
+    "NOT PRESENT IN CAMP (3):",
+    "",
+    "LEAVE (1):",
+    "1. CPL JORDAN TEO",
+    "",
+    "OFF/OIL (1):",
+    "1. CFC DANIEL LIM",
+    "",
+    "ON COURSE (0):",
+    "",
+    "MC (1):",
+    "1. 3SG RAVI KUMAR",
+    "",
+    "OTHERS (0):",
+])
 
 
 def test_golden_mixed_roster_byte_exact():
@@ -122,38 +128,40 @@ def test_golden_mixed_counts_derive_from_lists():
 
 # --- golden 2: several empty categories (done-criterion 2) ---------------
 
-GOLDEN_EMPTY = """DELTA MORNING PARADE STATE:
-060726
-
-TOTAL STRENGTH: 2
-
-CURRENT STRENGTH: 2
-
-ABSENT STRENGTH: 0
-
-——
-
-PRESENT IN CAMP (2):
-
-CURRENT STRENGTH (2):
-1. CPT OSCAR ONG
-2. PTE AARON GOH
-
-OTHERS IN CAMP (0):
-
-——
-
-NOT PRESENT IN CAMP (0):
-
-LEAVE (0):
-
-OFF/OIL (0):
-
-ON COURSE (0):
-
-MC (0):
-
-OTHERS (0):"""
+GOLDEN_EMPTY = "\n".join([
+    "DELTA MORNING PARADE STATE:",
+    "060726",
+    "",
+    "TOTAL STRENGTH: 2",
+    "",
+    "CURRENT STRENGTH: 2",
+    "",
+    "ABSENT STRENGTH: 0",
+    "",
+    "——",
+    "",
+    "PRESENT IN CAMP (2):",
+    "",
+    "CURRENT STRENGTH (2):",
+    "1. CPT OSCAR ONG",
+    "2. PTE AARON GOH",
+    "",
+    "OTHERS IN CAMP (0):",
+    "",
+    "——",
+    "",
+    "NOT PRESENT IN CAMP (0):",
+    "",
+    "LEAVE (0):",
+    "",
+    "OFF/OIL (0):",
+    "",
+    "ON COURSE (0):",
+    "",
+    "MC (0):",
+    "",
+    "OTHERS (0):",
+])
 
 
 def test_golden_empty_categories_header_only():
