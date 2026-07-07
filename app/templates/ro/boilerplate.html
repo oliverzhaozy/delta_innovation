@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}RO boilerplate{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>RO boilerplate</h1>
+</div>
+<p class="muted">Standing text for the six Matters sections. An empty section renders a bare dash in the document.</p>
+
+{% for section in sections %}
+<section class="card">
+  <h2>{{ section.label }}</h2>
+  <form method="post" action="{{ url_for('ro.boilerplate') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="section" value="{{ section.value }}">
+    <textarea name="content" rows="6" style="width:100%">{{ rows[section].content if section in rows else "" }}</textarea>
+    <button type="submit" class="btn">Save {{ section.label }}</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

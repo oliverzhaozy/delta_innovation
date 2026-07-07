@@ -32,6 +32,7 @@ def create_app(config_class=None):
     from app.blueprints.meals import bp as meals_bp
     from app.blueprints.overseas import bp as overseas_bp
     from app.blueprints.parade import bp as parade_bp
+    from app.blueprints.ro import bp as ro_bp
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
@@ -43,6 +44,7 @@ def create_app(config_class=None):
     app.register_blueprint(meals_bp)
     app.register_blueprint(overseas_bp)
     app.register_blueprint(parade_bp)
+    app.register_blueprint(ro_bp)
 
     from app.domain import policy, routing
     from app.domain.types import BalanceKind

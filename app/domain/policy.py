@@ -88,6 +88,12 @@ def can_edit_ro(person, *, is_cdos_of_day) -> bool:
     return is_cdos_of_day or is_command_team(person)
 
 
+def can_manage_ro_standing(person) -> bool:
+    # Standing RO text (boilerplate, standing timeline items, weekly key
+    # events) is staff work, not the rotating duty's (P5.4).
+    return person.company_role is CompanyRole.S3 or is_admin(person)
+
+
 def can_key_direct_absence(person) -> bool:
     # S3 keys regulars' absences (decision b) — not PS, who has no business
     # keying the command team's exceptions.
