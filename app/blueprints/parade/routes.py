@@ -7,7 +7,6 @@ from app.authz import require
 from app.blueprints.parade import bp
 from app.blueprints.parade.forms import DirectAbsenceForm, FpQuickAddForm, StatusEntryForm
 from app.domain import policy
-from app.domain import parade as parade_domain
 from app.domain.dates import today_sgt
 from app.domain.types import (
     DayPart,
@@ -140,18 +139,11 @@ def _fp_rows(day):
 @login_required
 def morning():
     day = _parse_day(request.args.get("date", ""))
-    pairs = presence_service.presence_inputs(day)
-    conflicts = _conflict_lines(pairs)
-
-    text = None
-    imbalance = None
-    try:
-        doc = parade_domain.categorize(day, pairs, "morning")
-        text = parade_domain.render_morning(doc)
-    except parade_domain.ParadeImbalance as exc:
-        # A wrong document is worse than none (plan) — render the page with
-        # an error card and no <pre>/copy button at all.
-        imbalance = str(exc)
+    # One pipeline for page, finalize, and meals (addendum A2). On imbalance
+    # the template renders the error card and no <pre> — a wrong document is
+    # worse than none (plan).
+    built = parade_service.build_doc(day, ParadeVariant.MORNING)
+    conflicts = _conflict_lines(built.pairs)
 
     fp_form = None
     fp_rows = ()
@@ -166,8 +158,8 @@ def morning():
         today=today_sgt(),
         prev_day=day - timedelta(days=1),
         next_day=day + timedelta(days=1),
-        text=text,
-        imbalance=imbalance,
+        text=built.text,
+        imbalance=built.imbalance,
         conflicts=conflicts,
         fp_form=fp_form,
         fp_rows=fp_rows,
@@ -226,17 +218,14 @@ def morning_fp_remove(entry_id):
 @require(policy.can_key_parade)
 def morning_finalize():
     day = _parse_day(request.form.get("date", ""))
-    # Recompute server-side from the same pipeline the GET page uses — never
-    # trust the posted body for the archival record, or a tampered hidden
-    # field could falsify what the app actually finalized.
-    pairs = presence_service.presence_inputs(day)
-    try:
-        doc = parade_domain.categorize(day, pairs, "morning")
-        text = parade_domain.render_morning(doc)
-    except parade_domain.ParadeImbalance as exc:
-        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+    # Recompute server-side through the same build_doc the GET page uses —
+    # never trust the posted body for the archival record, or a tampered
+    # hidden field could falsify what the app actually finalized.
+    built = parade_service.build_doc(day, ParadeVariant.MORNING)
+    if built.imbalance:
+        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
         return redirect(url_for("parade.morning", date=day.isoformat()))
-    snap = parade_service.finalize(day, ParadeVariant.MORNING, text, current_user)
+    snap = parade_service.finalize(day, ParadeVariant.MORNING, built.text, current_user)
     flash("Finalized and copied.", "success")
     return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 
@@ -249,17 +238,8 @@ def cos_message():
     day = _parse_day(request.args.get("date", ""), default=today_sgt() + timedelta(days=1))
     roster = event_service.active_roster()
     cos_person = _validate_cos_person(request.args.get("cos", ""), roster)
-    pairs = presence_service.presence_inputs(day)
-    conflicts = _conflict_lines(pairs)
-
-    text = None
-    imbalance = None
-    try:
-        doc = parade_domain.compute_cos_message(day, cos_person, pairs)
-        text = parade_domain.render_cos(doc)
-    except parade_domain.ParadeImbalance as exc:
-        # Same posture as morning: a wrong document is worse than none.
-        imbalance = str(exc)
+    built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
+    conflicts = _conflict_lines(built.pairs)
 
     return render_template(
         "parade/cos_message.html",
@@ -269,8 +249,8 @@ def cos_message():
         next_day=day + timedelta(days=1),
         cos_person=cos_person,
         roster=roster,
-        text=text,
-        imbalance=imbalance,
+        text=built.text,
+        imbalance=built.imbalance,
         conflicts=conflicts,
     )
 
@@ -283,14 +263,11 @@ def cos_message_finalize():
     # trust the hidden field, exactly like the recompute below never trusts
     # posted text.
     cos_person = _validate_cos_person(request.form.get("cos", ""))
-    pairs = presence_service.presence_inputs(day)
-    try:
-        doc = parade_domain.compute_cos_message(day, cos_person, pairs)
-        text = parade_domain.render_cos(doc)
-    except parade_domain.ParadeImbalance as exc:
-        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+    built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
+    if built.imbalance:
+        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
         return redirect(url_for("parade.cos_message", date=day.isoformat(), cos=cos_person.id))
-    snap = parade_service.finalize(day, ParadeVariant.COS_MESSAGE, text, current_user)
+    snap = parade_service.finalize(day, ParadeVariant.COS_MESSAGE, built.text, current_user)
     flash("Finalized and copied.", "success")
     return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 
@@ -299,16 +276,8 @@ def cos_message_finalize():
 @login_required
 def roll_call():
     day = _parse_day(request.args.get("date", ""))
-    pairs = presence_service.presence_inputs(day)
-    conflicts = _conflict_lines(pairs)
-
-    text = None
-    imbalance = None
-    try:
-        doc = parade_domain.categorize(day, pairs, "roll_call")
-        text = parade_domain.render_roll_call(doc)
-    except parade_domain.ParadeImbalance as exc:
-        imbalance = str(exc)
+    built = parade_service.build_doc(day, ParadeVariant.ROLL_CALL)
+    conflicts = _conflict_lines(built.pairs)
 
     return render_template(
         "parade/roll_call.html",
@@ -316,8 +285,8 @@ def roll_call():
         today=today_sgt(),
         prev_day=day - timedelta(days=1),
         next_day=day + timedelta(days=1),
-        text=text,
-        imbalance=imbalance,
+        text=built.text,
+        imbalance=built.imbalance,
         conflicts=conflicts,
     )
 
@@ -326,16 +295,13 @@ def roll_call():
 @require(policy.can_key_parade)
 def roll_call_finalize():
     day = _parse_day(request.form.get("date", ""))
-    # Recompute server-side from the same pipeline the GET page uses (same
+    # Recompute server-side through the same build_doc the GET page uses (same
     # posture as morning_finalize) — never trust the posted body.
-    pairs = presence_service.presence_inputs(day)
-    try:
-        doc = parade_domain.categorize(day, pairs, "roll_call")
-        text = parade_domain.render_roll_call(doc)
-    except parade_domain.ParadeImbalance as exc:
-        flash(f"Cannot finalize — parade state out of balance: {exc}", "error")
+    built = parade_service.build_doc(day, ParadeVariant.ROLL_CALL)
+    if built.imbalance:
+        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
         return redirect(url_for("parade.roll_call", date=day.isoformat()))
-    snap = parade_service.finalize(day, ParadeVariant.ROLL_CALL, text, current_user)
+    snap = parade_service.finalize(day, ParadeVariant.ROLL_CALL, built.text, current_user)
     flash("Finalized and copied.", "success")
     return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 

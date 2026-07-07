@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Meal counts{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Meal counts</h1>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('meals.index', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
+    <a href="{{ url_for('meals.index', date=today.isoformat()) }}">Today</a>
+    <a href="{{ url_for('meals.index', date=next_day.isoformat()) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  </div>
+</section>
+
+{% if imbalance %}
+<section class="card">
+  <p class="error">Cannot compute counts — a parade document for these dates is out of balance; check keyed data.</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>{{ day.strftime("%A %d %b %Y") }}</h2>
+  <table>
+    <thead>
+      <tr><th>Meal</th><th>Base</th><th>NSF</th><th>Adj.</th><th>Final</th></tr>
+    </thead>
+    <tbody>
+      {% for c in counts.values() %}
+      <tr>
+        <td>{{ c.meal.label }}</td>
+        <td>{{ c.base_total }}</td>
+        <td>{{ c.base_nsf }}</td>
+        <td>{% if c.adjustment_delta %}{{ "%+d"|format(c.adjustment_delta) }}{% else %}&mdash;{% endif %}</td>
+        <td><strong>{{ c.final_total }}</strong>{% if c.negative %} <span class="tag">negative &mdash; check adjustments</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Manual adjustment</h2>
+  <form method="post" action="{{ url_for('meals.adjust') }}">
+    {{ form.hidden_tag() }}
+    <input type="hidden" name="date" value="{{ day.isoformat() }}">
+    <p>{{ form.meal.label }}{{ form.meal() }}</p>
+    <p>{{ form.delta.label }}{{ form.delta(inputmode="numeric") }}</p>
+    <p>{{ form.reason.label }}{{ form.reason() }}</p>
+    {% for field in form if field.errors %}
+      {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+    {% endfor %}
+    <button type="submit">Record</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Adjustments keyed for this date</h2>
+  {% if history %}
+  <ul class="toollist">
+    {% for row in history %}
+    <li>
+      <span>{{ row.meal.label }} {{ "%+d"|format(row.delta) }} &mdash; {{ row.reason }}</span>
+      <span class="tag">{{ row.created_by.display_name }}, {{ row.created_at.strftime("%d %b %H:%M") }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>None. Corrections are compensating rows &mdash; a keyed adjustment is never edited or deleted.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>How these counts are derived</h2>
+  {# The assumptions panel (TECH_PLAN P3b.6): the meal <-> category mapping in
+     the open, so a wrong assumption is challenged by the person who'd know. #}
+  <ul class="toollist">
+    <li>Breakfast = roll call ({{ day.strftime("%d %b") }}) CURRENT STRENGTH &mdash; last night's stayers. Duty personnel join automatically when the duty roster ships (Phase 4).</li>
+    <li>Lunch = morning parade ({{ day.strftime("%d %b") }}) PRESENT IN CAMP &mdash; current strength plus others in camp.</li>
+    <li>Dinner = roll call ({{ next_day.strftime("%d %b") }}) CURRENT STRENGTH &mdash; tonight's stayers; stay-outs book out before dinner.</li>
+  </ul>
+  <p class="tag">Mapping pending S4 confirmation &mdash; date will be recorded here once confirmed.</p>
+</section>
+{% endblock %}

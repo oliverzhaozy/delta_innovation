@@ -4,8 +4,47 @@ sending is a legitimate correction, and the resulting extra row IS the audit
 trail (ledger posture — history, never edits), never a stored calendar the
 app could let drift against the live recompute.
 """
+from collections import namedtuple
+
+from app.domain import parade as parade_domain
+from app.domain.types import ParadeVariant
 from app.extensions import db
 from app.models import ParadeSnapshot
+from app.services import presence_service
+
+# pairs: the presence_inputs PersonPresence list (routes read conflicts off it);
+# doc/text: the categorized document and its rendered WhatsApp text, or None
+# when the engine refused the document — then `imbalance` carries the reason.
+BuiltDoc = namedtuple("BuiltDoc", "pairs doc text imbalance")
+
+
+def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
+    """The ONE owner of the presence_inputs -> categorize/compute -> render
+    pipeline (pre-flight addendum A2). Every page and finalize route — and the
+    meals compute — builds documents through here, so a convention added to
+    the pipeline (P4.7's duty_day offset lives here and nowhere else) can never
+    reach the screen but miss the archival snapshot. ParadeImbalance becomes
+    the `imbalance` field rather than a raise: the conflicts panel needs
+    `pairs` even when the document itself is refused.
+    """
+    if variant is ParadeVariant.COS_MESSAGE and cos_person is None:
+        raise ValueError("COS_MESSAGE needs a cos_person for its greeting")
+    pairs = presence_service.presence_inputs(day)
+    try:
+        if variant is ParadeVariant.MORNING:
+            doc = parade_domain.categorize(day, pairs, "morning")
+            text = parade_domain.render_morning(doc)
+        elif variant is ParadeVariant.ROLL_CALL:
+            doc = parade_domain.categorize(day, pairs, "roll_call")
+            text = parade_domain.render_roll_call(doc)
+        elif variant is ParadeVariant.COS_MESSAGE:
+            doc = parade_domain.compute_cos_message(day, cos_person, pairs)
+            text = parade_domain.render_cos(doc)
+        else:  # pragma: no cover — ParadeVariant is closed; a new member must land here deliberately
+            raise ValueError(f"unknown parade variant: {variant!r}")
+    except parade_domain.ParadeImbalance as exc:
+        return BuiltDoc(pairs=pairs, doc=None, text=None, imbalance=str(exc))
+    return BuiltDoc(pairs=pairs, doc=doc, text=text, imbalance=None)
 
 
 def finalize(day, variant, rendered_text, actor) -> ParadeSnapshot:
