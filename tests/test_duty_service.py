@@ -7,6 +7,8 @@ resolution, CONFIRMED preservation, and the confirm fingerprint (A4).
 import pytest
 from datetime import date, datetime
 
+from app.domain import roster
+from app.domain.dates import iter_days
 from app.domain.types import (
     Appointment, Calendar, DayPart, Duty, DutyState, LeaveType,
     ParticipantCategory, Rank, RequestStatus, StatusType,
@@ -169,6 +171,108 @@ def test_availability_confirmed_assignment_blocks_same_date(app, make_person):
                 state=DutyState.CONFIRMED
             ).all()
         ]
+
+
+# --- generate_month ------------------------------------------------------------
+
+AUG = "2026-08"
+
+
+def make_duty_cast(make_person):
+    """2 COS-eligible + 2 CDOS-eligible people; returns their usernames."""
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD)
+    make_person(username="opr1", rank=Rank.CPL, appointment=Appointment.OPR)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    make_person(username="p2ic3", rank=Rank.ONE_SG, appointment=Appointment.P2IC, platoon=3)
+    return ["det1", "opr1", "ps2", "p2ic3"]
+
+
+def proposed_map(first, last):
+    rows = (
+        db.session.query(DutyAssignment)
+        .filter(
+            DutyAssignment.date >= first,
+            DutyAssignment.date <= last,
+            DutyAssignment.state == DutyState.PROPOSED,
+        )
+        .all()
+    )
+    return {(r.date, r.duty): r.person_id for r in rows}
+
+
+def test_generate_writes_proposed_and_matches_pure_module(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        actor = get_person("det1")
+        duty_service.generate_month(AUG, actor)
+
+        first, last = duty_service.month_bounds(AUG)
+        # Rebuild the same inputs by hand and run the pure generator directly:
+        # the service's rows must equal the pure module's output exactly.
+        pools, availability, _confirmed = duty_service.availability_for_month(AUG)
+        days = list(iter_days(first, last))
+        expected = {}
+        for duty in Duty:
+            expected.update(roster.generate(days, {duty: pools[duty]}, availability))
+        expected = {k: v for k, v in expected.items() if v is not None}
+
+        assert proposed_map(first, last) == expected
+        rows = db.session.query(DutyAssignment).all()
+        assert rows and all(r.state is DutyState.PROPOSED for r in rows)
+        assert all(r.created_by_id == actor.id for r in rows)
+
+
+def test_regenerate_preserves_confirmed_and_replans_rest(app, make_person):
+    make_duty_cast(make_person)
+    x = pid(app, "det1")
+    confirmed_id = plant_assignment(app, x, date(2026, 8, 10), Duty.COS,
+                                    state=DutyState.CONFIRMED)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("ps2"))
+
+        row = db.session.get(DutyAssignment, confirmed_id)
+        assert row.state is DutyState.CONFIRMED
+        assert row.person_id == x
+        assert row.date == date(2026, 8, 10)
+        first, last = duty_service.month_bounds(AUG)
+        proposed = proposed_map(first, last)
+        # The confirmed slot was NOT re-planned...
+        assert (date(2026, 8, 10), Duty.COS) not in proposed
+        # ...but the rest of the month was (both duties have candidates).
+        assert (date(2026, 8, 11), Duty.COS) in proposed
+        assert (date(2026, 8, 10), Duty.CDOS) in proposed
+
+
+def test_generate_blank_days_have_no_row(app, make_person):
+    # COS-eligible people only: the CDOS pool is empty and blanks are the
+    # ABSENCE of a row, not a person_id=None row (column is NOT NULL).
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        cdos_rows = db.session.query(DutyAssignment).filter_by(duty=Duty.CDOS).count()
+        assert cdos_rows == 0
+        cos_rows = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).count()
+        assert cos_rows == 31  # every August day planned for the one candidate
+
+
+def test_generate_replaces_only_proposed(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        first, last = duty_service.month_bounds(AUG)
+        duty_service.generate_month(AUG, get_person("det1"))
+        first_run = proposed_map(first, last)
+        duty_service.generate_month(AUG, get_person("det1"))
+        second_run = proposed_map(first, last)
+
+        # Deterministic generator + identical inputs -> identical roster, and
+        # exactly one PROPOSED row per slot (no duplicate accumulation).
+        assert second_run == first_run
+        total = db.session.query(DutyAssignment).count()
+        assert total == len(second_run)
 
 
 def test_pools_shape(app, make_person):

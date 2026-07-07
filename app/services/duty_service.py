@@ -11,7 +11,8 @@ from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
-from app.domain import eligibility
+from app.domain import eligibility, roster
+from app.domain.dates import iter_days
 from app.domain.types import Calendar, Duty, DutyState
 from app.extensions import db
 from app.models import DutyAssignment, Event
@@ -94,3 +95,67 @@ def availability_for_month(month: str):
         )
 
     return pools, availability, confirmed
+
+
+def _prior_month_inputs(first):
+    """CONFIRMED-only history for the generator (A7): counts = the whole
+    previous month; tail = its last 3 calendar days (Fri->Mon adjacency can
+    reach 3 days back). Both empty when no previous month exists — an empty
+    tail means no adjacency constraint from the past, defined, not crashed."""
+    prev_last = first - timedelta(days=1)
+    prev_first = prev_last.replace(day=1)
+    rows = _assignments_between(prev_first, prev_last, state=DutyState.CONFIRMED)
+    prior_counts = {duty: defaultdict(int) for duty in Duty}
+    for row in rows:
+        prior_counts[row.duty][row.person_id] += 1
+    tail_start = prev_last - timedelta(days=2)
+    prior_tail = [(r.date, r.duty, r.person_id) for r in rows if r.date >= tail_start]
+    return prior_counts, prior_tail
+
+
+def generate_month(month: str, actor):
+    """Generate the month's PROPOSED roster in one transaction, replacing only
+    PROPOSED rows — CONFIRMED rows are never touched by regeneration.
+
+    One generate() call PER DUTY over that duty's open (non-CONFIRMED) days:
+    the appointment pools are disjoint, so per-duty runs cannot double-book a
+    person, and skipping confirmed slots this way keeps the pure module's
+    internal counts honest (no discarded picks). In-month CONFIRMED rows join
+    the tail (adjacency must see them) and the prior counts (evenness bias).
+    """
+    first, last = month_bounds(month)
+    pools, availability, confirmed = availability_for_month(month)
+    prior_counts, prior_tail = _prior_month_inputs(first)
+
+    confirmed_slots = {(r.date, r.duty) for r in confirmed}
+    tail = list(prior_tail) + [(r.date, r.duty, r.person_id) for r in confirmed]
+    counts = {duty: dict(prior_counts[duty]) for duty in Duty}
+    for r in confirmed:
+        counts[r.duty][r.person_id] = counts[r.duty].get(r.person_id, 0) + 1
+
+    all_days = list(iter_days(first, last))
+    picks = {}
+    for duty in Duty:
+        open_days = [d for d in all_days if (d, duty) not in confirmed_slots]
+        picks.update(
+            roster.generate(
+                open_days, {duty: pools[duty]}, availability,
+                prior_counts=counts, prior_tail=tail,
+            )
+        )
+
+    db.session.query(DutyAssignment).filter(
+        DutyAssignment.date >= first,
+        DutyAssignment.date <= last,
+        DutyAssignment.state == DutyState.PROPOSED,
+    ).delete()
+    for (day, duty), person_id in picks.items():
+        if person_id is None:
+            continue  # blank day: no row — the page derives blanks (P4.5)
+        db.session.add(
+            DutyAssignment(
+                date=day, duty=duty, person_id=person_id,
+                state=DutyState.PROPOSED, created_by_id=actor.id,
+            )
+        )
+    db.session.commit()
