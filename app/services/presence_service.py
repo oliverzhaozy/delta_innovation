@@ -10,15 +10,15 @@ two fetches with different filters — a second derivation is exactly the drift
 bug this app exists to kill. Semantics (precedence, day-part) live in
 `app.domain.presence`; this module is the fetch/shape layer only.
 """
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from typing import NamedTuple
 
 from app.domain import parade, presence
 from app.domain.dates import iter_days
-from app.domain.types import DayPart, RequestStatus
+from app.domain.types import DayPart, DutyState, RequestStatus
 from app.extensions import db
-from app.models import DirectAbsence, LeaveRequest, Person, StatusEntry
+from app.models import DirectAbsence, DutyAssignment, LeaveRequest, Person, StatusEntry
 
 
 @dataclass(frozen=True)
@@ -186,7 +186,10 @@ class PersonPresence(NamedTuple):
     resolution: presence.Resolution
 
 
-def presence_inputs(day):
+_DutyCover = namedtuple("DutyCover", "start_date end_date")
+
+
+def presence_inputs(day, *, duty_day=None):
     """Every ACTIVE person's resolved presence for `day` as parade-sorted
     `PersonPresence(person, resolution)` pairs — the one function every parade
     document reads (P3a.6+).
@@ -197,8 +200,26 @@ def presence_inputs(day):
     `resolve` — the engine returns the caller's own objects, and downstream
     rendering reads model fields (`.type`, `.remarks`, `.person`). Deactivated
     people are off the roster entirely, matching the away board.
+
+    `duty_day` (keyword-only): which date's CONFIRMED duty_assignment rows feed
+    the DUTY state — the fetch key ONLY. The adapter row handed to the engine
+    covers start=end=`day` (the resolution day), because `covers()` compares
+    against the day being resolved (A3): roll call labeled D covers the night
+    D−1→D, so its build passes duty_day=D−1 but the duty must count ON day D.
+    Default None means the duty of `day` itself (morning parade, COS message).
     """
     leaves, directs, statuses = fetch_absence_rows(day, day)
+    duty_rows = (
+        db.session.query(DutyAssignment)
+        .filter(
+            DutyAssignment.date == (duty_day if duty_day is not None else day),
+            DutyAssignment.state == DutyState.CONFIRMED,
+        )
+        .all()
+    )
+    by_duty = defaultdict(list)
+    for row in duty_rows:
+        by_duty[row.person_id].append(_DutyCover(start_date=day, end_date=day))
     by_leave, by_direct, by_status = defaultdict(list), defaultdict(list), defaultdict(list)
     for row in leaves:
         by_leave[row.person_id].append(row)
@@ -218,6 +239,7 @@ def presence_inputs(day):
                 leaves=by_leave.get(person.id, ()),
                 direct_absences=by_direct.get(person.id, ()),
                 statuses=by_status.get(person.id, ()),
+                duties=by_duty.get(person.id, ()),
             ),
         )
         for person in people
