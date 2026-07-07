@@ -30,6 +30,9 @@ class Person(UserMixin, db.Model):
         db.Enum(CompanyRole, values_callable=_values, name="company_role"), nullable=True
     )
     platoon = db.Column(db.Integer, nullable=True)  # 1-3; OC/SM/2IC have none
+    # Optional, S3-keyed, for the manning document only (owner decision (q)
+    # 2026-07-07 revised the no-phones rule — docs/MANNING_FORMATS.md).
+    phone = db.Column(db.String(20), nullable=True)
     service = db.Column(db.Enum(Service, values_callable=_values, name="service"), nullable=False)
     stay_out = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)

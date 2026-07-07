@@ -4,6 +4,7 @@ from app.models.event import Event, EventParticipant
 from app.models.holiday import PublicHoliday
 from app.models.ledger import LedgerEntry
 from app.models.leave import LeaveRequest
+from app.models.manning import ManningPeriod, ManningSlot
 from app.models.meal import MealAdjustment
 from app.models.overseas import OverseasDeclaration
 from app.models.person import Person
@@ -25,6 +26,8 @@ __all__ = [
     "EventParticipant",
     "LeaveRequest",
     "LedgerEntry",
+    "ManningPeriod",
+    "ManningSlot",
     "MealAdjustment",
     "OverseasDeclaration",
     "ParadeSnapshot",

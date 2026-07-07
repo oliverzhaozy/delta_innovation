@@ -288,3 +288,36 @@ class DutyState(str, enum.Enum):
 
     PROPOSED = "PROPOSED"
     CONFIRMED = "CONFIRMED"
+
+
+class ManningSlotType(str, enum.Enum):
+    """TU manning slots (P6.2). THE TRAP, enum-level: TU_DET_COMD is filled
+    by appointment P2IC/PS and is DELIBERATELY distinct from
+    Appointment.DET_COMD — company Det Comds fill DET_PERSONNEL. The document
+    itself prints "DET COMD" for this slot (docs/MANNING_FORMATS.md), which
+    is exactly why the identifier must never be renamed to match the label.
+    `label` is the DOCUMENT line label; `ui_label` is the builder's
+    disambiguated wording."""
+
+    TU_COMD = "TU_COMD"
+    TU_PLANNER = "TU_PLANNER"
+    TU_DET_COMD = "TU_DET_COMD"
+    DET_PERSONNEL = "DET_PERSONNEL"
+
+    @property
+    def label(self) -> str:
+        return {
+            "TU_COMD": "TU COMD",
+            "TU_PLANNER": "TU PLANNER",
+            "TU_DET_COMD": "DET COMD",
+            "DET_PERSONNEL": "DET PERSONNEL",
+        }[self.value]
+
+    @property
+    def ui_label(self) -> str:
+        return {
+            "TU_COMD": "TU Comd (OC/2IC)",
+            "TU_PLANNER": "TU Planner (PC)",
+            "TU_DET_COMD": "TU Det Comd (P2IC/PS)",
+            "DET_PERSONNEL": "Det Personnel (Det Comd/Opr)",
+        }[self.value]
