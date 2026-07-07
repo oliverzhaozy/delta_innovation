@@ -11,8 +11,10 @@ direct absences, out-of-camp statuses) from the shared fetch into
 conflict (an MC or a long course).
 """
 import enum
+from collections import namedtuple
 
 from app.domain.eligibility import TU_SLOT_APPOINTMENTS
+from app.domain.types import ManningSlotType
 
 
 class ManningConflict(str, enum.Enum):
@@ -58,3 +60,57 @@ def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
             )
     status = ManningConflict.CONFLICT if reasons else ManningConflict.NO_KNOWN_CONFLICT
     return status, tuple(reasons)
+
+
+ManningDoc = namedtuple("ManningDoc", "text unfilled")
+
+_HQ_SLOTS = (ManningSlotType.TU_COMD, ManningSlotType.TU_PLANNER)
+
+
+def _person_lines(row):
+    """Two lines per person: the slot line and the phone line. No phone keyed
+    renders the fill-in-WhatsApp placeholder '( )' (decision q)."""
+    phone = f"({row.phone})" if row.phone else "( )"
+    return [f"{row.slot.label}: {row.name}", phone]
+
+
+def render_manning(start_date, end_date, *, slots) -> ManningDoc:
+    """The document text + unfilled-HQ report (docs/MANNING_FORMATS.md).
+
+    `slots`: shaped rows with .slot/.det_number/.name/.phone (the service
+    formats names and owns the CONFIRMED... nothing — manning has no draft
+    state; whatever is assigned renders). Grouping is derived here: HQ block
+    (TU COMD then TU PLANNER), then dets ascending by det_number, DET COMD
+    line first within each det, personnel in given order. Unfilled HQ slots
+    are REPORTED, never silently absent; det completeness is the S3's
+    judgment (per-det headcount rules are deliberately cut).
+    """
+    header = [
+        "TASK UNIT (TU) MANNING FOR",
+        f"{start_date.strftime('%d%m%y')} - {end_date.strftime('%d%m%y')}",
+    ]
+
+    hq_lines = []
+    unfilled = []
+    for hq_slot in _HQ_SLOTS:
+        row = next((r for r in slots if r.slot is hq_slot), None)
+        if row is None:
+            unfilled.append(hq_slot.label)
+        else:
+            hq_lines += _person_lines(row)
+
+    blocks = ["\n".join(header)]
+    if hq_lines:
+        blocks.append("\n".join(hq_lines))
+
+    det_numbers = sorted({r.det_number for r in slots if r.det_number is not None})
+    for det in det_numbers:
+        det_rows = [r for r in slots if r.det_number == det]
+        ordered = [r for r in det_rows if r.slot is ManningSlotType.TU_DET_COMD]
+        ordered += [r for r in det_rows if r.slot is ManningSlotType.DET_PERSONNEL]
+        lines = [f"TU {det}"]
+        for row in ordered:
+            lines += _person_lines(row)
+        blocks.append("\n".join(lines))
+
+    return ManningDoc(text="\n\n".join(blocks), unfilled=unfilled)

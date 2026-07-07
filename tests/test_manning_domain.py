@@ -113,3 +113,91 @@ def test_single_day_reason_renders_one_date():
         START, END, absence_rows=[absence(date(2026, 7, 6), date(2026, 7, 6), label="MC")],
     )
     assert reasons == ("MC 06 Jul",)
+
+
+# --- the document render (P6.5) -----------------------------------------------------
+
+def slot_row(slot, det_number, name, phone):
+    return SimpleNamespace(slot=slot, det_number=det_number, name=name, phone=phone)
+
+
+SAMPLE_SLOTS = [
+    slot_row(ManningSlotType.TU_COMD, None, "CPT WONG LI XUAN", "9190 9702"),
+    slot_row(ManningSlotType.TU_PLANNER, None, "LTA QUEK JING YU", "9736 3276"),
+    slot_row(ManningSlotType.TU_DET_COMD, 1, "3WO WONG JINGHENG", "9798 3466"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 1, "2SG JEYMUS TAN", "8518 3687"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 1, "3SG WONG WEI XUAN", "9683 9858"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 1, "CPL ANG CHENG ZE", "8435 8990"),
+    slot_row(ManningSlotType.TU_DET_COMD, 2, "2SG RAYBRIEL WONG", "9382 3212"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 2, "3SG LOY QIYUAN", "9673 7123"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 2, "3SG XU XIANGRUI", "8218 8905"),
+    slot_row(ManningSlotType.DET_PERSONNEL, 2, "LCP SAMUEL LIM", "9838 7704"),
+]
+
+# The owner's sample normalized per decision (l-bis): no trailing spaces.
+GOLDEN = "\n".join([
+    "TASK UNIT (TU) MANNING FOR",
+    "050726 - 130726",
+    "",
+    "TU COMD: CPT WONG LI XUAN",
+    "(9190 9702)",
+    "TU PLANNER: LTA QUEK JING YU",
+    "(9736 3276)",
+    "",
+    "TU 1",
+    "DET COMD: 3WO WONG JINGHENG",
+    "(9798 3466)",
+    "DET PERSONNEL: 2SG JEYMUS TAN",
+    "(8518 3687)",
+    "DET PERSONNEL: 3SG WONG WEI XUAN",
+    "(9683 9858)",
+    "DET PERSONNEL: CPL ANG CHENG ZE",
+    "(8435 8990)",
+    "",
+    "TU 2",
+    "DET COMD: 2SG RAYBRIEL WONG",
+    "(9382 3212)",
+    "DET PERSONNEL: 3SG LOY QIYUAN",
+    "(9673 7123)",
+    "DET PERSONNEL: 3SG XU XIANGRUI",
+    "(8218 8905)",
+    "DET PERSONNEL: LCP SAMUEL LIM",
+    "(9838 7704)",
+])
+
+
+def test_render_golden_byte_exact():
+    doc = manning.render_manning(START, END, slots=SAMPLE_SLOTS)
+    assert doc.unfilled == []
+    assert doc.text == GOLDEN
+
+
+def test_render_unkeyed_phone_and_unfilled_hq():
+    doc = manning.render_manning(
+        START, END,
+        slots=[slot_row(ManningSlotType.TU_COMD, None, "CPT WONG LI XUAN", None)],
+    )
+    # No phone keyed -> a fill-in-WhatsApp placeholder line (decision q);
+    # missing HQ slots are reported, never silently absent.
+    assert "TU COMD: CPT WONG LI XUAN\n( )" in doc.text
+    assert doc.unfilled == ["TU PLANNER"]
+    assert "TU PLANNER" not in doc.text
+
+
+def test_render_groups_dets_and_orders_comd_first():
+    doc = manning.render_manning(
+        START, END,
+        slots=[
+            slot_row(ManningSlotType.TU_COMD, None, "CPT A", "1"),
+            slot_row(ManningSlotType.TU_PLANNER, None, "LTA B", "2"),
+            # Keyed out of order: personnel before their det comd, det 2 first.
+            slot_row(ManningSlotType.DET_PERSONNEL, 2, "CPL D2P", "3"),
+            slot_row(ManningSlotType.TU_DET_COMD, 2, "2SG D2C", "4"),
+            slot_row(ManningSlotType.DET_PERSONNEL, 1, "CPL D1P", "5"),
+            slot_row(ManningSlotType.TU_DET_COMD, 1, "3WO D1C", "6"),
+        ],
+    )
+    text = doc.text
+    assert text.index("TU 1") < text.index("TU 2")
+    assert text.index("DET COMD: 3WO D1C") < text.index("DET PERSONNEL: CPL D1P")
+    assert text.index("DET COMD: 2SG D2C") < text.index("DET PERSONNEL: CPL D2P")
