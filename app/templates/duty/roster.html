@@ -123,6 +123,30 @@
     <button type="submit" class="btn secondary">Clear slot</button>
   </form>
 </section>
+
+<section class="card">
+  <h2>Swap (CONFIRMED duties only)</h2>
+  {% set confirmed_rows = view.rows | selectattr("state.value", "equalto", "CONFIRMED") | list %}
+  {% if confirmed_rows | length >= 2 %}
+  <form method="post" action="{{ url_for('duty.swap') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    {% for field in ("assignment_a", "assignment_b") %}
+    <label>{{ "First" if loop.first else "Second" }} duty
+      <select name="{{ field }}">
+        {% for r in confirmed_rows %}
+        <option value="{{ r.id }}">{{ r.date.strftime("%d %b") }} — {{ r.duty.label }} — {{ r.person.display_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <label><input type="checkbox" name="confirm" value="1"> swap anyway (override availability warning)</label>
+    <button type="submit" class="btn">Swap</button>
+  </form>
+  {% else %}
+  <p class="muted">Swaps become available once the month has at least two confirmed duties.</p>
+  {% endif %}
+</section>
 {% endif %}
 
 <section class="card table-wrap">

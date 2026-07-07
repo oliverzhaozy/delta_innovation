@@ -121,3 +121,26 @@ def clear():
         abort(400)
     flash("Cleared." if duty_service.clear(day, duty) else "Nothing to clear.", "success")
     return redirect(url_for("duty.roster", month=month))
+
+
+@bp.route("/roster/swap", methods=["POST"])
+@require(policy.can_manage_roster)
+def swap():
+    month = _parse_month(request.form.get("month", ""))
+    try:
+        a_id = int(request.form.get("assignment_a", ""))
+        b_id = int(request.form.get("assignment_b", ""))
+    except ValueError:
+        abort(400)
+    try:
+        duty_service.swap(
+            a_id, b_id, actor=current_user,
+            override_availability=request.form.get("confirm") == "1",
+        )
+    except (duty_service.SwapError, duty_service.IneligibleAssignment) as exc:
+        abort(400, description=str(exc))
+    except duty_service.NeedsAvailabilityConfirm as exc:
+        flash(f"Not swapped — {exc}. Tick “swap anyway” to override.", "error")
+        return redirect(url_for("duty.roster", month=month))
+    flash("Swapped — logged.", "success")
+    return redirect(url_for("duty.roster", month=month))
