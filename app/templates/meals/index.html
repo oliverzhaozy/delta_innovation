@@ -14,6 +14,12 @@
   </div>
 </section>
 
+{% if missing_duties %}
+  <p class="flash flash-error">No confirmed duty for this night:
+    {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
+    — this document counts nobody as on duty.</p>
+{% endif %}
+
 {% if imbalance %}
 <section class="card">
   <p class="error">Cannot compute &mdash; a parade document for these dates is out of balance; check keyed data.</p>

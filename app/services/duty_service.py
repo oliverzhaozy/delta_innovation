@@ -263,6 +263,18 @@ def clear(day, duty) -> bool:
     return True
 
 
+def confirmed_on(day):
+    """CONFIRMED assignments dated `day` — the consumers' notice helper (A7):
+    when a night has no confirmed duty (rollout ramp, month boundary), pages
+    say so in chrome; the document text never changes."""
+    return (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.date == day, DutyAssignment.state == DutyState.CONFIRMED)
+        .order_by(DutyAssignment.duty)
+        .all()
+    )
+
+
 class SwapError(Exception):
     """Structurally invalid swap — 4xx, user-facing message."""
 

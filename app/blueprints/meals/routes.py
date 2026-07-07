@@ -6,7 +6,8 @@ from app.authz import require
 from app.blueprints.meals import bp
 from app.domain import policy
 from app.domain.dates import today_sgt
-from app.services import meal_service
+from app.domain.types import Duty
+from app.services import duty_service, meal_service
 
 
 def _parse_day(raw: str) -> date:
@@ -25,6 +26,10 @@ def index():
     # are S4's working tool, not broadcast information.
     day = _parse_day(request.args.get("date", ""))
     counts, imbalance = meal_service.compute_for(day)
+    # Day D's overnight counter covers the night D → D+1 (one day LATER than
+    # roll_call(D)'s night), so the notice reads the duty dated D.
+    night_duties = {row.duty for row in duty_service.confirmed_on(day)}
+    missing_duties = [duty for duty in Duty if duty not in night_duties]
     return render_template(
         "meals/index.html",
         day=day,
@@ -33,4 +38,5 @@ def index():
         next_day=day + timedelta(days=1),
         counts=counts,
         imbalance=imbalance,
+        missing_duties=missing_duties,
     )

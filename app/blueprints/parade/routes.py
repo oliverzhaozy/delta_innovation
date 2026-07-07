@@ -11,6 +11,7 @@ from app.domain.dates import today_sgt
 from app.domain.types import (
     DayPart,
     DirectAbsenceType,
+    Duty,
     LeaveType,
     ParadeVariant,
     STATUS_IN_CAMP_DEFAULT,
@@ -19,7 +20,7 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import DirectAbsence, ParadeSnapshot, Person, StatusEntry
-from app.services import event_service, parade_service, presence_service
+from app.services import duty_service, event_service, parade_service, presence_service
 
 
 def _set_status_person_choices(form):
@@ -278,6 +279,10 @@ def roll_call():
     day = _parse_day(request.args.get("date", ""))
     built = parade_service.build_doc(day, ParadeVariant.ROLL_CALL)
     conflicts = _conflict_lines(built.pairs)
+    # The night this document covers is day−1 → day (A7 notice reads the same
+    # duty date build_doc does).
+    night_duties = {row.duty for row in duty_service.confirmed_on(day - timedelta(days=1))}
+    missing_duties = [duty for duty in Duty if duty not in night_duties]
 
     return render_template(
         "parade/roll_call.html",
@@ -288,6 +293,7 @@ def roll_call():
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,
+        missing_duties=missing_duties,
     )
 
 

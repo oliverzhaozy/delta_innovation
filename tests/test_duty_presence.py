@@ -3,6 +3,7 @@ build_doc pipeline. The A3 trap pinned here: the adapter row handed to the
 engine covers the RESOLUTION day (duty_day is only the fetch key), so the roll
 call labeled D really counts the duty of D−1 on day D.
 """
+import re
 from datetime import date, timedelta
 
 from app.domain.presence import PresenceState
@@ -11,8 +12,9 @@ from app.domain.types import (
     RequestStatus, Service,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, Person
+from app.models import DutyAssignment, LeaveRequest, ParadeSnapshot, Person
 from app.services import meal_service, parade_service, presence_service
+from tests.conftest import login
 
 D = date(2026, 8, 10)  # a Monday
 
@@ -158,3 +160,59 @@ def test_meals_counters_follow_the_same_pipe(app, make_person):
         assert imbalance is None
         # Leave > duty, and nobody re-adds him downstream (A1's exact bug).
         assert counts.overnight == 0
+
+
+# --- missing-duty page chrome (A7) --------------------------------------------------
+
+NOTICE = "No confirmed duty for this night"
+
+
+def notice_duties(html):
+    """The duty labels named in the notice, or None when no notice rendered."""
+    match = re.search(NOTICE + r":\s*(.*?)\s*—", html, re.S)
+    return match.group(1) if match else None
+
+
+def test_roll_call_page_notice_when_no_confirmed_duty(app, client, make_person):
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    make_stay_out_opr(make_person)
+    login(client, "ps2")
+
+    html = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
+    assert notice_duties(html) == "COS, CDO/S"
+
+    # The night covered by roll_call(D) is D−1→D: a CONFIRMED COS dated D−1
+    # covers it, so only CDO/S is still missing.
+    plant_duty(app, "cos_guy", D - timedelta(days=1))
+    html = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
+    assert notice_duties(html) == "CDO/S"
+
+
+def test_meals_page_notice(app, client, make_person):
+    make_person(username="s4", is_admin=True)
+    make_stay_out_opr(make_person)
+    login(client, "s4")
+
+    # Meals for day D cover the night D→D+1 — one day later than roll_call(D).
+    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    assert notice_duties(html) == "COS, CDO/S"
+
+    plant_duty(app, "cos_guy", D)
+    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    assert notice_duties(html) == "CDO/S"
+
+
+def test_snapshot_text_never_contains_notice(app, client, make_person):
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    login(client, "ps2")
+
+    resp = client.post(
+        "/parade/roll-call/finalize", data={"date": D.isoformat()},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    with app.app_context():
+        snap = db.session.query(ParadeSnapshot).one()
+        # The notice is page chrome, never document text — a snapshot frozen on
+        # a duty-less night must not carry it.
+        assert NOTICE not in snap.rendered_text
