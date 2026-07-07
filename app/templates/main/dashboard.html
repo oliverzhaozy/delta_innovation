@@ -12,40 +12,70 @@
   </div>
 </div>
 
+{# Grouped, rights-gated tiles — mirrors the nav sections; every entry is a
+   live link (UI refresh fixed the stale "Phase 4" duty-roster placeholder). #}
 <section class="card">
-  <h2>Your tools</h2>
-  {# Role-aware placeholders; each becomes a real link as its phase ships. #}
+  <h2>Documents &amp; parades</h2>
   <ul class="toollist">
-    {% if routing.can_request(current_user) %}
-      <li><a href="{{ url_for('leave.index') }}">Leave requests</a><span class="tag">Live</span></li>
+    <li><a href="{{ url_for('parade.morning') }}">Parade state</a><span class="muted">Morning · COS message · Roll call</span></li>
+    <li><a href="{{ url_for('parade.away') }}">Away board</a></li>
+    <li><a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a></li>
+    {% if can_key_parade_today(current_user) %}
+      <li><a href="{{ url_for('parade.statuses_list') }}">Statuses</a></li>
     {% endif %}
-    <li><a href="{{ url_for('parade.away') }}">Away board</a><span class="tag">Live</span></li>
-    <li><a href="{{ url_for('overseas.mine') }}">Overseas declarations</a><span class="tag">Live</span></li>
-    {% if policy.can_manage_manning(current_user) %}
-      <li><a href="{{ url_for('overseas.upcoming') }}">Upcoming overseas travel</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.is_pc(current_user) %}
-      <li><a href="{{ url_for('leave.pc_queue') }}">Platoon {{ current_user.platoon }} approvals</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.can_final_approve(current_user) %}
-      <li><a href="{{ url_for('leave.oc_queue') }}">Final approvals</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.can_manage_ledger(current_user) %}
-      <li><a href="{{ url_for('ledger.index') }}">OFF/OIL ledger</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.can_manage_people(current_user) %}
-      <li><a href="{{ url_for('admin.people') }}">People admin</a><span class="tag">Live</span></li>
-    {% endif %}
-    <li><a href="{{ url_for('calendar.tp_list') }}">TP calendar</a><span class="tag">Live</span></li>
-    {% if policy.can_view_arctic(current_user) %}
-      <li><a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE calendar</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.can_manage_meals(current_user) %}
-      <li><a href="{{ url_for('meals.index') }}">NSF meal counter</a><span class="tag">Live</span></li>
-    {% endif %}
-    {% if policy.can_manage_roster(current_user) %}
-      <li><span>Duty roster</span><span class="tag">Phase 4</span></li>
+    {% if policy.can_key_direct_absence(current_user) %}
+      <li><a href="{{ url_for('parade.direct_absences_list') }}">Direct absences</a></li>
     {% endif %}
   </ul>
 </section>
+
+<section class="card">
+  <h2>Duty &amp; orders</h2>
+  <ul class="toollist">
+    <li><a href="{{ url_for('duty.roster') }}">Duty roster</a></li>
+    <li><a href="{{ url_for('ro.view') }}">Routine Orders</a></li>
+    {% if policy.can_manage_manning(current_user) %}
+      <li><a href="{{ url_for('manning.index') }}">TU manning</a></li>
+    {% endif %}
+    <li><a href="{{ url_for('calendar.month') }}">TP calendar</a></li>
+    {% if policy.can_view_arctic(current_user) %}
+      <li><a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE calendar</a></li>
+    {% endif %}
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Leave &amp; travel</h2>
+  <ul class="toollist">
+    {% if routing.can_request(current_user) %}
+      <li><a href="{{ url_for('leave.index') }}">My leave requests</a></li>
+    {% endif %}
+    {% if policy.is_pc(current_user) %}
+      <li><a href="{{ url_for('leave.pc_queue') }}">Platoon {{ current_user.platoon }} approvals</a>{% if pending_approvals %}<span class="badge pending">{{ pending_approvals }} pending</span>{% endif %}</li>
+    {% elif policy.can_final_approve(current_user) %}
+      <li><a href="{{ url_for('leave.oc_queue') }}">Final approvals</a>{% if pending_approvals %}<span class="badge pending">{{ pending_approvals }} pending</span>{% endif %}</li>
+    {% endif %}
+    <li><a href="{{ url_for('overseas.mine') }}">Overseas declarations</a></li>
+    {% if policy.can_manage_manning(current_user) %}
+      <li><a href="{{ url_for('overseas.upcoming') }}">Upcoming overseas travel</a></li>
+    {% endif %}
+    {% if policy.can_manage_ledger(current_user) %}
+      <li><a href="{{ url_for('ledger.index') }}">OFF/OIL ledger</a></li>
+    {% endif %}
+  </ul>
+</section>
+
+{% if policy.can_manage_people(current_user) or policy.can_manage_meals(current_user) %}
+<section class="card">
+  <h2>Staff tools</h2>
+  <ul class="toollist">
+    {% if policy.can_manage_people(current_user) %}
+      <li><a href="{{ url_for('admin.people') }}">People admin</a></li>
+    {% endif %}
+    {% if policy.can_manage_meals(current_user) %}
+      <li><a href="{{ url_for('meals.index') }}">NSF meal counter</a></li>
+    {% endif %}
+  </ul>
+</section>
+{% endif %}
 {% endblock %}

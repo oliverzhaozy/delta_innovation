@@ -15,7 +15,7 @@ def test_dashboard_content_is_role_aware(client, make_person):
     opr = make_person(username="opr_tools")
     login(client, opr)
     body = client.get("/").data
-    assert b"Leave requests" in body
+    assert b"My leave requests" in body  # UI refresh renamed the tile
     assert b"OFF/OIL ledger" not in body
     client.post("/logout")
 
