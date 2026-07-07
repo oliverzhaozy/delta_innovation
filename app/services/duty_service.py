@@ -9,7 +9,7 @@ path is the drift bug this app exists to kill.
 """
 import hashlib
 from calendar import monthrange
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import update
@@ -162,6 +162,34 @@ def generate_month(month: str, actor):
             )
         )
     db.session.commit()
+
+
+MonthView = namedtuple("MonthView", "first last days rows by_slot pools violations fingerprint")
+
+
+def month_view(month: str) -> MonthView:
+    """Everything the roster page renders, assembled once. `violations` is
+    re-derived from the CURRENT rows on every call (the pure module's contract:
+    re-flag after manual edits and swaps, not only after generation). Blanks
+    are slots with NO row — the DB never stores a None assignment."""
+    first, last = month_bounds(month)
+    days = list(iter_days(first, last))
+    rows = _assignments_between(first, last)
+    by_slot = {(r.date, r.duty): r for r in rows}
+    people = event_service.active_roster()
+    pools = {duty: eligibility.pool(duty, people) for duty in Duty}
+    assignments = {
+        (d, duty): (by_slot[(d, duty)].person_id if (d, duty) in by_slot else None)
+        for d in days
+        for duty in Duty
+    }
+    _counts, prior_tail = _prior_month_inputs(first)
+    return MonthView(
+        first=first, last=last, days=days, rows=rows, by_slot=by_slot,
+        pools=pools,
+        violations=roster.violations(assignments, pools, prior_tail=prior_tail),
+        fingerprint=roster_fingerprint(month),
+    )
 
 
 def roster_fingerprint(month: str) -> str:
