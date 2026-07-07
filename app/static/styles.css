@@ -90,6 +90,78 @@ body {
 
 .inline-form { display: inline; margin: 0; }
 
+/* ---------- Grouped nav dropdowns (UI refresh) ---------- */
+
+.navgroup { position: relative; }
+
+.navgroup summary {
+  list-style: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.92rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 7px;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.navgroup summary::-webkit-details-marker { display: none; }
+
+.navgroup summary::after {
+  content: " ▾";
+  font-size: 0.7em;
+  opacity: 0.7;
+}
+
+.navgroup summary:hover,
+.navgroup[open] summary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.navgroup[data-here] summary,
+.topnav a.here {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.navmenu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 30;
+  min-width: 12rem;
+  padding: 0.4rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.navmenu a,
+.navmenu .linklike {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: var(--ink);
+  font-size: 0.94rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  text-decoration: none;
+}
+
+.navmenu a:hover,
+.navmenu .linklike:hover {
+  background: var(--green-100);
+  color: var(--green-800);
+}
+
+/* The last two groups open near the right edge on phones: flip the panel. */
+.navgroup:nth-last-child(-n+2) .navmenu { left: auto; right: 0; }
+
 .linklike {
   background: none;
   border: none;

@@ -302,10 +302,16 @@ def test_opr_views_both_pages_but_403_on_finalize_keyer_succeeds(app, make_perso
         assert db.session.query(ParadeSnapshot).count() == 2  # the 403s appended nothing
 
 
-# --- nav: both links visible to every logged-in user ------------------------
+# --- nav: both documents reachable by every logged-in user ------------------
 
-def test_nav_shows_cos_message_and_roll_call_links_to_every_logged_in_user(client, make_person):
+def test_nav_reaches_cos_message_and_roll_call_for_every_logged_in_user(client, make_person):
+    # UI refresh: the top nav now groups the parade pages behind the Parade
+    # dropdown -> Parade state, and the three documents are URL-backed pills on
+    # that page. The guarantee is unchanged (any logged-in user reaches both);
+    # the path is Home -> Parade state -> pills.
     login(client, make_person(username="anyviewer2", appointment=Appointment.OPR))
-    home = client.get("/").data
-    assert b'href="/parade/cos-message"' in home
-    assert b'href="/parade/roll-call"' in home
+    home = client.get("/", follow_redirects=True).data
+    assert b'href="/parade/morning"' in home  # the Parade-state entry point
+    pills = client.get("/parade/morning").data
+    assert b'/parade/cos-message' in pills
+    assert b'/parade/roll-call' in pills

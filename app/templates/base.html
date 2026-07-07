@@ -13,54 +13,84 @@
     {# Neutral brand everywhere — no unit name, pre- or post-login (CLAUDE.md). #}
     <span class="brand"><span class="mark">OP</span>Ops Portal</span>
     {% if current_user.is_authenticated %}
+      {# Grouped nav (UI refresh): five rights-gated dropdowns; the group
+         holding the current page is highlighted via its blueprint. #}
+      {% set section = {
+        "parade": "parade", "duty": "duty", "ro": "duty", "manning": "duty",
+        "leave": "leave", "overseas": "leave", "ledger": "leave",
+        "calendar": "calendar", "admin": "account", "meals": "account", "auth": "account",
+      }.get(request.blueprint) %}
       <nav class="topnav">
-        <a href="{{ url_for('main.dashboard') }}">Home</a>
-        <a href="{{ url_for('parade.away') }}">Away</a>
-        <a href="{{ url_for('parade.morning') }}">Morning parade</a>
-        <a href="{{ url_for('parade.cos_message') }}">COS message</a>
-        <a href="{{ url_for('parade.roll_call') }}">Roll call</a>
-        <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
-        <a href="{{ url_for('duty.roster') }}">Duty roster</a>
-        <a href="{{ url_for('ro.view') }}">RO</a>
-        {% if can_key_parade_today(current_user) %}
-          <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
-        {% endif %}
-        {% if policy.can_key_direct_absence(current_user) %}
-          <a href="{{ url_for('parade.direct_absences_list') }}">Direct absences</a>
-        {% endif %}
-        {% if routing.can_request(current_user) %}
-          <a href="{{ url_for('leave.index') }}">Leave</a>
-        {% endif %}
-        <a href="{{ url_for('overseas.mine') }}">Overseas</a>
-        {% if policy.can_manage_manning(current_user) %}
-          <a href="{{ url_for('overseas.upcoming') }}">Overseas (upcoming)</a>
-        {% endif %}
-        <a href="{{ url_for('calendar.month') }}">Calendar</a>
-        {% if policy.can_view_arctic(current_user) %}
-          <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
-        {% endif %}
-        {% if policy.is_pc(current_user) %}
-          <a href="{{ url_for('leave.pc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
-        {% elif policy.can_final_approve(current_user) %}
-          <a href="{{ url_for('leave.oc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
-        {% endif %}
-        {% if policy.can_manage_ledger(current_user) %}
-          <a href="{{ url_for('ledger.index') }}">Ledger</a>
-        {% endif %}
-        {% if policy.can_manage_manning(current_user) %}
-          <a href="{{ url_for('manning.index') }}">Manning</a>
-        {% endif %}
-        {% if policy.can_manage_meals(current_user) %}
-          <a href="{{ url_for('meals.index') }}">Meals</a>
-        {% endif %}
-        {% if policy.can_manage_people(current_user) %}
-          <a href="{{ url_for('admin.people') }}">People</a>
-        {% endif %}
-        <a href="{{ url_for('auth.change_password') }}">Password</a>
-        <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="linklike">Sign out</button>
-        </form>
+        <a href="{{ url_for('main.dashboard') }}" {% if request.blueprint == "main" %}class="here"{% endif %}>Home</a>
+        <details class="navgroup" {% if section == "parade" %}data-here{% endif %}>
+          <summary>Parade</summary>
+          <div class="navmenu">
+            <a href="{{ url_for('parade.morning') }}">Parade state</a>
+            <a href="{{ url_for('parade.away') }}">Away board</a>
+            <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
+            {% if can_key_parade_today(current_user) %}
+              <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
+            {% endif %}
+            {% if policy.can_key_direct_absence(current_user) %}
+              <a href="{{ url_for('parade.direct_absences_list') }}">Direct absences</a>
+            {% endif %}
+          </div>
+        </details>
+        <details class="navgroup" {% if section == "duty" %}data-here{% endif %}>
+          <summary>Duty</summary>
+          <div class="navmenu">
+            <a href="{{ url_for('duty.roster') }}">Duty roster</a>
+            <a href="{{ url_for('ro.view') }}">Routine Orders</a>
+            {% if policy.can_manage_manning(current_user) %}
+              <a href="{{ url_for('manning.index') }}">Manning</a>
+            {% endif %}
+          </div>
+        </details>
+        <details class="navgroup" {% if section == "leave" %}data-here{% endif %}>
+          <summary>Leave{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</summary>
+          <div class="navmenu">
+            {% if routing.can_request(current_user) %}
+              <a href="{{ url_for('leave.index') }}">My leave</a>
+            {% endif %}
+            {% if policy.is_pc(current_user) %}
+              <a href="{{ url_for('leave.pc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
+            {% elif policy.can_final_approve(current_user) %}
+              <a href="{{ url_for('leave.oc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
+            {% endif %}
+            <a href="{{ url_for('overseas.mine') }}">Overseas declarations</a>
+            {% if policy.can_manage_manning(current_user) %}
+              <a href="{{ url_for('overseas.upcoming') }}">Upcoming travel</a>
+            {% endif %}
+            {% if policy.can_manage_ledger(current_user) %}
+              <a href="{{ url_for('ledger.index') }}">OFF/OIL ledger</a>
+            {% endif %}
+          </div>
+        </details>
+        <details class="navgroup" {% if section == "calendar" %}data-here{% endif %}>
+          <summary>Calendar</summary>
+          <div class="navmenu">
+            <a href="{{ url_for('calendar.month') }}">TP month</a>
+            {% if policy.can_view_arctic(current_user) %}
+              <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
+            {% endif %}
+          </div>
+        </details>
+        <details class="navgroup" {% if section == "account" %}data-here{% endif %}>
+          <summary>Account</summary>
+          <div class="navmenu">
+            {% if policy.can_manage_people(current_user) %}
+              <a href="{{ url_for('admin.people') }}">People</a>
+            {% endif %}
+            {% if policy.can_manage_meals(current_user) %}
+              <a href="{{ url_for('meals.index') }}">NSF meals</a>
+            {% endif %}
+            <a href="{{ url_for('auth.change_password') }}">Password</a>
+            <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="linklike">Sign out</button>
+            </form>
+          </div>
+        </details>
       </nav>
     {% endif %}
   </header>

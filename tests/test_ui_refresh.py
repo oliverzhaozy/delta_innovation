@@ -45,3 +45,30 @@ def test_pills_carry_the_page_date(app, client, make_person):
     html = client.get(f"/parade/morning?date={DAY.isoformat()}").get_data(as_text=True)
     # Switching document tabs stays on the same day.
     assert f"/parade/roll-call?date={DAY.isoformat()}" in html.replace("&amp;", "&")
+
+
+def test_nav_groups_are_rights_gated(app, client, make_person):
+    make_viewer(make_person)  # a plain Opr
+    login(client, "opr1")
+    html = client.get("/").get_data(as_text=True)
+    for summary in ("Parade", "Duty", "Leave", "Calendar", "Account"):
+        assert f"<summary>{summary}" in html, summary
+    # Staff-only entries stay invisible to an Opr.
+    for hidden in ("Manning", "OFF/OIL ledger", ">People<", "NSF meals",
+                   "Statuses", "Direct absences", "ARCTIC FOE"):
+        assert hidden not in html, hidden
+
+    client.post("/logout")
+    make_person(username="s3_admin", company_role="S3", is_admin=True)
+    login(client, "s3_admin")
+    html = client.get("/").get_data(as_text=True)
+    for visible in ("Manning", "OFF/OIL ledger", ">People<", "NSF meals"):
+        assert visible in html, visible
+
+
+def test_nav_highlights_the_current_section(app, client, make_person):
+    make_viewer(make_person)
+    login(client, "opr1")
+    html = client.get("/duty/roster").get_data(as_text=True)
+    match = re.search(r'<details class="navgroup" data-here>\s*<summary>(\w+)', html)
+    assert match and match.group(1) == "Duty"
