@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Implementation is **in progress** (started 2026-07-05 at Phase 0). `SPEC.md` is the product spec; `docs/TECH_PLAN.md` is the approved technical plan and the authoritative reference for the data model, architecture, permission layers, build phases, and the P0/P1 task breakdown — work through its tasks in order and check git log to see where the build stands. Read TECH_PLAN.md before doing anything substantive; do not re-plan what it already decides. Tasks P0.7 (OC's written hosting OK) and P0.8 (deploy) are gated on the owner.
 
+## Executor cognitive profile
+
+Every model executing tasks in this repo follows the cognitive profile below (pre-computation rhythm, risk-aversion checklist, anti-rush rules, halt conditions). Where it conflicts with this file or `docs/TECH_PLAN.md`, those win.
+
+@docs/fable-behavior.md
+
 ## What this is
 
 A Flask web app replacing TimeTree as the single source of truth for a ~36-person Singapore army company's manpower admin (leave, parade states, duty rosters, RO, TU manning, meal counts). The two governing ideas:
