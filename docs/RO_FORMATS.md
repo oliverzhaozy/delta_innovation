@@ -148,6 +148,12 @@ Fri - IPPT, Ranging Ops Order, Site Testing
   ascending by time, then ONE `TBC` block last. The sample's mid-list TBC was
   hand-placement; a derived document needs a deterministic rule. Within the
   TBC block: standing items by their position, then extras in keyed order.
+- **(p) RO edit rights are WIDE (owner decision 2026-07-07, overrides P5.4's
+  "same person next day 403s" Done line):** any command-team appointment
+  (OC/SM/2IC/PC/P2IC/PS) may edit any day's RO — `policy.can_edit_ro` stays
+  exactly as P4.8 landed it. Since every CDO/S-eligible appointment is
+  command team, the A9 duty window is currently subsumed by the fallback; the
+  window plumbing stays (harmless, and the rule may narrow later).
 - **(o) Standing vs daily:** the six Matters sections (Safety,
   Administrative, Logistic, Security, R&D, Instructions) are standing
   boilerplate, S3/admin-edited; an empty section renders a bare `-` line.
