@@ -309,6 +309,78 @@ Eligibility ∧ availability feeds auto-pick; humans always confirm; manual assi
 
 **Deliberately cut from P7** (so they aren't re-litigated): full audit-log middleware; soft-deletes everywhere; OC delegation toggle (revisit only on evidence — assumption 7); soldier self-declaration (v2); 2FA/SSO/WAF; TimeTree import/export; any admin permission matrix.
 
+## Pre-flight review addendum — P4–P7 execution hardening (2026-07-07)
+
+> Delta-only layer over the Phase 4–7 breakdowns above: it amends task text, adds per-task contracts, and defines Stop & Validate gates. Where this addendum conflicts with a task's original wording, **this addendum wins.** Written after an adversarial review of the committed code (P3b.5, 394 tests green); every finding cites the code it rests on.
+
+### A. Blind spots — task amendments (things that would break as originally written)
+
+**A1 — Breakfast's duty term is presence-derived or it is wrong (amends P4.7).** Once CONFIRMED duties feed `presence.resolve`, duty stayers land in roll-call CURRENT STRENGTH via `PresenceState.DUTY` (`presence.py:141`, `parade.py:252`) — the set of DUTY-state people is a strict subset of CURRENT STRENGTH. The original "unioned by person_id" wording can only ever *re-add people presence deliberately excluded*: a duty holder on approved leave (leave > duty by precedence) would be counted for breakfast while absent. Amended rule: **the meals duty term stays permanently empty; duty reaches meals exclusively through `presence_inputs` duty_day offsets in the doc builds** (roll_call(D) with duty of D−1, roll_call(D+1) with duty of D). P4.7 MUST also rewrite the misleading hook comments at `meals.py:16-18` and `:79-81` to state this — a sub-agent implements what the code comment says, not what the plan says. Pin with two tests: duty holder on approved leave is NOT counted for breakfast; stay-out CDOS with no absences is counted exactly once.
+
+**A2 — The duty_day offset needs one owner (amends P3b.6, gates P4.7).** `presence_inputs(day)` is called twice per variant (page + finalize; six sites in `parade/routes.py`), and P3b.6's meals route adds three more doc builds. An offset convention re-derived at nine call sites by nine sub-agent moments is nine coin flips; the worst failure is silent — a roll-call page that shows duty stayers while its finalized snapshot omits them. Amendment to **P3b.6**: introduce `parade_service.build_doc(day, variant)` owning presence_inputs + categorize (and, from P4.7 on, the duty_day convention: roll_call(D) ⇒ duty of D−1; morning/cos ⇒ duty of D); migrate all six parade route sites to it in the same task; the meals route consumes it. Add a **permanent invariant test**: for each variant, the finalize route's stored text equals the GET route's rendered text for identical inputs. P4.7 then changes exactly one function.
+
+**A3 — Adapter-row date: the natural reading is the wrong one (amends P4.7).** `covers()` compares against the **resolution day** (`presence.py:70-72`). Wrapping a duty assignment with its own `.date` makes `covers()` always False precisely when `duty_day != day` — duty would never appear at roll call, the one place it matters. Pin: **the adapter row carries start_date = end_date = the resolution day; the assignment's `.date` (duty_day) is only the fetch key.**
+
+**A4 — Confirm-vs-regenerate TOCTOU (amends P4.4).** `confirm_month`'s `WHERE state='PROPOSED'` claim confirms whatever exists at claim time: PS A reviews the grid, PS B regenerates, PS A confirms a roster A never saw (all three PSs share rights, and the confirmed roster drives keying rights and food counts). The claim idiom defends double-submit only. Fix: the confirm form carries a **content fingerprint — hash of sorted (date, duty, person_id) over the month's PROPOSED rows** — recomputed inside the transaction; mismatch ⇒ abort with "roster changed since you loaded this page — re-review". *Not* count+max(id): regenerate may be implemented as UPDATE-in-place (ids preserved), and a single manual edit must also invalidate.
+
+**A5 — `is_cos_of_day` takes no default (amends P4.8).** With `can_key_parade(person, is_cos_of_day=False)`, any of the 14 call sites a sub-agent misses degrades **silently** to fallback-only rights — page-to-page inconsistency with no error. Make the parameter **keyword-only with no default**: a stale caller TypeErrors in the suite. Wire the duty-aware wrapper through the existing `inject_policy` context processor (`app/__init__.py:46`) so the 4 template sites switch in one place. The wrapper runs one duty query per page render (it gates the nav in base.html) — **accepted at 40 users; do not invent caching.** Rights are date-independent: the two-day window decides *who* can key, not *which dates* they may key (matches today's PS/S3 behavior).
+
+**A6 — Swaps are CONFIRMED-only (amends P4.6).** Mixed-state swaps have no coherent answer, and a PROPOSED↔PROPOSED swap writes an append-only log row that the next regenerate semantically orphans. Rule: `swap()` requires both rows CONFIRMED and leaves both CONFIRMED; any PROPOSED row ⇒ 4xx ("regenerate or manual-assign covers drafts"); test pins the 4xx.
+
+**A7 — prior_tail/prior_counts have a source and an empty case (amends P4.3/P4.4).** Nothing in P4.4 said where they come from. Pin: `prior_tail` = CONFIRMED assignments in the **last 3 calendar days** of the previous month (Fri→Mon adjacency can reach 3 days back); `prior_counts` = CONFIRMED per-person counts of the previous month; both empty when no previous month exists — empty tail ⇒ no adjacency constraint from the past (first-ever month is defined, not crashed). Corollary for consumers: when no CONFIRMED duty exists for a night (rollout ramp, month boundary), roll-call and meals pages render an explicit "no confirmed duty for this night" notice — **as page chrome outside the `<pre>`**, never in the document text (the P3 goldens and snapshots must stay byte-identical).
+
+**A8 — Conflict flags are presence-derived, not leave-only (amends P4.9, P6.3, P6.6).** "Covering approved absence" reads as a leave-table join; the most common real conflict is a duty holder going on **MC** (a StatusEntry) or a regular's direct absence. Define flagged ⇔ `resolve(holder, night)` returns absent — any absent-making row from the shared fetch. Same predicate for the leave-detail duty panel (P4.9) and the manning conflict function (P6.3 — its original list omitted statuses entirely: a slot-holder on a 3-week course would show NO_KNOWN_CONFLICT; include out-of-camp statuses, one line over the shared fetch). Additionally (P4.9): the roster page flag doesn't help the person compiling roll call — add a page-chrome notice on the roll-call page ("CONFIRMED duty holder X is absent (MC) tonight"), derived in the route from the same fetch, outside the `<pre>`.
+
+**A9 — RO rights and inputs have date rules (amends P5.3/P5.4).** Editing the RO dated D requires CONFIRMED CDOS of **D or D−1** (the compiling evening — same reasoning as P4.8's two-day COS window), fallback command team. The RO's duty names come from **CONFIRMED rows dated D only**; a PROPOSED row renders the explicit missing-duty placeholder — drafts never appear in a document.
+
+**A10 — Purge enumerates every dated table and one FK edge (amends P7.2).** Add to the purge list, each explicitly purged-or-kept-with-why: `meal_adjustment`, `weekly_key_events`, `overseas_declaration`, `duty_swap_log`, `person_audit`. FK edge: a ledger row *newer* than DATE can reference a `leave_request` *older* than DATE (cancellation/early-return posted after the leave ended) — leave rows referenced by any surviving ledger row are **kept**; the balance-identity check remains the gate.
+
+### B. Component independence (sub-agent isolation rules)
+
+**B1 — New-panel-as-include rule.** `leave/detail.html` (127 inline lines, 8 cards) is edited by P4.9 and P6.6. Do NOT refactor the existing cards (zero payoff, real risk). Rule: each new panel is a **new include file** (`leave/_duty_panel.html`, `leave/_manning_panel.html`) plus exactly one `{% include %}` line inserted after the "Conducts & presence" card; touching any other line of detail.html is out of contract.
+
+**B2 — No parade doc-card extraction.** The three copy-cards are near-duplicates but not verbatim (different pre ids, finalize endpoints, cos's hidden field). P4.8's change there is a one-token predicate swap per template; extraction is a parameterized-macro refactor with its own risk. **Rejected** — recorded here so nobody re-litigates it. (If ever wanted: standalone refactor task with a rendered-HTML-equality assertion.)
+
+**B3 — Strict sequence P4.4 → (P3b.6's build_doc already landed) → P4.7 → P4.8.** These three share files: P4.4 and P4.7 both edit `presence_service.py`; P4.7 and P4.8 both edit `parade/routes.py`; P4.8 also edits the three parade templates. Never parallelize them. Parallel-safe groups: {P4.1, P4.2, P4.3} (disjoint files); {P4.5, P4.6} after P4.4; P4.9 after P4.8.
+
+**B4 — Freeze `domain/eligibility.py`'s public API at P4.2.** The exact signatures in P4.2's task text (`eligible_cos(p)`, `eligible_cdos(p)`, `pool(duty, people)`, `TU_SLOT_APPOINTMENTS`, `available(p, day, *, absence_rows=(), overnight_events=(), other_duty_dates=())`) are copied **verbatim into P6.3's task text**, so the P6 sub-agent imports without ever reading P4 code.
+
+**B5 — `types.py` is append-only at the end.** P4.1 and P6.2 both add enums there; both append after the last definition, never reorder or interleave.
+
+### C. Task contracts (P4 — Requires / Produces / Forbidden)
+
+> Format: **Requires** = must already exist (verify, don't create). **Produces** = the exhaustive list of new/changed artifacts — if it isn't listed, don't build it. **Forbidden** = files/behaviors out of contract even if they seem helpful.
+
+- **P4.1** Requires: `domain/types.py`, models package conventions, linear migration chain. Produces: `Duty`/`DutyState` enums (appended, end of types.py); `duty_assignment` + `duty_swap_log` models; ONE migration; model tests. Forbidden: any service, route, template, or edit to existing enums.
+- **P4.2** Requires: `types.py` `RANK_ORDER`/`rank_at_most`/`rank_at_least`. Produces: `app/domain/eligibility.py` with exactly the five frozen symbols of B4; `tests/test_eligibility.py`. Forbidden: Flask/DB imports (pure module); any service.
+- **P4.3** Requires: nothing beyond stdlib. Produces: `app/domain/roster.py` (`adjacent_duty_days`, `generate`, `violations` — signatures per P4.3 + A7); tests. Forbidden: Flask/DB imports; any randomness; any solver.
+- **P4.4** Requires: P4.1–P4.3; `approval_service._claim` idiom (`approval_service.py:30`); `presence_service._fetch_rows`. Produces: `app/services/duty_service.py` (`availability_for_month`, `generate_month`, `confirm_month` with A4's fingerprint); `_fetch_rows` promoted to public `fetch_absence_rows` with BOTH existing callers updated; service tests. Forbidden: routes/templates; changing `presence_inputs`'s signature (that is P4.7); touching CONFIRMED rows in regeneration.
+- **P4.5** Requires: P4.4. Produces: `app/blueprints/duty/` registered in `app/__init__.py`; routes exactly `GET /duty/roster`, `POST /duty/roster/generate`, `POST /duty/roster/confirm`; `templates/duty/roster.html` (grid + always-rendered pools panel + violation/blank flags); route tests. Forbidden: any other route; parade files; presence files.
+- **P4.6** Requires: P4.5. Produces: routes exactly `POST /duty/roster/assign`, `POST /duty/roster/clear`, `POST /duty/roster/swap` (+ swap-log section on the roster page); CONFIRMED-only swap per A6; warn-then-confirm param for availability, 4xx for eligibility. Forbidden: `approval_service`; auto-reassignment of anything.
+- **P4.7** Requires: `parade_service.build_doc` (from amended P3b.6); P4.4. Produces: `presence_inputs(day, *, duty_day=None)` fetching CONFIRMED assignments by DATE with A3's adapter (start=end=resolution day); build_doc passes the offsets (roll_call(D)⇒D−1, morning/cos⇒D); meals duty term stays empty + `meals.py` comment rewrite per A1; A1's two pin tests; A7's page-chrome notice. Forbidden: any change to `presence.resolve`, `covers`, or `parade.categorize`; any change to golden bytes.
+- **P4.8** Requires: P4.7. Produces: `duty_service.can_key_parade_today` (two-day window per plan), `duty_service.cdos_of_day`; `policy.can_key_parade(person, *, is_cos_of_day)` keyword-only no-default per A5; `policy.can_edit_ro(person, *, is_cdos_of_day)` (unrouted); context-processor wiring; ALL 14 call sites switched; tests incl. the deposed-COS case. Forbidden: caching machinery; per-date rights scoping; any DB import into `domain/policy.py`.
+- **P4.9** Requires: P4.8. Produces: `templates/leave/_duty_panel.html` + ONE include line in detail.html per B1; roster-page absence flags + roll-call chrome notice per A8 (presence-derived predicate); warn-only tests. Forbidden: `approval_service`; any other detail.html line; storing flags.
+- **P4.10** Requires: P4.1–P4.9 green. Produces: the E2E walk exactly as written in P4.10; ROLLOUT.md duty cutover step. Forbidden: new features discovered along the way — file them as questions instead.
+
+**P5/P6/P7 contracts** are authored at their format gates (P5.1/P6.1) — the samples reshape them; P4-style contracts written now would be fiction. Until then, P5/P6/P7 tasks carry only the amendments A8–A10 and the B4 freeze.
+
+### D. Stop & Validate gates
+
+**Per task (every task, no exceptions):**
+1. Full suite green (`.venv/Scripts/python -m pytest -q`); test count ≥ previous task's count.
+2. Parade goldens byte-identical — *except where the task text itself quotes a new golden* (a red gate the agent can't satisfy teaches it to "fix" goldens; this exception is the only legal path).
+3. `flask routes` diff against the previous task shows **only** the routes enumerated in this task's Produces list. Any extra route ⇒ STOP, revert, ask.
+4. Exactly one alembic head; only tables named in the task changed.
+5. Domain purity: `rg -l "flask|app\.models|app\.extensions|app\.services" app/domain/` returns nothing (P4.8 is exactly the task that tempts a DB import into policy.py).
+6. Commit per task, imperative message naming the task ID; push.
+
+**Per phase (additionally, at P4.10 / P5.6 / P6.7 / P7-end):**
+7. The page==snapshot invariant test (A2) passes for all three variants.
+8. After P4.8 and forever: `rg "policy\.can_key_parade" app/blueprints app/templates` returns nothing.
+9. E2E task green; ROLLOUT.md updated; no file exists outside the union of all Produces lists (`git status` + `git diff --stat` reviewed against the contracts).
+
+**Prime directive for executor sub-agents:** if the task text (as amended by this addendum) does not name an artifact, do not create it. When blocked or tempted to improvise, STOP and surface the question — a missing feature costs one question; a hallucinated one costs a review cycle. The app proposes, a human decides — that rule applies to the builder too.
+
 ## Risks & open decisions
 
 - **Format fidelity** — parade/RO/manning templates blocked on real samples; Phases 3/5/6 each begin with them. The samples also pin the parade compile-time semantics (assumption 4).
