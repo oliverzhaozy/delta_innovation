@@ -5,6 +5,7 @@ trail (ledger posture — history, never edits), never a stored calendar the
 app could let drift against the live recompute.
 """
 from collections import namedtuple
+from datetime import timedelta
 
 from app.domain import parade as parade_domain
 from app.domain.types import ParadeVariant
@@ -29,7 +30,11 @@ def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
     """
     if variant is ParadeVariant.COS_MESSAGE and cos_person is None:
         raise ValueError("COS_MESSAGE needs a cos_person for its greeting")
-    pairs = presence_service.presence_inputs(day)
+    # The duty_day convention lives HERE and nowhere else (A2): the roll call
+    # labeled `day` covers the night day−1 → day, so it reads the duty of
+    # day−1; morning parade and the COS message read the duty of their own day.
+    duty_day = day - timedelta(days=1) if variant is ParadeVariant.ROLL_CALL else None
+    pairs = presence_service.presence_inputs(day, duty_day=duty_day)
     try:
         if variant is ParadeVariant.MORNING:
             doc = parade_domain.categorize(day, pairs, "morning")
