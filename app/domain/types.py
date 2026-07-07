@@ -235,3 +235,23 @@ class ParticipantCategory(str, enum.Enum):
             "PLATOON_2": "Platoon 2",
             "PLATOON_3": "Platoon 3",
         }[self.value]
+
+
+class Duty(str, enum.Enum):
+    """The two rotating company duties (P4). Eligibility rules live in
+    eligibility.py; the appointment pools are disjoint by design."""
+
+    COS = "COS"
+    CDOS = "CDOS"
+
+    @property
+    def label(self) -> str:
+        return {"COS": "COS", "CDOS": "CDO/S"}[self.value]
+
+
+class DutyState(str, enum.Enum):
+    """PROPOSED = generator/PS draft, invisible to parades and meals;
+    CONFIRMED = the roster of record (drafts must never move real counts)."""
+
+    PROPOSED = "PROPOSED"
+    CONFIRMED = "CONFIRMED"
