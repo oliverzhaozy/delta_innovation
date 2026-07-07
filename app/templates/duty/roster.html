@@ -46,6 +46,7 @@
             {% if row %}
               {{ row.person.rank.value }} {{ row.person.display_name }}
               <span class="badge {{ 'approved' if row.state.value == 'CONFIRMED' else 'pending' }}">{{ row.state.value }}</span>
+              {% if row.id in view.absent_flags %}<span class="badge rejected">&#9888; holder absent</span>{% endif %}
               {% if (row.person_id, d) in adjacency_marks %}<span class="chip">&#9888; adjacent</span>{% endif %}
             {% else %}
               — <strong>blank</strong> &#9888;

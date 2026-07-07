@@ -19,6 +19,11 @@
     {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
     — this document counts nobody as on duty.</p>
 {% endif %}
+{% for a in absent_holders %}
+  <p class="flash flash-error">CONFIRMED {{ a.row.duty.label }}
+     {{ a.person.rank.value }} {{ a.person.display_name }} is absent
+     ({{ a.label }}) tonight — resolve on the duty roster.</p>
+{% endfor %}
 
 {% if conflicts %}
 <section class="card">

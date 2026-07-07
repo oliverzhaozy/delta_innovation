@@ -14,7 +14,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import update
 
-from app.domain import eligibility, policy, roster
+from app.domain import eligibility, policy, presence, roster
 from app.domain.dates import iter_days, now_sgt, today_sgt
 from app.domain.types import Calendar, Duty, DutyState
 from app.extensions import db
@@ -373,14 +373,45 @@ def swap(assignment_a_id, assignment_b_id, *, actor, override_availability):
     return log
 
 
-MonthView = namedtuple("MonthView", "first last days rows by_slot pools violations fingerprint")
+def _absent_assignment_ids(rows, first, last):
+    """Assignment ids whose CONFIRMED holder resolves ABSENT on the duty date,
+    derived from the shared fetch (A8): an MC, a direct absence, and approved
+    leave all flag the same way, because the predicate IS presence, not a
+    leave-table join. Never stored — recomputed at render."""
+    confirmed = [r for r in rows if r.state is DutyState.CONFIRMED]
+    if not confirmed:
+        return frozenset()
+    leaves, directs, statuses = presence_service.fetch_absence_rows(first, last)
+    by_person = defaultdict(lambda: ([], [], []))
+    for row in leaves:
+        by_person[row.person_id][0].append(row)
+    for row in directs:
+        by_person[row.person_id][1].append(row)
+    for row in statuses:
+        by_person[row.person_id][2].append(row)
+    flagged = set()
+    for r in confirmed:
+        p_leaves, p_directs, p_statuses = by_person.get(r.person_id, ((), (), ()))
+        resolution = presence.resolve(
+            r.person, r.date,
+            leaves=p_leaves, direct_absences=p_directs, statuses=p_statuses,
+        )
+        if resolution.state is presence.PresenceState.ABSENT:
+            flagged.add(r.id)
+    return frozenset(flagged)
+
+
+MonthView = namedtuple(
+    "MonthView", "first last days rows by_slot pools violations fingerprint absent_flags"
+)
 
 
 def month_view(month: str) -> MonthView:
-    """Everything the roster page renders, assembled once. `violations` is
-    re-derived from the CURRENT rows on every call (the pure module's contract:
-    re-flag after manual edits and swaps, not only after generation). Blanks
-    are slots with NO row — the DB never stores a None assignment."""
+    """Everything the roster page renders, assembled once. `violations` and
+    `absent_flags` are re-derived from the CURRENT rows on every call (the pure
+    module's contract: re-flag after manual edits and swaps, not only after
+    generation). Blanks are slots with NO row — the DB never stores a None
+    assignment."""
     first, last = month_bounds(month)
     days = list(iter_days(first, last))
     rows = _assignments_between(first, last)
@@ -398,6 +429,7 @@ def month_view(month: str) -> MonthView:
         pools=pools,
         violations=roster.violations(assignments, pools, prior_tail=prior_tail),
         fingerprint=roster_fingerprint(month),
+        absent_flags=_absent_assignment_ids(rows, first, last),
     )
 
 

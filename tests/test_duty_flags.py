@@ -10,12 +10,14 @@ never blocked and nobody is auto-reassigned.
 from datetime import date
 
 from app.domain.types import (
-    Appointment, DayPart, Duty, DutyState, LeaveType, Rank, RequestStatus,
-    Service, StatusType,
+    Appointment, BalanceKind, DayPart, DirectAbsenceType, Duty, DutyState,
+    LeaveType, LedgerSource, Rank, RequestStatus, Service, StatusType,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, Person, StatusEntry
-from app.services import duty_service
+from app.models import (
+    DirectAbsence, DutyAssignment, LeaveRequest, LedgerEntry, Person, StatusEntry,
+)
+from app.services import approval_service, duty_service, ledger_service
 from tests.conftest import login
 
 WED = date(2026, 8, 5)
@@ -86,3 +88,133 @@ def test_leave_detail_no_duties_message(app, client, make_person):
 
     html = client.get(f"/leave/{req_id}").get_data(as_text=True)
     assert "No confirmed duties on these dates." in html
+
+
+# --- roster absence flags (Task 2, A8) -----------------------------------------------
+
+def plant_mc(app, username, start, end):
+    with app.app_context():
+        person_id = db.session.query(Person.id).filter_by(username=username).scalar()
+        db.session.add(
+            StatusEntry(
+                person_id=person_id, type=StatusType.MC, start_date=start,
+                end_date=end, day_part=DayPart.FULL, in_camp=False,
+                created_by_id=person_id,
+            )
+        )
+        db.session.commit()
+
+
+def plant_approved_leave(app, username, start, end, *, day_part=DayPart.FULL):
+    with app.app_context():
+        person_id = db.session.query(Person.id).filter_by(username=username).scalar()
+        row = LeaveRequest(
+            person_id=person_id, type=LeaveType.OFF, start_date=start,
+            end_date=end, day_part=day_part, status=RequestStatus.APPROVED,
+        )
+        db.session.add(row)
+        db.session.commit()
+        return row.id
+
+
+def flags(app):
+    with app.app_context():
+        return duty_service.month_view(AUG).absent_flags
+
+
+def test_roster_flags_absent_confirmed_holder_mc(app, client, make_person):
+    # THE A8 PIN: an MC is a StatusEntry, not leave — a leave-table join
+    # misses the most common real conflict.
+    make_cast(make_person)
+    aid = plant_duty(app, "opr1", WED)
+    plant_mc(app, "opr1", WED, WED)
+
+    assert aid in flags(app)
+    login(client, "opr1")
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "holder absent" in html
+
+
+def test_roster_flags_direct_absence_and_leave_too(app, client, make_person):
+    make_cast(make_person)
+    make_person(username="p2ic3", rank=Rank.SSG, appointment=Appointment.P2IC,
+                platoon=3, service=Service.REGULAR)
+    cdos_id = plant_duty(app, "p2ic3", WED, duty=Duty.CDOS)
+    with app.app_context():
+        person_id = db.session.query(Person.id).filter_by(username="p2ic3").scalar()
+        db.session.add(
+            DirectAbsence(
+                person_id=person_id, type=DirectAbsenceType.LEAVE, start_date=WED,
+                end_date=WED, day_part=DayPart.FULL, created_by_id=person_id,
+            )
+        )
+        db.session.commit()
+    cos_id = plant_duty(app, "opr1", THU)
+    plant_approved_leave(app, "opr1", THU, THU)
+
+    flagged = flags(app)
+    assert cdos_id in flagged and cos_id in flagged
+
+
+def test_pm_half_day_does_not_flag(app, make_person):
+    # PM off = present for the night documents; the engine owns day-part logic.
+    make_cast(make_person)
+    aid = plant_duty(app, "opr1", WED)
+    plant_approved_leave(app, "opr1", WED, WED, day_part=DayPart.PM)
+
+    assert aid not in flags(app)
+
+
+def test_cancelling_leave_clears_flag(app, make_person):
+    make_cast(make_person)
+    aid = plant_duty(app, "opr1", WED)
+    req_id = plant_approved_leave(app, "opr1", WED, WED)
+    assert aid in flags(app)
+
+    with app.app_context():
+        req = db.session.get(LeaveRequest, req_id)
+        oc = db.session.query(Person).filter_by(username="oc").one()
+        approval_service.cancel_approved(req, oc)
+    # Derived at render, never stored: the flag vanished with zero flag-writes.
+    assert aid not in flags(app)
+
+
+def test_roll_call_chrome_names_absent_holder(app, client, make_person):
+    make_cast(make_person)
+    plant_duty(app, "opr1", WED)  # covers the night WED→THU
+    plant_mc(app, "opr1", THU, THU)
+    login(client, "opr1")
+
+    html = client.get(f"/parade/roll-call?date={THU.isoformat()}").get_data(as_text=True)
+    normalized = " ".join(html.split())
+    assert "3SG Opr1 is absent (MC) tonight — resolve on the duty roster." in normalized
+
+
+def test_approval_not_blocked_by_confirmed_duty(app, make_person):
+    # WARN-ONLY PIN: the OC saw the panel; approving still succeeds, the ledger
+    # debits once, and the assignment names the same person (nothing reassigned).
+    make_cast(make_person)
+    aid = plant_duty(app, "opr1", WED)
+    req_id = plant_request(app, "opr1", WED, THU, status=RequestStatus.PENDING_OC)
+    with app.app_context():
+        opr_id = db.session.query(Person.id).filter_by(username="opr1").scalar()
+        oc = db.session.query(Person).filter_by(username="oc").one()
+        ledger_service.post_entry(
+            person_id=opr_id, kind=BalanceKind.OFF, delta_half_days=10,
+            reason="opening balance", source=LedgerSource.MANUAL, created_by_id=oc.id,
+        )
+        db.session.commit()
+
+        req = db.session.get(LeaveRequest, req_id)
+        approval_service.oc_approve(req, oc)
+
+        assert req.status is RequestStatus.APPROVED
+        debits = (
+            db.session.query(LedgerEntry)
+            .filter(LedgerEntry.leave_request_id == req_id, LedgerEntry.delta_half_days < 0)
+            .all()
+        )
+        assert len(debits) == 1  # exactly one deduction, no double-debit
+        row = db.session.get(DutyAssignment, aid)
+        assert row.person_id == opr_id and row.state is DutyState.CONFIRMED
+    assert aid in flags(app)  # ...and the roster page now flags the clash

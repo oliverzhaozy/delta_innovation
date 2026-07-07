@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from app.authz import require
 from app.blueprints.parade import bp
 from app.blueprints.parade.forms import DirectAbsenceForm, FpQuickAddForm, StatusEntryForm
-from app.domain import policy
+from app.domain import policy, presence
 from app.domain.dates import today_sgt
 from app.domain.types import (
     DayPart,
@@ -285,8 +285,17 @@ def roll_call():
     conflicts = _conflict_lines(built.pairs)
     # The night this document covers is day−1 → day (A7 notice reads the same
     # duty date build_doc does).
-    night_duties = {row.duty for row in duty_service.confirmed_on(day - timedelta(days=1))}
-    missing_duties = [duty for duty in Duty if duty not in night_duties]
+    night_rows = duty_service.confirmed_on(day - timedelta(days=1))
+    missing_duties = [duty for duty in Duty if duty not in {r.duty for r in night_rows}]
+    # Absent holders derive from built.pairs — those resolutions were computed
+    # with the right duty_day; re-resolving here could disagree with the
+    # document below the chrome.
+    holders = {row.person_id: row for row in night_rows}
+    absent_holders = [
+        {"row": holders[person.id], "person": person, "label": _row_label(resolution.row)}
+        for person, resolution in built.pairs
+        if person.id in holders and resolution.state is presence.PresenceState.ABSENT
+    ]
 
     return render_template(
         "parade/roll_call.html",
@@ -298,6 +307,7 @@ def roll_call():
         imbalance=built.imbalance,
         conflicts=conflicts,
         missing_duties=missing_duties,
+        absent_holders=absent_holders,
     )
 
 
