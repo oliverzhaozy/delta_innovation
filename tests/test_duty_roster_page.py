@@ -4,12 +4,14 @@ Routes are thin wires over duty_service; these tests hit the real app so the
 wiring, rights (view-for-all vs manage-for-PS), and the hard-block-vs-warn
 split are pinned through actual responses, mirroring the parade page suites.
 """
+import re
 from datetime import date
 
 from app.domain.types import Appointment, Duty, DutyState, Rank
 from app.extensions import db
 from app.models import DutyAssignment, Person
 from app.services import duty_service
+from tests.conftest import login
 
 AUG = "2026-08"
 
@@ -63,3 +65,101 @@ def test_month_view_empty_pool_all_blank(app, make_person):
         assert view.pools[Duty.CDOS] == []
         for d in view.days:
             assert (d, Duty.CDOS) in view.violations.blanks
+
+
+# --- page + generate/confirm routes ----------------------------------------------
+
+def make_full_cast(make_person):
+    """COS pair + a roster-managing PS (2SG PS: CDOS-eligible) + a viewer Opr."""
+    make_cos_pair(make_person)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+
+
+def rendered_fingerprint(html):
+    match = re.search(r'name="fingerprint" value="([0-9a-f]{64})"', html)
+    assert match, "confirm form must render the fingerprint"
+    return match.group(1)
+
+
+def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "opr1")
+
+    page = client.get(f"/duty/roster?month={AUG}")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "COS pool" in html and "CDO/S pool" in html
+    assert 'name="fingerprint"' not in html
+    assert "/duty/roster/generate" not in html
+    assert "/duty/roster/confirm" not in html
+
+
+def test_roster_mutations_403_for_opr(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "opr1")
+
+    for endpoint in ("generate", "confirm"):
+        resp = client.post(f"/duty/roster/{endpoint}", data={"month": AUG})
+        assert resp.status_code == 403, endpoint
+
+
+def test_empty_pool_warning_card(app, client, make_person):
+    # COS people exist; the CDOS pool is empty -> warning card renders.
+    make_cos_pair(make_person)
+    login(client, "opr1")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "CDO/S pool is empty or tiny" in html
+
+
+def test_bad_month_query_falls_back_to_current_month(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "opr1")
+    # Same posture as parade's _parse_day: junk never 400s the page.
+    assert client.get("/duty/roster?month=garbage").status_code == 200
+
+
+def test_generate_then_confirm_flips_badges(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "ps2")
+
+    resp = client.post("/duty/roster/generate", data={"month": AUG}, follow_redirects=True)
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "PROPOSED" in html and "CONFIRMED" not in html
+
+    resp = client.post(
+        "/duty/roster/confirm",
+        data={"month": AUG, "fingerprint": rendered_fingerprint(html)},
+        follow_redirects=True,
+    )
+    html = resp.get_data(as_text=True)
+    assert "CONFIRMED" in html and "PROPOSED" not in html
+
+
+def test_confirm_stale_fingerprint_flashes_rereview(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "ps2")
+
+    html = client.post(
+        "/duty/roster/generate", data={"month": AUG}, follow_redirects=True
+    ).get_data(as_text=True)
+    stale = rendered_fingerprint(html)
+
+    # Another PS edits one slot after this page was loaded.
+    with app.app_context():
+        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
+        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
+        row.person_id = other.id
+        db.session.commit()
+
+    resp = client.post(
+        "/duty/roster/confirm",
+        data={"month": AUG, "fingerprint": stale},
+        follow_redirects=True,
+    )
+    html = resp.get_data(as_text=True)
+    assert "re-review" in html
+    with app.app_context():
+        rows = db.session.query(DutyAssignment).all()
+        assert rows and all(r.state is DutyState.PROPOSED for r in rows)

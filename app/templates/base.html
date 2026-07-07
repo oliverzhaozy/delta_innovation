@@ -20,6 +20,7 @@
         <a href="{{ url_for('parade.cos_message') }}">COS message</a>
         <a href="{{ url_for('parade.roll_call') }}">Roll call</a>
         <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
+        <a href="{{ url_for('duty.roster') }}">Duty roster</a>
         {% if policy.can_key_parade(current_user) %}
           <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
         {% endif %}
