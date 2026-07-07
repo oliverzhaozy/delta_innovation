@@ -15,7 +15,7 @@ from app.models import LeaveRequest, Person
 def _apply_form(person, form):
     person.username = form.username.data.strip().lower()
     person.display_name = form.display_name.data.strip()
-    person.phone = form.phone.data.strip() or None
+    person.phone = (form.phone.data or "").strip() or None
     person.rank = Rank(form.rank.data)
     person.appointment = Appointment(form.appointment.data)
     person.company_role = CompanyRole(form.company_role.data) if form.company_role.data else None
