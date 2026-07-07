@@ -7,12 +7,15 @@ shapes. Availability reads the SAME shared absence fetch as the away board and
 every parade document (presence_service.fetch_absence_rows) — a third fetch
 path is the drift bug this app exists to kill.
 """
+import hashlib
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy import update
+
 from app.domain import eligibility, roster
-from app.domain.dates import iter_days
+from app.domain.dates import iter_days, now_sgt
 from app.domain.types import Calendar, Duty, DutyState
 from app.extensions import db
 from app.models import DutyAssignment, Event
@@ -158,4 +161,45 @@ def generate_month(month: str, actor):
                 state=DutyState.PROPOSED, created_by_id=actor.id,
             )
         )
+    db.session.commit()
+
+
+def roster_fingerprint(month: str) -> str:
+    """sha256 over the sorted (date, duty, person_id) CONTENT of the month's
+    PROPOSED rows (A4). Content-based on purpose: an UPDATE-in-place regenerate
+    and a single manual edit both change it; count+max(id) would not."""
+    first, last = month_bounds(month)
+    rows = _assignments_between(first, last, state=DutyState.PROPOSED)
+    canon = "|".join(
+        f"{r.date.isoformat()},{r.duty.value},{r.person_id}"
+        for r in sorted(rows, key=lambda r: (r.date, r.duty.value, r.person_id))
+    )
+    return hashlib.sha256(canon.encode()).hexdigest()
+
+
+def confirm_month(month: str, actor, fingerprint: str):
+    """Confirm the month's PROPOSED rows — but only the roster the actor
+    actually reviewed: the posted fingerprint is recomputed inside this
+    transaction and a mismatch aborts (A4 — the plain WHERE state='PROPOSED'
+    claim would confirm whatever PS B regenerated after PS A loaded the page).
+    """
+    first, last = month_bounds(month)
+    if roster_fingerprint(month) != fingerprint:
+        db.session.rollback()
+        raise RosterChanged(
+            "Roster changed since you loaded this page — re-review before confirming."
+        )
+    db.session.execute(
+        update(DutyAssignment)
+        .where(
+            DutyAssignment.date >= first,
+            DutyAssignment.date <= last,
+            DutyAssignment.state == DutyState.PROPOSED,
+        )
+        .values(
+            state=DutyState.CONFIRMED,
+            confirmed_by_id=actor.id,
+            confirmed_at=now_sgt(),
+        )
+    )
     db.session.commit()

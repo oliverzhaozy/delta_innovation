@@ -275,6 +275,100 @@ def test_generate_replaces_only_proposed(app, make_person):
         assert total == len(second_run)
 
 
+# --- roster_fingerprint + confirm_month (A4) ------------------------------------
+
+def test_confirm_flips_proposed_and_stamps(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        actor = get_person("ps2")
+        duty_service.confirm_month(AUG, actor, duty_service.roster_fingerprint(AUG))
+
+        rows = db.session.query(DutyAssignment).all()
+        assert rows and all(r.state is DutyState.CONFIRMED for r in rows)
+        assert all(r.confirmed_by_id == actor.id for r in rows)
+        assert all(r.confirmed_at is not None for r in rows)
+
+
+def test_confirm_stale_fingerprint_aborts(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        stale = duty_service.roster_fingerprint(AUG)
+
+        # PS B edits one slot after PS A loaded the page: swap the holder to
+        # the other COS candidate (UNIQUE(date, duty) untouched).
+        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
+        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
+        row.person_id = other.id
+        db.session.commit()
+
+        with pytest.raises(duty_service.RosterChanged):
+            duty_service.confirm_month(AUG, get_person("ps2"), stale)
+        rows = db.session.query(DutyAssignment).all()
+        assert rows and all(r.state is DutyState.PROPOSED for r in rows)
+        assert all(r.confirmed_by_id is None for r in rows)
+
+
+def test_double_confirm_second_loses_cleanly(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        fp = duty_service.roster_fingerprint(AUG)
+        duty_service.confirm_month(AUG, get_person("ps2"), fp)
+        stamped = {
+            r.id: (r.confirmed_by_id, r.confirmed_at)
+            for r in db.session.query(DutyAssignment).all()
+        }
+
+        # The same (now stale) fingerprint loses: nothing is PROPOSED anymore.
+        with pytest.raises(duty_service.RosterChanged):
+            duty_service.confirm_month(AUG, get_person("p2ic3"), fp)
+        after = {
+            r.id: (r.confirmed_by_id, r.confirmed_at)
+            for r in db.session.query(DutyAssignment).all()
+        }
+        assert after == stamped
+
+
+def test_confirm_does_not_touch_other_months(app, make_person):
+    make_duty_cast(make_person)
+    x = pid(app, "det1")
+    plant_assignment(app, x, date(2026, 9, 5), Duty.COS, state=DutyState.PROPOSED)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        duty_service.confirm_month(
+            AUG, get_person("ps2"), duty_service.roster_fingerprint(AUG)
+        )
+        sept = (
+            db.session.query(DutyAssignment)
+            .filter_by(date=date(2026, 9, 5), duty=Duty.COS)
+            .one()
+        )
+        assert sept.state is DutyState.PROPOSED
+        assert sept.confirmed_by_id is None
+
+
+def test_fingerprint_is_content_based(app, make_person):
+    make_duty_cast(make_person)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        before = duty_service.roster_fingerprint(AUG)
+        # Same content -> same print (stability)...
+        assert duty_service.roster_fingerprint(AUG) == before
+        # ...single manual edit -> different print (A4's exact requirement).
+        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
+        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
+        row.person_id = other.id
+        db.session.commit()
+        assert duty_service.roster_fingerprint(AUG) != before
+
+
 def test_pools_shape(app, make_person):
     make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD)
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
