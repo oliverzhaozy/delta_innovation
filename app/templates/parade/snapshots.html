@@ -7,6 +7,8 @@
   <p class="muted">Frozen parade documents, exactly as copied — each finalize appends; nothing here is ever edited or deleted.</p>
 </div>
 
+{% with active = "snapshots" %}{% include "parade/_pills.html" %}{% endwith %}
+
 <section class="card">
   <h2>All{% if not rows %} — none yet{% endif %}</h2>
   {% if rows %}

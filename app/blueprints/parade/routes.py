@@ -158,7 +158,8 @@ def morning():
         fp_rows = _fp_rows(day)
 
     return render_template(
-        "parade/morning.html",
+        "parade/state.html",
+        doc="morning",
         day=day,
         today=today_sgt(),
         prev_day=day - timedelta(days=1),
@@ -247,7 +248,8 @@ def cos_message():
     conflicts = _conflict_lines(built.pairs)
 
     return render_template(
-        "parade/cos_message.html",
+        "parade/state.html",
+        doc="cos",
         day=day,
         today=today_sgt(),
         prev_day=day - timedelta(days=1),
@@ -298,7 +300,8 @@ def roll_call():
     ]
 
     return render_template(
-        "parade/roll_call.html",
+        "parade/state.html",
+        doc="roll_call",
         day=day,
         today=today_sgt(),
         prev_day=day - timedelta(days=1),

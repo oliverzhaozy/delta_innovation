@@ -171,6 +171,35 @@ h2 {
   white-space: nowrap;
 }
 
+/* ---------- Pill sub-nav (UI refresh) ---------- */
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 1.1rem;
+}
+
+.pills a {
+  padding: 0.32rem 0.85rem;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--green-800);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.pills a.active {
+  background: var(--green-800);
+  border-color: var(--green-800);
+  color: #fff;
+}
+
+.pills a:hover:not(.active) { background: var(--green-100); }
+
 /* ---------- Cards & lists ---------- */
 
 .card {

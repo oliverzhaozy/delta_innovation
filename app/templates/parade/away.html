@@ -11,6 +11,8 @@
   </div>
 </div>
 
+{% with active = "away" %}{% include "parade/_pills.html" %}{% endwith %}
+
 <section class="card">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
     <a href="{{ url_for('parade.away', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
