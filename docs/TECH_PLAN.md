@@ -19,7 +19,8 @@ This plan was pressure-tested by a 5-critic review panel (ambiguity, edge cases,
 - **(g) Parade display order (2026-07-06):** appointment OC > [OC DES] > 2IC > SM > [CSM DES] > PC > P2IC > PS > Det Comd > Opr; rank CPT > 3WO > LTA > 2LT > MSG > SSG > 1SG > 2SG > 3SG > CFC > CPL > LCP > PTE; no alphabetizing within rank. Display-only — legal RANK_ORDER (eligibility) unaffected. Full format spec: `docs/PARADE_FORMATS.md`.
 - **(h) OC DES / CSM DES deferred (2026-07-06):** sort slots documented in the order constant; enum members added only when Delta actually has a DES posting.
 - **(i) AM-off at night roll call = absent (2026-07-06):** for day D's roll call and morning parade alike, FULL and AM absences count absent; PM counts present (extends decision (c) to one rule everywhere).
-- **Hosting:** undecided — plan targets a small Linux VPS + Caddy; decide before task P0.8.
+- **(j) Meal indents are NSF-only (2026-07-07):** relayed from S4 via the owner — this closes the P3b meal-mapping open decision and REPLACES the P3b.5/P3b.6 per-meal compute: the S4 page shows exactly two counters per day (NSFs in camp by day from morning(D); NSFs staying the night from roll_call(D+1)), nothing more. The manual ± UI was removed; `meal_adjustment` stays in the schema, dormant. Addendum A1's "duty term stays empty" posture carries over: when P4 lands, duty NSFs reach the overnight counter through presence, never as a raw add.
+- **(k) Hosting & OPSEC deferral (2026-07-07):** owner directs: deploy on a free/low-cost host (chosen: **Oracle Cloud Always Free, SG region**) with a **sanitized demo roster** — real personnel data stays local until the organisation approves the project and takes over security. The P0.7 OC-written-OK gate is deferred into that organisational approval; the app-level security baseline (auth, CSRF, HTTPS, deny-by-default) still ships as specced. P0.8 is unblocked pending the owner's Oracle account.
 - **Formats:** real sanitized samples of the 3 parade states, RO, and manning list will be pasted when Phases 3/5/6 need them.
 
 ## Assumptions that would change the design
@@ -388,9 +389,9 @@ Eligibility ∧ availability feeds auto-pick; humans always confirm; manual assi
 - **Approval latency** — no notifications; badges only. Watch during parallel run; Telegram bot is the escape hatch.
 - **Adoption** — the ledger only earns trust if every delta is explainable; that's why per-person history ships in Phase 1 and manual S3 adjustments require reasons.
 - **Eligible-pool reality check** — if Delta's actual ranks leave the CDO/S pool near-empty, the rule (not the app) is the problem; pools are displayed so this surfaces on day one of Phase 4.
-- **Deploy sequencing (adopted 2026-07-07):** P0.7 (OC's written hosting OK) is an ASAP owner action — it is a conversation, not code, and a "no" gets more expensive the longer the build runs before asking. P0.8 (deploy) lands **between P3b.6 and P3b.7**: the parade parallel-run needs the COS on a real host nightly, and P4 needs all three PSs acting from their phones.
+- **Deploy sequencing (adopted 2026-07-07, revised same day by decision (k)):** P0.8 (deploy) lands **between P3b.6 and P3b.7** — the parade parallel-run needs the COS on a real host nightly, and P4 needs all three PSs acting from their phones. The P0.7 OC gate is deferred per decision (k); the public instance runs the sanitized demo roster until organisational approval.
 - **Remaining-phase ordering (2026-07-07):** P4 → P5 is forced (the RO's headline value is auto-filled duty personnel, and its edit rights resolve via duty_assignment). P6 depends only on P4.2 — if the RO sample stalls, run P6 right after P4 and slot P5 in when the sample lands. P7 last.
-- Open: meal-category→meal mapping (confirm with S4 in P3b); whether all three PSs share roster rights (default yes); OC-away delegation (default none, revisit); event-participant materialization for history (skipped — snapshots cover documents); retention cadence (default annual manual purge).
+- Open: whether all three PSs share roster rights (default yes); OC-away delegation (default none, revisit); event-participant materialization for history (skipped — snapshots cover documents); retention cadence (default annual manual purge). *(Meal mapping closed by decision (j), 2026-07-07.)*
 
 ## Verification
 

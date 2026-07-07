@@ -1,0 +1,37 @@
+username,display_name,rank,appointment,company_role,platoon,service,stay_out,is_admin
+demo_oc,CPT Marcus Leong,CPT,OC,,,REGULAR,1,0
+demo_sm,3WO Zulkifli Bin Ahmad,3WO,SM,,,REGULAR,1,0
+demo_2ic,LTA Keith Chng,LTA,2IC,,,REGULAR,1,0
+demo_pc1,2LT Ryan Foo,2LT,PC,,1,NSF,0,0
+demo_p2ic1,SSG Suresh S/O Maniam,SSG,P2IC,,1,REGULAR,1,0
+demo_ps1,3SG Aloysius Peh,3SG,PS,,1,NSF,0,0
+demo_pc2,2LT Javier Soh,2LT,PC,,2,NSF,0,0
+demo_p2ic2,MSG Danny Quek,MSG,P2IC,,2,REGULAR,1,0
+demo_ps2,3SG Irfan Bin Rashid,3SG,PS,,2,NSF,0,0
+demo_pc3,LTA Nicholas Thio,LTA,PC,,3,NSF,0,0
+demo_p2ic3,SSG Roslan Bin Yusof,SSG,P2IC,,3,REGULAR,1,0
+demo_ps3,3SG Brandon Kwek,3SG,PS,,3,NSF,0,0
+demo_dc1a,2SG Dylan Chey,2SG,DET_COMD,S3,1,NSF,0,1
+demo_dc1b,3SG Naveen S/O Kumar,3SG,DET_COMD,,1,NSF,0,0
+demo_dc2a,3SG Shawn Baey,3SG,DET_COMD,S4,2,NSF,0,0
+demo_dc2b,3SG Amirul Bin Zaini,3SG,DET_COMD,,2,NSF,0,0
+demo_dc3a,2SG Lucas Yong,2SG,DET_COMD,,3,NSF,0,0
+demo_dc3b,3SG Zachary Png,3SG,DET_COMD,,3,NSF,0,0
+demo_opr01,CFC Ethan Siow,CFC,OPR,,1,NSF,0,0
+demo_opr02,CFC Hariz Bin Salleh,CFC,OPR,,1,NSF,0,0
+demo_opr03,CPL Joel Chern,CPL,OPR,,1,NSF,0,0
+demo_opr04,CPL Wayne Loo,CPL,OPR,,1,NSF,1,0
+demo_opr05,LCP Pravin S/O Selvam,LCP,OPR,,1,NSF,0,0
+demo_opr06,PTE Caleb Zhuo,PTE,OPR,,1,NSF,0,0
+demo_opr07,CFC Darius Ho,CFC,OPR,,2,NSF,0,0
+demo_opr08,CFC Iskandar Bin Noor,CFC,OPR,,2,NSF,0,0
+demo_opr09,CPL Terence Kang,CPL,OPR,,2,NSF,0,0
+demo_opr10,CPL Melvin Chieng,CPL,OPR,,2,NSF,1,0
+demo_opr11,LCP Adriel Twang,LCP,OPR,,2,NSF,0,0
+demo_opr12,PTE Samuel Yick,PTE,OPR,,2,NSF,0,0
+demo_opr13,CFC Gerald Mok,CFC,OPR,,3,NSF,0,0
+demo_opr14,CFC Firdaus Bin Kamal,CFC,OPR,,3,NSF,0,0
+demo_opr15,CPL Vignesh S/O Ravi,CPL,OPR,,3,NSF,0,0
+demo_opr16,CPL Benedict Loy,CPL,OPR,,3,NSF,1,0
+demo_opr17,LCP Jonas Whye,LCP,OPR,,3,NSF,0,0
+demo_opr18,PTE Ashwin Nair,PTE,OPR,,3,NSF,0,0

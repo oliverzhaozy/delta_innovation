@@ -1,12 +1,15 @@
-"""P3b.5 — meals compute (pure domain/meals.py) + the ParadeDoc person-list
-extension that makes it possible.
+"""Meals domain (P3b.5, reworked by owner decision (j) 2026-07-07) + the
+ParadeDoc person-list extension that makes it possible.
+
+Decision (j): all meal indents are NSF-only, so the compute is exactly two
+counters per day — NSFs in camp by day (from morning(D)) and NSFs staying the
+night D->D+1 (from roll_call(D+1)). The earlier per-meal compute with manual
+adjustments was removed by the same decision.
 
 Pure unit tests with duck-typed fakes (same style as test_roll_call /
-test_morning_parade): no app, no DB. The fixture-week docs are built by driving
-the REAL presence `resolve()` and `categorize()`, so the meal <-> document
-mapping is proven honestly against the engine, never asserted by fiat. Every
-expectation below was hand-derived from the corrected offsets (see the module
-comment in app/domain/meals.py).
+test_morning_parade): no app, no DB. The fixture docs are built by driving the
+REAL presence `resolve()` and `categorize()`, so the counter <-> document
+mapping is proven honestly against the engine, never asserted by fiat.
 """
 import ast
 from datetime import date, timedelta
@@ -15,8 +18,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.domain import meals, parade
-from app.domain.meals import compute_meals
+from app.domain import parade
+from app.domain.meals import NsfPresence, nsf_presence
 from app.domain.presence import PresenceState, Resolution, resolve
 from app.domain.types import (
     DayPart, DirectAbsenceType, LeaveType, Meal, Service, StatusType,
@@ -165,7 +168,7 @@ def test_meal_enum_members_and_labels():
 
 
 # =========================================================================
-# Fixture week — meal membership by persona (done-criterion 2)
+# Fixture week — NSF presence counters by persona (decision (j))
 # =========================================================================
 #
 # Roster (each row carries the rows fed to resolve() for BOTH D and D+1):
@@ -173,20 +176,21 @@ def test_meal_enum_members_and_labels():
 #   B  stay-in NSF           — present around the clock
 #   C  MC NSF                — MC covering D-2..D+3 (covers D and D+1)
 #   E  PM-off stay-in NSF    — OFF, PM day-part, single day D only
-#   F  regular (stay-out)    — regulars default to stay-out
+#   F  regular (stay-out)    — regulars default to stay-out; NEVER counted
+#   G  in-camp-status NSF    — single-day OTHER in_camp (e.g. BDO), day D only
 #
-# The three documents that feed the three meals (corrected offsets):
-#   breakfast(D) = roll_call(D)   CURRENT STRENGTH   (last night's stayers)
-#   lunch(D)     = morning(D)     PRESENT IN CAMP     (A + K)
-#   dinner(D)    = roll_call(D+1) CURRENT STRENGTH    (tonight's stayers)
+# The two documents that feed the two counters:
+#   day_in_camp(D) = morning(D)     PRESENT IN CAMP (A + K), NSFs only
+#   overnight(D)   = roll_call(D+1) CURRENT STRENGTH (night D -> D+1), NSFs only
 
 A = person("3SG Stayout Nsf", service=Service.NSF, stay_out=True, id=1)
 B = person("3SG Stayin Nsf", service=Service.NSF, stay_out=False, id=2)
 C = person("3SG Mc Nsf", service=Service.NSF, stay_out=False, id=3)
 E = person("3SG Pmoff Nsf", service=Service.NSF, stay_out=False, id=4)
 F = person("CPT Regular Guy", service=Service.REGULAR, stay_out=False, id=5)
+G = person("3SG Bdo Nsf", service=Service.NSF, stay_out=False, id=6)
 
-ROSTER = [A, B, C, E, F]
+ROSTER = [A, B, C, E, F, G]
 ROWS = {
     A.id: {},
     B.id: {},
@@ -194,6 +198,8 @@ ROWS = {
                                    end=D + timedelta(days=3), in_camp=False)]},
     E.id: {"leaves": [leave_row(LeaveType.OFF, start=D, end=D, day_part=DayPart.PM)]},
     F.id: {},
+    G.id: {"statuses": [status_row(StatusType.OTHER, start=D, end=D,
+                                   in_camp=True, remarks="BDO")]},
 }
 
 
@@ -201,146 +207,45 @@ def _pairs_for(day):
     return [(p, resolve(p, day, **ROWS[p.id])) for p in ROSTER]
 
 
-def _build_docs():
-    roll_today = parade.categorize(D, _pairs_for(D), "roll_call")
+def _docs():
     morning = parade.categorize(D, _pairs_for(D), "morning")
     roll_next = parade.categorize(NEXT, _pairs_for(NEXT), "roll_call")
-    return roll_today, morning, roll_next
+    return morning, roll_next
 
 
-# Meal -> the person tuple that feeds it, mirrored independently from the docs
-# (NOT from compute_meals' own arithmetic), so membership is checked honestly.
-def _breakfast_people(roll_today, morning, roll_next):
-    return roll_today.current_strength_people          # + duty (P4 hook, 0 today)
+def test_day_count_is_nsfs_present_in_camp_by_day():
+    # morning(D) PRESENT IN CAMP: A (stay-out dissolves by day), B, E (PM-off
+    # present at morning parade, decision i), G (in-camp status -> OTHERS IN
+    # CAMP). C is on MC; F is present but a regular. NSFs of those: A, B, E, G.
+    morning, roll_next = _docs()
+    assert nsf_presence(morning, roll_next).day_in_camp == 4
 
 
-def _lunch_people(roll_today, morning, roll_next):
-    return morning.current_strength_people + morning.others_in_camp_people
+def test_overnight_count_is_nsfs_staying_the_night():
+    # roll_call(D+1) CURRENT STRENGTH: B and E stay (E's PM-off is single-day D,
+    # so it does not cover D+1; G's status likewise). A books out, C's MC covers
+    # D+1, F is a regular (stay-out by rule AND excluded by service anyway).
+    morning, roll_next = _docs()
+    assert nsf_presence(morning, roll_next).overnight == 3  # B, E, G
 
 
-def _dinner_people(roll_today, morning, roll_next):
-    return roll_next.current_strength_people
+def test_regulars_are_never_counted():
+    pairs_day = [(F, resolve(F, D))]
+    pairs_next = [(F, resolve(F, NEXT))]
+    morning = parade.categorize(D, pairs_day, "morning")
+    roll_next = parade.categorize(NEXT, pairs_next, "roll_call")
+    counts = nsf_presence(morning, roll_next)
+    assert counts == NsfPresence(day_in_camp=0, overnight=0)
 
 
-def test_stay_out_nsf_is_in_lunch_only():
-    docs = _build_docs()
-    assert A not in _breakfast_people(*docs)   # books out — not an overnight stayer
-    assert A in _lunch_people(*docs)           # back for the day (STAY OUT dissolves)
-    assert A not in _dinner_people(*docs)      # books out again before dinner
-
-
-def test_stay_in_nsf_is_in_all_three_meals():
-    docs = _build_docs()
-    assert B in _breakfast_people(*docs)
-    assert B in _lunch_people(*docs)
-    assert B in _dinner_people(*docs)
-
-
-def test_mc_person_is_in_no_meal():
-    docs = _build_docs()
-    assert C not in _breakfast_people(*docs)
-    assert C not in _lunch_people(*docs)
-    assert C not in _dinner_people(*docs)
-
-
-def test_pm_off_person_is_in_all_three_meals_derived_from_the_engine():
-    # DERIVED, not assumed (done-criterion 2). A PM-off is present at
-    # roll_call(D) and morning(D) -> breakfast + lunch. Dinner "depends on
-    # coverage" of roll_call(D+1): a PM half-day is single-day (D only), so it
-    # does NOT cover D+1; resolve(E, D+1) sees no covering row -> PRESENT -> in
-    # CURRENT STRENGTH -> in dinner. Owner decision (c) agrees: PM-off is away
-    # in the afternoon only and expected back at night, so they eat dinner. The
-    # naive "PM-off not in dinner" does NOT match the engine.
-    docs = _build_docs()
-    assert E in _breakfast_people(*docs)
-    assert E in _lunch_people(*docs)
-    assert E in _dinner_people(*docs)
-
-
-def test_regular_is_in_lunch_only_and_excluded_from_the_nsf_subcount():
-    docs = _build_docs()
-    assert F not in _breakfast_people(*docs)
-    assert F in _lunch_people(*docs)
-    assert F not in _dinner_people(*docs)
-
-
-# --- the counts these memberships imply (base_total + NSF sub-count) --------
-
-def test_fixture_week_base_totals_and_nsf_subcounts():
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {})
-
-    # breakfast: {B, E} — both NSF
-    assert counts[Meal.BREAKFAST].base_total == 2
-    assert counts[Meal.BREAKFAST].base_nsf == 2
-    # lunch: {A, B, E, F} — F is a regular, so 3 of 4 are NSF
-    assert counts[Meal.LUNCH].base_total == 4
-    assert counts[Meal.LUNCH].base_nsf == 3
-    # dinner: {B, E} — both NSF
-    assert counts[Meal.DINNER].base_total == 2
-    assert counts[Meal.DINNER].base_nsf == 2
-
-
-def test_breakfast_duty_hook_adds_zero_today():
-    # breakfast = roll_call(D) CURRENT STRENGTH + duty personnel. Duty is a P4
-    # hook that contributes an explicit 0 today, so the base equals CURRENT
-    # STRENGTH exactly.
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {})
-    assert counts[Meal.BREAKFAST].base_total == len(roll_today.current_strength_people)
-
-
-def test_meal_count_returns_all_three_meals():
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {})
-    assert set(counts) == {Meal.BREAKFAST, Meal.LUNCH, Meal.DINNER}
-    for meal, mc in counts.items():
-        assert mc.meal is meal
-
-
-# =========================================================================
-# Adjustments (done-criterion 3)
-# =========================================================================
-
-def test_adjustment_applies_last_to_the_final_total():
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {Meal.BREAKFAST: 2})
-    bfast = counts[Meal.BREAKFAST]
-    assert bfast.base_total == 2
-    assert bfast.adjustment_delta == 2
-    assert bfast.final_total == 4          # base + delta, applied last
-    assert bfast.negative is False
-    # Meals without an adjustment are untouched (delta 0).
-    assert counts[Meal.LUNCH].adjustment_delta == 0
-    assert counts[Meal.LUNCH].final_total == counts[Meal.LUNCH].base_total
-
-
-def test_negative_final_is_flagged_and_kept_not_clamped():
-    roll_today, morning, roll_next = _build_docs()
-    # dinner base is 2; a -7 pushes the final to -5.
-    counts = compute_meals(D, roll_today, morning, roll_next, {Meal.DINNER: -7})
-    dinner = counts[Meal.DINNER]
-    assert dinner.adjustment_delta == -7
-    assert dinner.final_total == -5        # kept as-is, never floored to 0
-    assert dinner.negative is True
-
-
-def test_empty_adjustments_leaves_final_equal_to_base():
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {})
-    for mc in counts.values():
-        assert mc.adjustment_delta == 0
-        assert mc.final_total == mc.base_total
-        assert mc.negative is False
-
-
-def test_adjustment_does_not_change_the_nsf_subcount():
-    # An adjustment is a coarse ± on the headcount; it is never attributed to
-    # NSF vs regular, so the NSF sub-count stays a property of the derived base.
-    roll_today, morning, roll_next = _build_docs()
-    counts = compute_meals(D, roll_today, morning, roll_next, {Meal.LUNCH: 5})
-    assert counts[Meal.LUNCH].base_nsf == 3
-    assert counts[Meal.LUNCH].final_total == 9
+def test_counters_are_engine_derived_not_roster_arithmetic():
+    # The counters read the categorized docs, never the roster: an MC NSF is on
+    # the roster all week but appears in neither number.
+    morning, roll_next = _docs()
+    counts = nsf_presence(morning, roll_next)
+    total_nsfs = sum(1 for p in ROSTER if p.service is Service.NSF)
+    assert counts.day_in_camp < total_nsfs
+    assert counts.overnight < total_nsfs
 
 
 # =========================================================================

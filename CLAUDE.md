@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Implementation is **in progress** (started 2026-07-05 at Phase 0). `SPEC.md` is the product spec; `docs/TECH_PLAN.md` is the approved technical plan and the authoritative reference for the data model, architecture, permission layers, build phases, and the P0/P1 task breakdown — work through its tasks in order and check git log to see where the build stands. Read TECH_PLAN.md before doing anything substantive; do not re-plan what it already decides. Tasks P0.7 (OC's written hosting OK) and P0.8 (deploy) are gated on the owner.
+Implementation is **in progress** (started 2026-07-05 at Phase 0). `SPEC.md` is the product spec; `docs/TECH_PLAN.md` is the approved technical plan and the authoritative reference for the data model, architecture, permission layers, build phases, and the P0/P1 task breakdown — work through its tasks in order and check git log to see where the build stands. Read TECH_PLAN.md before doing anything substantive; do not re-plan what it already decides. P0.8 (deploy) targets Oracle Cloud Always Free with a sanitized demo roster, pending the owner's Oracle account; the P0.7 OC gate is deferred per TECH_PLAN decision (k).
 
 ## Executor cognitive profile
 
@@ -61,4 +61,4 @@ Python lives in the repo venv — use `.venv/Scripts/python` (Windows) directly:
 
 ## Data sensitivity
 
-Personnel movements and activation-standby manning for a real military unit. Data minimization is a rule: rank + name + appointment + platoon only — no NRIC, phone numbers, or medical detail beyond the literal string "MC". No unit name/crest on pre-login pages. Deployment is gated on the OC's written OK (task P0.7).
+Personnel movements and activation-standby manning for a real military unit. Data minimization is a rule: rank + name + appointment + platoon only — no NRIC, phone numbers, or medical detail beyond the literal string "MC". No unit name/crest on pre-login pages. Per TECH_PLAN decision (k) (2026-07-07): the public instance runs a **sanitized demo roster** (`seed/demo_people.csv`) until the organisation approves the project and takes over security — real personnel data never goes on the public host before that.
