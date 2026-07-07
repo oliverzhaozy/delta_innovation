@@ -17,7 +17,7 @@ from app.domain.types import (
     RequestStatus,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, Person
+from app.models import DutyAssignment, LeaveRequest, ManningPeriod, ManningSlot, Person
 from app.services import approval_service, event_service, leave_service, ledger_service, presence_service
 from app.services.approval_service import NegativeBalanceUnconfirmed, TransitionError
 
@@ -196,6 +196,19 @@ def detail(request_id):
         .order_by(DutyAssignment.date)
         .all()
     )
+    # Same posture for manning (P6.6): membership in periods overlapping the
+    # request completes the core-transaction step-2 panel promises.
+    manning_rows = (
+        db.session.query(ManningSlot)
+        .join(ManningPeriod, ManningSlot.period_id == ManningPeriod.id)
+        .filter(
+            ManningSlot.person_id == request_row.person_id,
+            ManningPeriod.start_date <= request_row.end_date,
+            ManningPeriod.end_date >= request_row.start_date,
+        )
+        .order_by(ManningPeriod.start_date)
+        .all()
+    )
     can_act_pc = (
         request_row.status is RequestStatus.PENDING_PC
         and policy.can_approve_as_pc(current_user, request_row.person.platoon)
@@ -216,6 +229,7 @@ def detail(request_id):
         clashes=clashes,
         away_rows=away_rows,
         duty_rows=duty_rows,
+        manning_rows=manning_rows,
         can_act_pc=can_act_pc,
         can_act_oc=can_act_oc,
         early_return_form=EarlyReturnForm(),

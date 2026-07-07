@@ -23,7 +23,8 @@
   <ul class="toollist">
     {% for s in hq %}
     <li>
-      <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}</span>
+      <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
+        {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
       <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="slot_id" value="{{ s.id }}">
@@ -34,7 +35,8 @@
     {% for det, rows in dets.items() %}
       {% for s in rows %}
       <li>
-        <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}</span>
+        <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
+          {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
         <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="slot_id" value="{{ s.id }}">
