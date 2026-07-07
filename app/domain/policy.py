@@ -69,9 +69,23 @@ def can_cancel_approved_leave(person) -> bool:
     return can_manage_ledger(person) or can_final_approve(person)
 
 
-def can_key_parade(person) -> bool:
-    # Fallback set until P4 resolves COS-of-day via duty_assignment.
-    return person.appointment is Appointment.PS or person.company_role is CompanyRole.S3 or is_admin(person)
+def can_key_parade(person, *, is_cos_of_day) -> bool:
+    # Keyword-only, NO default (addendum A5): a stale caller that forgets the
+    # duty fact TypeErrors in the suite instead of silently degrading to
+    # fallback-only rights. The DB-aware fact comes from
+    # duty_service.can_key_parade_today — policy.py never queries.
+    return (
+        is_cos_of_day
+        or person.appointment is Appointment.PS
+        or person.company_role is CompanyRole.S3
+        or is_admin(person)
+    )
+
+
+def can_edit_ro(person, *, is_cdos_of_day) -> bool:
+    # P5's consumer, landed unrouted (P4.8): the rotating CDO/S edits the RO;
+    # command team is the fallback (addendum A9).
+    return is_cdos_of_day or is_command_team(person)
 
 
 def can_key_direct_absence(person) -> bool:

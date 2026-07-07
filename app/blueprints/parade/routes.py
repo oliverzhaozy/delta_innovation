@@ -63,22 +63,26 @@ def _parse_day(raw: str, default: date = None) -> date:
         return default if default is not None else today_sgt()
 
 
-def _validate_cos_person(raw, roster=None):
-    """Resolve a `cos=` id (query or posted) to an active Person, else
-    current_user. A keying mistake here costs one reload (P4's duty roster
-    will auto-fill this), so we never 400 — invalid/inactive falls back
-    silently, and the finalize route re-runs this same check server-side so a
-    tampered hidden field can't name someone who isn't on the active roster.
-    `roster` lets a caller that already fetched the active roster (the GET
-    page, for its selector) pass it in rather than querying twice.
+def _validate_cos_person(raw, day, roster=None):
+    """Resolve a `cos=` id (query or posted) to an active Person; fallback
+    order is CONFIRMED COS of the page date, then current_user (P4.8 closes
+    the P3 hook this function's comment has named since P3b.3). An explicit
+    valid `?cos=` always wins — auto-fill must not override a deliberate
+    hand-selection. Invalid or inactive ids never 400 — a keying mistake costs
+    one reload — and the finalize route re-runs this same resolution so a
+    tampered hidden field can't name someone off-roster. `roster` lets a
+    caller that already fetched the active roster pass it in.
     """
+    roster = roster if roster is not None else event_service.active_roster()
     try:
         cos_id = int(raw)
     except (TypeError, ValueError):
-        return current_user
-    roster = roster if roster is not None else event_service.active_roster()
-    person = next((p for p in roster if p.id == cos_id), None)
-    return person or current_user
+        cos_id = None
+    if cos_id is not None:
+        person = next((p for p in roster if p.id == cos_id), None)
+        if person is not None:
+            return person
+    return duty_service.cos_of_day(day) or current_user
 
 
 def _row_label(row) -> str:
@@ -148,7 +152,7 @@ def morning():
 
     fp_form = None
     fp_rows = ()
-    if policy.can_key_parade(current_user):
+    if duty_service.can_key_parade_today(current_user):
         fp_form = FpQuickAddForm()
         _set_status_person_choices(fp_form)
         fp_rows = _fp_rows(day)
@@ -168,7 +172,7 @@ def morning():
 
 
 @bp.route("/morning/fp", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def morning_fp_new():
     day = _parse_day(request.form.get("date", ""))
     form = FpQuickAddForm()
@@ -193,7 +197,7 @@ def morning_fp_new():
 
 
 @bp.route("/morning/fp/<int:entry_id>/remove", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def morning_fp_remove(entry_id):
     day = _parse_day(request.form.get("date", ""))
     row = db.session.get(StatusEntry, entry_id)
@@ -216,7 +220,7 @@ def morning_fp_remove(entry_id):
 
 
 @bp.route("/morning/finalize", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def morning_finalize():
     day = _parse_day(request.form.get("date", ""))
     # Recompute server-side through the same build_doc the GET page uses —
@@ -238,7 +242,7 @@ def cos_message():
     # 4) — the one page whose date default is tomorrow, not today.
     day = _parse_day(request.args.get("date", ""), default=today_sgt() + timedelta(days=1))
     roster = event_service.active_roster()
-    cos_person = _validate_cos_person(request.args.get("cos", ""), roster)
+    cos_person = _validate_cos_person(request.args.get("cos", ""), day, roster)
     built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
     conflicts = _conflict_lines(built.pairs)
 
@@ -257,13 +261,13 @@ def cos_message():
 
 
 @bp.route("/cos-message/finalize", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def cos_message_finalize():
     day = _parse_day(request.form.get("date", ""), default=today_sgt() + timedelta(days=1))
     # Re-validate the posted cos id against the active roster here too — never
     # trust the hidden field, exactly like the recompute below never trusts
     # posted text.
-    cos_person = _validate_cos_person(request.form.get("cos", ""))
+    cos_person = _validate_cos_person(request.form.get("cos", ""), day)
     built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
     if built.imbalance:
         flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
@@ -298,7 +302,7 @@ def roll_call():
 
 
 @bp.route("/roll-call/finalize", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def roll_call_finalize():
     day = _parse_day(request.form.get("date", ""))
     # Recompute server-side through the same build_doc the GET page uses (same
@@ -341,7 +345,7 @@ def _resolve_in_camp(type_value, in_camp_choice):
 
 
 @bp.route("/statuses")
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def statuses_list():
     today = today_sgt()
     rows = (
@@ -355,7 +359,7 @@ def statuses_list():
 
 
 @bp.route("/statuses/new", methods=["GET", "POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def status_new():
     form = StatusEntryForm()
     _set_status_person_choices(form)
@@ -378,7 +382,7 @@ def status_new():
 
 
 @bp.route("/statuses/<int:entry_id>/edit", methods=["GET", "POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def status_edit(entry_id):
     row = db.session.get(StatusEntry, entry_id) or abort(404)
     form = StatusEntryForm(obj=row)
@@ -406,7 +410,7 @@ def status_edit(entry_id):
 
 
 @bp.route("/statuses/<int:entry_id>/end-today", methods=["POST"])
-@require(policy.can_key_parade)
+@require(duty_service.can_key_parade_today)
 def status_end_today(entry_id):
     row = db.session.get(StatusEntry, entry_id) or abort(404)
     today = today_sgt()

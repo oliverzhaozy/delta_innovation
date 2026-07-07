@@ -21,7 +21,7 @@
         <a href="{{ url_for('parade.roll_call') }}">Roll call</a>
         <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
         <a href="{{ url_for('duty.roster') }}">Duty roster</a>
-        {% if policy.can_key_parade(current_user) %}
+        {% if can_key_parade_today(current_user) %}
           <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
         {% endif %}
         {% if policy.can_key_direct_absence(current_user) %}

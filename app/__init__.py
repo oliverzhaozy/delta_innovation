@@ -50,7 +50,17 @@ def create_app(config_class=None):
     @app.context_processor
     def inject_policy():
         # Templates condition nav/content on the same predicates routes enforce.
-        return {"policy": policy, "routing": routing, "BalanceKind": BalanceKind}
+        # can_key_parade is duty-aware (P4.8): templates get the DB-aware
+        # wrapper, so the pure policy predicate (keyword-only) is never called
+        # bare from Jinja.
+        from app.services import duty_service
+
+        return {
+            "policy": policy,
+            "routing": routing,
+            "BalanceKind": BalanceKind,
+            "can_key_parade_today": duty_service.can_key_parade_today,
+        }
 
     @app.context_processor
     def inject_pending_badge():

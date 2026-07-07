@@ -96,11 +96,15 @@ def _person(appointment=Appointment.OPR, company_role=None, is_admin=False):
 
 
 def test_can_key_parade_is_ps_s3_or_admin():
-    assert policy.can_key_parade(_person(Appointment.PS))
-    assert policy.can_key_parade(_person(Appointment.OPR, company_role=CompanyRole.S3))
-    assert policy.can_key_parade(_person(Appointment.OPR, is_admin=True))
-    assert not policy.can_key_parade(_person(Appointment.OPR))
-    assert not policy.can_key_parade(_person(Appointment.OC))
+    # is_cos_of_day=False is the honest spelling of "no duty today" (P4.8);
+    # the duty-granted path is pinned in test_duty_rights.py.
+    assert policy.can_key_parade(_person(Appointment.PS), is_cos_of_day=False)
+    assert policy.can_key_parade(
+        _person(Appointment.OPR, company_role=CompanyRole.S3), is_cos_of_day=False
+    )
+    assert policy.can_key_parade(_person(Appointment.OPR, is_admin=True), is_cos_of_day=False)
+    assert not policy.can_key_parade(_person(Appointment.OPR), is_cos_of_day=False)
+    assert not policy.can_key_parade(_person(Appointment.OC), is_cos_of_day=False)
 
 
 def test_can_key_direct_absence_is_s3_or_admin_only():

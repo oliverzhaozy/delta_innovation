@@ -14,8 +14,8 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import update
 
-from app.domain import eligibility, roster
-from app.domain.dates import iter_days, now_sgt
+from app.domain import eligibility, policy, roster
+from app.domain.dates import iter_days, now_sgt, today_sgt
 from app.domain.types import Calendar, Duty, DutyState
 from app.extensions import db
 from app.models import DutyAssignment, DutySwapLog, Event
@@ -273,6 +273,51 @@ def confirmed_on(day):
         .order_by(DutyAssignment.duty)
         .all()
     )
+
+
+def _confirmed_holder(day, duty):
+    row = (
+        db.session.query(DutyAssignment)
+        .filter(
+            DutyAssignment.date == day,
+            DutyAssignment.duty == duty,
+            DutyAssignment.state == DutyState.CONFIRMED,
+        )
+        .first()
+    )
+    return row.person if row is not None else None
+
+
+def cos_of_day(day):
+    """CONFIRMED COS holder for `day`, or None (autofills the greeting)."""
+    return _confirmed_holder(day, Duty.COS)
+
+
+def cdos_of_day(day):
+    """CONFIRMED CDO/S holder for `day`, or None — P5's RO-rights input."""
+    return _confirmed_holder(day, Duty.CDOS)
+
+
+def can_key_parade_today(person) -> bool:
+    """The DB-aware wrapper every route and template calls: PS/S3/admin
+    fallback OR CONFIRMED COS for today or tomorrow (tomorrow's COS compiles
+    day-D's message on the evening of D−1 — assumption 4 makes the two-day
+    window the honest one). One duty query per page render — accepted at 40
+    users (A5); do not add caching. Rights are date-independent: the window
+    decides WHO can key, not WHICH dates they may key."""
+    today = today_sgt()
+    is_cos = (
+        db.session.query(DutyAssignment.id)
+        .filter(
+            DutyAssignment.person_id == person.id,
+            DutyAssignment.duty == Duty.COS,
+            DutyAssignment.state == DutyState.CONFIRMED,
+            DutyAssignment.date.in_((today, today + timedelta(days=1))),
+        )
+        .first()
+        is not None
+    )
+    return policy.can_key_parade(person, is_cos_of_day=is_cos)
 
 
 class SwapError(Exception):
