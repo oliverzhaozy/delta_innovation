@@ -11,12 +11,13 @@ from app.domain.dates import iter_days
 from app.domain.types import (
     BalanceKind,
     DayPart,
+    DutyState,
     LeaveType,
     PENDING_STATUSES,
     RequestStatus,
 )
 from app.extensions import db
-from app.models import LeaveRequest, Person
+from app.models import DutyAssignment, LeaveRequest, Person
 from app.services import approval_service, event_service, leave_service, ledger_service, presence_service
 from app.services.approval_service import NegativeBalanceUnconfirmed, TransitionError
 
@@ -181,6 +182,20 @@ def detail(request_id):
                 "projected": len(already | {request_row.person_id}),
             }
         )
+    # Warn-only clash surface (P4.9): the requester's CONFIRMED duties in the
+    # requested range, shown to every viewer — approval is never blocked and
+    # nothing is reassigned; the PS resolves on the duty roster.
+    duty_rows = (
+        db.session.query(DutyAssignment)
+        .filter(
+            DutyAssignment.person_id == request_row.person_id,
+            DutyAssignment.state == DutyState.CONFIRMED,
+            DutyAssignment.date >= request_row.start_date,
+            DutyAssignment.date <= request_row.end_date,
+        )
+        .order_by(DutyAssignment.date)
+        .all()
+    )
     can_act_pc = (
         request_row.status is RequestStatus.PENDING_PC
         and policy.can_approve_as_pc(current_user, request_row.person.platoon)
@@ -200,6 +215,7 @@ def detail(request_id):
         overlaps=overlaps,
         clashes=clashes,
         away_rows=away_rows,
+        duty_rows=duty_rows,
         can_act_pc=can_act_pc,
         can_act_oc=can_act_oc,
         early_return_form=EarlyReturnForm(),

@@ -1,0 +1,16 @@
+<section class="card">
+  <h2>Confirmed duties on these dates</h2>
+  {% if duty_rows %}
+  <ul class="toollist">
+    {% for d in duty_rows %}
+    <li><span class="muted">{{ d.date.strftime("%a %d %b") }}</span>
+        <span>{{ d.duty.label }} — confirmed</span></li>
+    {% endfor %}
+  </ul>
+  <p class="muted">Approving does not reassign the duty — the PS resolves it on the
+     <a href="{{ url_for('duty.roster', month=duty_rows[0].date.strftime('%Y-%m')) }}">duty roster</a>
+     (manual replace or swap).</p>
+  {% else %}
+  <p class="muted">No confirmed duties on these dates.</p>
+  {% endif %}
+</section>
