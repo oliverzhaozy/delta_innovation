@@ -3,9 +3,9 @@ duty_service.month_view assembles everything the page renders; the service
 functions own the transactions and raise typed exceptions these routes
 translate to 4xx (rule violations) or flash-and-redirect (judgment warnings).
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.orm import joinedload
 
@@ -15,7 +15,7 @@ from app.domain import policy
 from app.domain.dates import today_sgt
 from app.domain.types import Duty
 from app.extensions import db
-from app.models import DutySwapLog
+from app.models import DutySwapLog, Person
 from app.services import duty_service
 
 
@@ -81,4 +81,43 @@ def confirm():
         flash(str(exc), "error")
     else:
         flash("Month confirmed — parades and meals now read these duties.", "success")
+    return redirect(url_for("duty.roster", month=month))
+
+
+@bp.route("/roster/assign", methods=["POST"])
+@require(policy.can_manage_roster)
+def assign():
+    month = _parse_month(request.form.get("month", ""))
+    try:
+        day = date.fromisoformat(request.form.get("date", ""))
+        duty = Duty(request.form.get("duty", ""))
+        person = db.session.get(Person, int(request.form.get("person_id", "")))
+    except (ValueError, TypeError):
+        abort(400)
+    if person is None:
+        abort(400)
+    try:
+        duty_service.assign(
+            day, duty, person, actor=current_user,
+            override_availability=request.form.get("confirm") == "1",
+        )
+    except duty_service.IneligibleAssignment as exc:
+        abort(400, description=str(exc))
+    except duty_service.NeedsAvailabilityConfirm as exc:
+        flash(f"Not assigned — {exc}. Tick “assign anyway” to override.", "error")
+        return redirect(url_for("duty.roster", month=month))
+    flash("Assigned.", "success")
+    return redirect(url_for("duty.roster", month=month))
+
+
+@bp.route("/roster/clear", methods=["POST"])
+@require(policy.can_manage_roster)
+def clear():
+    month = _parse_month(request.form.get("month", ""))
+    try:
+        day = date.fromisoformat(request.form.get("date", ""))
+        duty = Duty(request.form.get("duty", ""))
+    except ValueError:
+        abort(400)
+    flash("Cleared." if duty_service.clear(day, duty) else "Nothing to clear.", "success")
     return redirect(url_for("duty.roster", month=month))

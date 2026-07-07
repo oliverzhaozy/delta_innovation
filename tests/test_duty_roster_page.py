@@ -7,9 +7,11 @@ split are pinned through actual responses, mirroring the parade page suites.
 import re
 from datetime import date
 
-from app.domain.types import Appointment, Duty, DutyState, Rank
+from app.domain.types import (
+    Appointment, DayPart, Duty, DutyState, LeaveType, Rank, RequestStatus,
+)
 from app.extensions import db
-from app.models import DutyAssignment, Person
+from app.models import DutyAssignment, LeaveRequest, Person
 from app.services import duty_service
 from tests.conftest import login
 
@@ -98,7 +100,7 @@ def test_roster_mutations_403_for_opr(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")
 
-    for endpoint in ("generate", "confirm"):
+    for endpoint in ("generate", "confirm", "assign", "clear"):
         resp = client.post(f"/duty/roster/{endpoint}", data={"month": AUG})
         assert resp.status_code == 403, endpoint
 
@@ -135,6 +137,132 @@ def test_generate_then_confirm_flips_badges(app, client, make_person):
     )
     html = resp.get_data(as_text=True)
     assert "CONFIRMED" in html and "PROPOSED" not in html
+
+
+# --- manual assign / clear (P4.6 part 1) ------------------------------------------
+
+def plant_leave(app, username, day, *, day_part=DayPart.FULL):
+    with app.app_context():
+        person_id = db.session.query(Person.id).filter_by(username=username).scalar()
+        db.session.add(
+            LeaveRequest(
+                person_id=person_id, type=LeaveType.OFF, start_date=day,
+                end_date=day, day_part=day_part, status=RequestStatus.APPROVED,
+            )
+        )
+        db.session.commit()
+
+
+def plant_assignment(app, username, day, duty, *, state=DutyState.CONFIRMED):
+    with app.app_context():
+        person_id = db.session.query(Person.id).filter_by(username=username).scalar()
+        row = DutyAssignment(
+            date=day, duty=duty, person_id=person_id, state=state,
+            created_by_id=person_id,
+        )
+        db.session.add(row)
+        db.session.commit()
+        return row.id
+
+
+def assign_form(username_key, app, day, duty=Duty.COS, **extra):
+    data = {
+        "month": AUG, "date": day.isoformat(), "duty": duty.value,
+        "person_id": str(pid(app, username_key)),
+    }
+    data.update(extra)
+    return data
+
+
+def test_assign_ineligible_is_400(app, client, make_person):
+    make_full_cast(make_person)
+    make_person(username="pc2", rank=Rank.LTA, appointment=Appointment.PC, platoon=2)
+    login(client, "ps2")
+
+    resp = client.post(
+        "/duty/roster/assign", data=assign_form("pc2", app, date(2026, 8, 5))
+    )
+    assert resp.status_code == 400
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+
+
+def test_assign_unavailable_requires_confirm(app, client, make_person):
+    make_full_cast(make_person)
+    plant_leave(app, "det1", date(2026, 8, 5))
+    login(client, "ps2")
+
+    resp = client.post(
+        "/duty/roster/assign",
+        data=assign_form("det1", app, date(2026, 8, 5)),
+        follow_redirects=True,
+    )
+    assert "Not assigned" in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+
+    resp = client.post(
+        "/duty/roster/assign",
+        data=assign_form("det1", app, date(2026, 8, 5), confirm="1"),
+        follow_redirects=True,
+    )
+    assert "Assigned." in resp.get_data(as_text=True)
+    with app.app_context():
+        row = db.session.query(DutyAssignment).one()
+        assert row.person_id == pid(app, "det1")
+        assert row.state is DutyState.PROPOSED
+
+
+def test_assign_replaces_confirmed_keeping_confirmed(app, client, make_person):
+    make_full_cast(make_person)
+    row_id = plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
+    login(client, "ps2")
+
+    resp = client.post(
+        "/duty/roster/assign",
+        data=assign_form("opr1", app, date(2026, 8, 5), confirm="1"),
+        follow_redirects=True,
+    )
+    assert "Assigned." in resp.get_data(as_text=True)
+    with app.app_context():
+        row = db.session.get(DutyAssignment, row_id)
+        # Manual replace is how the PS resolves a post-approval clash: the slot
+        # stays CONFIRMED (tonight's roll call must not lose its duty) with a
+        # fresh stamp saying who changed it.
+        assert row.person_id == pid(app, "opr1")
+        assert row.state is DutyState.CONFIRMED
+        assert row.confirmed_by_id == pid(app, "ps2")
+        assert db.session.query(DutyAssignment).count() == 1
+
+
+def test_new_row_on_empty_slot_is_proposed_not_confirmed(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "ps2")
+
+    client.post(
+        "/duty/roster/assign",
+        data=assign_form("det1", app, date(2026, 8, 5)),
+        follow_redirects=True,
+    )
+    with app.app_context():
+        row = db.session.query(DutyAssignment).one()
+        assert row.state is DutyState.PROPOSED
+        assert row.confirmed_by_id is None
+
+
+def test_clear_removes_row(app, client, make_person):
+    make_full_cast(make_person)
+    plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
+    login(client, "ps2")
+
+    data = {"month": AUG, "date": "2026-08-05", "duty": Duty.COS.value}
+    resp = client.post("/duty/roster/clear", data=data, follow_redirects=True)
+    assert "Cleared." in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+
+    resp = client.post("/duty/roster/clear", data=data, follow_redirects=True)
+    assert "Nothing to clear." in resp.get_data(as_text=True)
 
 
 def test_confirm_stale_fingerprint_flashes_rereview(app, client, make_person):

@@ -91,6 +91,38 @@
     </form>
   </div>
 </section>
+
+<section class="card">
+  <h2>Manual assignment</h2>
+  <form method="post" action="{{ url_for('duty.assign') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <label>Date <input type="date" name="date" required min="{{ view.first.isoformat() }}" max="{{ view.last.isoformat() }}"></label>
+    <label>Duty
+      <select name="duty">
+        {% for duty in Duty %}<option value="{{ duty.value }}">{{ duty.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Person
+      <select name="person_id">
+        {% for p in roster_people %}<option value="{{ p.id }}">{{ p.rank.value }} {{ p.display_name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label><input type="checkbox" name="confirm" value="1"> assign anyway (override availability warning)</label>
+    <button type="submit" class="btn">Assign</button>
+  </form>
+  <form method="post" action="{{ url_for('duty.clear') }}" style="margin-top:0.8rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <label>Date <input type="date" name="date" required min="{{ view.first.isoformat() }}" max="{{ view.last.isoformat() }}"></label>
+    <label>Duty
+      <select name="duty">
+        {% for duty in Duty %}<option value="{{ duty.value }}">{{ duty.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn secondary">Clear slot</button>
+  </form>
+</section>
 {% endif %}
 
 <section class="card table-wrap">

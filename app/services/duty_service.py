@@ -164,6 +164,92 @@ def generate_month(month: str, actor):
     db.session.commit()
 
 
+class IneligibleAssignment(Exception):
+    """Rule violation (a PC can never hold COS) — hard block, 4xx, never a warning."""
+
+
+class NeedsAvailabilityConfirm(Exception):
+    """Soft problems (decision d: the PS may assign over them with an explicit
+    confirm). `reasons` is the user-facing list."""
+
+    def __init__(self, reasons):
+        super().__init__("; ".join(reasons))
+        self.reasons = reasons
+
+
+def _availability_reasons(person, day, duty):
+    """Soft-warning reasons for putting `person` on (day, duty): covering
+    absence/overnight event, adjacency (incl. cross-month tail), spread breach."""
+    month = day.strftime("%Y-%m")
+    pools, availability, _confirmed = availability_for_month(month)
+    reasons = []
+    if not availability(person, day):
+        reasons.append("covering absence, overnight TP event, or duty that day")
+    first, last = month_bounds(month)
+    rows = _assignments_between(first, last)
+    _counts, tail = _prior_month_inputs(first)
+    held = {r.date for r in rows if r.person_id == person.id and r.date != day}
+    held.update(d for d, _duty, person_id in tail if person_id == person.id)
+    if any(roster.adjacent_duty_days(day, other) for other in held):
+        reasons.append("adjacent duty day (incl. Fri→Mon)")
+    counts = {p.id: 0 for p in pools[duty]}
+    for r in rows:
+        if r.duty is duty and r.person_id in counts and r.date != day:
+            counts[r.person_id] += 1
+    if person.id in counts:
+        counts[person.id] += 1
+        if max(counts.values()) - min(counts.values()) > 1:
+            reasons.append(f"would breach {duty.label} spread (max−min > 1)")
+    return reasons
+
+
+def assign(day, duty, person, *, actor, override_availability):
+    """Assign/replace one (date, duty). Eligibility is LAW (hard block);
+    availability/adjacency/spread are judgment (warn-then-confirm). Replacing a
+    CONFIRMED row keeps it CONFIRMED with a fresh confirm stamp — manual replace
+    is exactly how the PS resolves a post-approval clash; a new row on an empty
+    slot is PROPOSED (it becomes real only when the month is confirmed)."""
+    rule = eligibility.eligible_cos if duty is Duty.COS else eligibility.eligible_cdos
+    if not (person.is_active and rule(person)):
+        raise IneligibleAssignment(
+            f"{person.display_name} can never hold {duty.label} — rank/appointment rule."
+        )
+    reasons = _availability_reasons(person, day, duty)
+    if reasons and not override_availability:
+        raise NeedsAvailabilityConfirm(reasons)
+    row = (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.date == day, DutyAssignment.duty == duty)
+        .first()
+    )
+    if row is None:
+        row = DutyAssignment(
+            date=day, duty=duty, person_id=person.id,
+            state=DutyState.PROPOSED, created_by_id=actor.id,
+        )
+        db.session.add(row)
+    else:
+        row.person_id = person.id
+        if row.state is DutyState.CONFIRMED:
+            row.confirmed_by_id = actor.id
+            row.confirmed_at = now_sgt()
+    db.session.commit()
+    return row
+
+
+def clear(day, duty) -> bool:
+    row = (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.date == day, DutyAssignment.duty == duty)
+        .first()
+    )
+    if row is None:
+        return False
+    db.session.delete(row)
+    db.session.commit()
+    return True
+
+
 MonthView = namedtuple("MonthView", "first last days rows by_slot pools violations fingerprint")
 
 
