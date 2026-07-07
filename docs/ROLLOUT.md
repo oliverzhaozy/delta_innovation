@@ -51,6 +51,35 @@ conducts as Phase 1 applied to OFF/OIL:
 - ARCTIC visibility doesn't change — command team only, same as it was on
   TimeTree; this cutover is about which tool is authoritative, not who sees what.
 
+## Phase 3 cutover — parade states & NSF meal counter
+
+Phase 3 replaces the COS's nightly hand-assembly of the three WhatsApp
+documents. The stakes are byte-level: a parade state with a wrong count is
+worse than none, so this cutover is judged on exact output, not vibes.
+
+- **Before the parallel run:** PS/S3 key every live status (MC, courses,
+  briefings) and the regulars' absences into the app — the documents can only
+  be right about what's been keyed. Stay-out flags checked person by person
+  (People admin).
+- **Parallel-run nights (1–2 weeks):** each evening the COS compiles the COS
+  message and roll call the old way AND opens the app's pages for the same
+  dates; each morning likewise for the morning parade. The owner (or the COS)
+  eyeballs the app's text against the real sent message **character by
+  character** — categories, order, counts, headers. Every mismatch is either
+  un-keyed data (key it) or a renderer bug (report it; the golden tests pin the
+  format, so a mismatch is a real finding).
+- **Finalize is the record:** from day one of the parallel run, whoever copies
+  a document presses "Finalize & copy" — the snapshot archive is what settles
+  "what did we actually send that night".
+- **S4 counter:** S4 compares the NSF day/overnight counters against their own
+  count for the same nights (indents are NSF-only, decision (j)).
+- **Hard cutover:** announce a date; from that night the app's text IS the
+  message (paste, don't retype). Manual assembly stops. Anything still keyed
+  wrong surfaces as a conflict line or a wrong count the next morning and gets
+  fixed in the app, never patched in WhatsApp.
+- Requires the app deployed and reachable from phones (P0.8) — the COS
+  compiles from home.
+
 ## Ongoing habits
 
 - Someone ORDs/posts out → S3 deactivates the account the same week
