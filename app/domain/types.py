@@ -180,6 +180,39 @@ class ParadeVariant(str, enum.Enum):
         }[self.value]
 
 
+class RoSection(str, enum.Enum):
+    """The six standing 'Matters' sections of the RO, in document order
+    (docs/RO_FORMATS.md decision (o)). The format fixes the order, so member
+    declaration order IS the render order — no position column anywhere."""
+
+    SAFETY = "SAFETY"
+    ADMIN = "ADMIN"
+    LOGISTIC = "LOGISTIC"
+    SECURITY = "SECURITY"
+    RND = "RND"
+    INSTRUCTIONS = "INSTRUCTIONS"
+
+    @property
+    def label(self) -> str:
+        return {
+            "SAFETY": "Safety Matters",
+            "ADMIN": "Administrative Matters",
+            "LOGISTIC": "Logistic Matters",
+            "SECURITY": "Security Matters",
+            "RND": "R&D Matters",
+            "INSTRUCTIONS": "Instructions",
+        }[self.value]
+
+
+class RoRecurrence(str, enum.Enum):
+    """When a standing timeline item appears (decision (n)): every day, or
+    only the last WORKING day of the week (Friday, or earlier when Friday is
+    a public holiday)."""
+
+    DAILY = "DAILY"
+    LAST_WORKING_DAY = "LAST_WORKING_DAY"
+
+
 class Meal(str, enum.Enum):
     """The three daily meals a manpower food order accounts for (P3b.5)."""
 

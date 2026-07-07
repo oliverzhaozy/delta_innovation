@@ -7,6 +7,13 @@ from app.models.leave import LeaveRequest
 from app.models.meal import MealAdjustment
 from app.models.overseas import OverseasDeclaration
 from app.models.person import Person
+from app.models.ro import (
+    RoBoilerplate,
+    RoDocument,
+    RoExtraItem,
+    RoStandingItem,
+    WeeklyKeyEvents,
+)
 from app.models.snapshot import ParadeSnapshot
 from app.models.status import StatusEntry
 
@@ -23,5 +30,10 @@ __all__ = [
     "ParadeSnapshot",
     "Person",
     "PublicHoliday",
+    "RoBoilerplate",
+    "RoDocument",
+    "RoExtraItem",
+    "RoStandingItem",
     "StatusEntry",
+    "WeeklyKeyEvents",
 ]
