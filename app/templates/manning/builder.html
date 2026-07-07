@@ -11,10 +11,12 @@
   <p class="flash flash-error">Unfilled: {{ doc.unfilled|join(", ") }}</p>
 {% endif %}
 
-<section class="card">
-  <h2>Copy as text</h2>
-  <pre id="manningtext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ doc.text }}</pre>
-  <button type="button" class="btn secondary" data-copy="#manningtext">Copy</button>
+<section class="card sheet">
+  <div class="sheet-rule">
+    <span>TU manning — {{ period.start_date.strftime("%d %b") }} – {{ period.end_date.strftime("%d %b %Y") }}</span>
+    <button type="button" class="btn secondary" data-copy="#manningtext">Copy</button>
+  </div>
+  <pre id="manningtext" style="white-space:pre-wrap; margin:0">{{ doc.text }}</pre>
 </section>
 
 <section class="card">
