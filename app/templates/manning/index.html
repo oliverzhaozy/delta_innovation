@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}TU manning{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>TU manning periods</h1>
+</div>
+
+<section class="card">
+  <h2>New period</h2>
+  <form method="post" action="{{ url_for('manning.new') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Start <input type="date" name="start_date" required></label>
+    <label>End <input type="date" name="end_date" required></label>
+    <label>Name (optional, never renders) <input type="text" name="name" maxlength="80"></label>
+    <button type="submit" class="btn">Create</button>
+  </form>
+  <p class="muted">Periods usually span 4–7 days — advisory, not enforced.</p>
+</section>
+
+<section class="card">
+  <h2>Periods</h2>
+  {% if periods %}
+  <ul class="toollist">
+    {% for p in periods %}
+    <li>
+      <a href="{{ url_for('manning.builder', period_id=p.id) }}">
+        {{ p.start_date.strftime("%d %b") }} – {{ p.end_date.strftime("%d %b %Y") }}
+        {% if p.name %}· {{ p.name }}{% endif %}
+      </a>
+      <span class="chip plain">{{ p.slots|length }} slot(s)</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No periods yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

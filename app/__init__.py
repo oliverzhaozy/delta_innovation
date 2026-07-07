@@ -29,6 +29,7 @@ def create_app(config_class=None):
     from app.blueprints.leave import bp as leave_bp
     from app.blueprints.ledger import bp as ledger_bp
     from app.blueprints.main import bp as main_bp
+    from app.blueprints.manning import bp as manning_bp
     from app.blueprints.meals import bp as meals_bp
     from app.blueprints.overseas import bp as overseas_bp
     from app.blueprints.parade import bp as parade_bp
@@ -41,6 +42,7 @@ def create_app(config_class=None):
     app.register_blueprint(leave_bp)
     app.register_blueprint(ledger_bp)
     app.register_blueprint(main_bp)
+    app.register_blueprint(manning_bp)
     app.register_blueprint(meals_bp)
     app.register_blueprint(overseas_bp)
     app.register_blueprint(parade_bp)

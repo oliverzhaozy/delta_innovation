@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, SelectField, StringField
-from wtforms.validators import DataRequired, Length, Regexp
+from wtforms.validators import DataRequired, Length, Optional, Regexp
 
 from app.domain.types import Appointment, CompanyRole, Rank, Service
 
@@ -15,6 +15,8 @@ class PersonForm(FlaskForm):
         ],
     )
     display_name = StringField("Display name", validators=[DataRequired(), Length(max=120)])
+    # Optional, for the manning document only (owner decision (q) 2026-07-07).
+    phone = StringField("Phone (manning doc)", validators=[Optional(), Length(max=20)])
     rank = SelectField("Rank", choices=[(r.value, r.value) for r in Rank])
     appointment = SelectField(
         "Appointment", choices=[(a.value, a.label) for a in Appointment]

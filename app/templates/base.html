@@ -47,6 +47,9 @@
         {% if policy.can_manage_ledger(current_user) %}
           <a href="{{ url_for('ledger.index') }}">Ledger</a>
         {% endif %}
+        {% if policy.can_manage_manning(current_user) %}
+          <a href="{{ url_for('manning.index') }}">Manning</a>
+        {% endif %}
         {% if policy.can_manage_meals(current_user) %}
           <a href="{{ url_for('meals.index') }}">Meals</a>
         {% endif %}

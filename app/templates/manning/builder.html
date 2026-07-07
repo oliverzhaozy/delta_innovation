@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}TU manning builder{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>TU manning — {{ period.start_date.strftime("%d %b") }} – {{ period.end_date.strftime("%d %b %Y") }}</h1>
+  {% if period.name %}<p class="muted">{{ period.name }}</p>{% endif %}
+</div>
+
+{% if doc.unfilled %}
+  <p class="flash flash-error">Unfilled: {{ doc.unfilled|join(", ") }}</p>
+{% endif %}
+
+<section class="card">
+  <h2>Copy as text</h2>
+  <pre id="manningtext" style="white-space:pre-wrap; font-size:0.9rem; margin:0 0 0.8rem">{{ doc.text }}</pre>
+  <button type="button" class="btn secondary" data-copy="#manningtext">Copy</button>
+</section>
+
+<section class="card">
+  <h2>Assigned slots</h2>
+  {% if period.slots %}
+  <ul class="toollist">
+    {% for s in hq %}
+    <li>
+      <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}</span>
+      <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="slot_id" value="{{ s.id }}">
+        <button type="submit" class="linklike">remove</button>
+      </form>
+    </li>
+    {% endfor %}
+    {% for det, rows in dets.items() %}
+      {% for s in rows %}
+      <li>
+        <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}</span>
+        <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="slot_id" value="{{ s.id }}">
+          <button type="submit" class="linklike">remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing assigned yet.</p>
+  {% endif %}
+</section>
+
+{% for slot in ManningSlotType %}
+<section class="card">
+  <h2>Assign {{ slot.ui_label }}</h2>
+  <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="slot" value="{{ slot.value }}">
+    <label>Person
+      <select name="person_id" data-slot="{{ slot.value }}">
+        {% for c in candidates[slot] %}
+        <option value="{{ c.person.id }}">
+          {%- if c.reasons %}&#9888; {% endif -%}
+          {{ c.person.rank.value }} {{ c.person.display_name }}
+          {%- if c.reasons %} — {{ c.reasons|join("; ") }}{% endif -%}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if slot.value in ("TU_DET_COMD", "DET_PERSONNEL") %}
+    <label>Det <input type="number" name="det_number" min="1" value="{{ next_det if slot.value == 'TU_DET_COMD' else (dets.keys()|list|last if dets else 1) }}"></label>
+    {% else %}
+    <input type="hidden" name="det_number" value="">
+    {% endif %}
+    <button type="submit" class="btn">Assign</button>
+  </form>
+  {% if not candidates[slot] %}
+  <p class="flash flash-error">&#9888; Nobody is eligible for {{ slot.ui_label }} — the appointment rule, not the app, may be the problem.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Danger</h2>
+  <form method="post" action="{{ url_for('manning.delete', period_id=period.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn secondary">Delete period</button>
+  </form>
+</section>
+{% endblock %}
