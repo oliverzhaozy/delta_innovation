@@ -80,6 +80,33 @@ worse than none, so this cutover is judged on exact output, not vibes.
 - Requires the app deployed and reachable from phones (P0.8) — the COS
   compiles from home.
 
+## Phase 4 cutover — duty roster
+
+Phase 4 replaces the PS's hand-built COS/CDO-S roster. The app proposes and a
+human decides: the generator drafts, the PS confirms, and only CONFIRMED
+duties reach parades, meals, and keying rights — so the cutover risk is a
+wrong draft nobody reviewed, not a silent reassignment.
+
+- **Parallel month:** the PSs generate one month alongside the manual roster.
+  First thing to check is the **pools panel** against reality: the eligibility
+  rules are strict (COS = ≤2SG Det Comd/Opr; CDO/S = ≥2SG PC/P2IC/PS), and a
+  3SG PS legitimately appears in NEITHER pool. If a pool is near-empty, the
+  rule — not the app — is the problem; raise it before trusting a roster.
+- **During the parallel month:** exercise manual assigns (including one over
+  an availability warning) and at least one swap, so the confirm/fingerprint,
+  warning, and swap-log flows have all been driven with real names. Blanks and
+  ⚠ flags on the page are findings, not bugs: a blank means no one eligible
+  was available; a "holder absent" flag means leave/MC landed after
+  confirmation and the PS resolves it by replace or swap.
+- **Confirm is the record:** a month's roster only counts once a PS presses
+  Confirm — drafts move nothing. Regenerate freely before confirming; after
+  confirming, changes go through manual replace or logged swaps.
+- **Hard cutover:** the following month, the manual roster stops. From day
+  one of that month the app's CONFIRMED roster drives roll-call CURRENT
+  STRENGTH, the NSF overnight meal counter, the COS-message pre-fill, and the
+  rotating COS's parade-keying rights (today's and tomorrow's confirmed COS
+  can key statuses; the rights disappear with the assignment).
+
 ## Ongoing habits
 
 - Someone ORDs/posts out → S3 deactivates the account the same week
