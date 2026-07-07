@@ -134,6 +134,31 @@ content, so the pre-run setup matters most.
   RO (paste, don't retype). There is no RO snapshot by design — the pasted
   WhatsApp message remains the archival record.
 
+## Phase 6 cutover — TU manning
+
+Phase 6 replaces the hand-typed TU manning list. Lower tempo than the nightly
+documents (a period every week or two), so the cutover is one real period
+built in parallel.
+
+- **Before the first period (S3, one-time):** key phone numbers on the
+  People admin page (decision (q) — phones exist for this document only; an
+  unkeyed phone renders "( )" to fill in WhatsApp). Remind everyone the
+  overseas-declaration form exists — the conflict flags can only know what
+  was declared or keyed.
+- **The trap, on purpose:** the document line "DET COMD" is the slot the app
+  calls "TU Det Comd (P2IC/PS)". The pick list will not offer a
+  company-appointment Det Comd for it — that is the eligibility rule working,
+  not a bug; company Det Comds go under DET PERSONNEL.
+- **Parallel period:** build the next real activation window in the app
+  alongside the usual hand-typed list; compare the rendered text character by
+  character (known normalization: no trailing spaces). Check every ⚠ flag —
+  each is an approved absence, an out-of-camp status, or a live overseas
+  declaration overlapping the period. "No known conflict" means exactly that
+  and no more: the app cannot see undeclared travel.
+- **Hard cutover:** from the next period on, the app's text IS the list
+  (paste, don't retype). There is no manning snapshot by design — the pasted
+  WhatsApp message remains the archival record.
+
 ## Ongoing habits
 
 - Someone ORDs/posts out → S3 deactivates the account the same week
