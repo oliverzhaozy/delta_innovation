@@ -107,6 +107,33 @@ wrong draft nobody reviewed, not a silent reassignment.
   rotating COS's parade-keying rights (today's and tomorrow's confirmed COS
   can key statuses; the rights disappear with the assignment).
 
+## Phase 5 cutover — Routine Orders
+
+Phase 5 replaces the CDO/CDS's nightly hand-assembly of the RO. Like the
+parade states, this is judged on exact output — but the RO has more keyed
+content, so the pre-run setup matters most.
+
+- **Before the parallel run (S3, one-time):** key the six Matters sections
+  into RO boilerplate exactly as the current RO carries them; key the
+  standing timeline items (the usual set: 0600 Roll call & Breakfast daily,
+  TBC LP daily, TBC SBA on the last working day of the week); key this
+  week's key events. TP conducts already in the calendar auto-insert — key
+  any that are missing.
+- **Weekly habit:** the S3 keys next week's key events on Friday (the page
+  defaults to the upcoming week from Friday on).
+- **Parallel-run evenings (1–2 weeks):** each evening the CDO/CDS opens
+  `/ro` (it defaults to tomorrow), pastes the day's messages/QOTD blob, keys
+  the day's timeline items, and compares the app's text against the real RO
+  they assemble the old way — character by character. Duty Personnel must
+  match the confirmed roster; a `[NO CONFIRMED DUTY]` placeholder means the
+  month wasn't confirmed, not a bug. Mismatches are un-keyed data (key it)
+  or a renderer bug (report it — the golden pins the format).
+- **Known normalizations (owner decisions, not bugs):** uniform 12-➖
+  separators, no trailing spaces, and the TBC block always renders last.
+- **Hard cutover:** announce a date; from that evening the app's text IS the
+  RO (paste, don't retype). There is no RO snapshot by design — the pasted
+  WhatsApp message remains the archival record.
+
 ## Ongoing habits
 
 - Someone ORDs/posts out → S3 deactivates the account the same week
