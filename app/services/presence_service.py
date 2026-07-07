@@ -45,10 +45,12 @@ class AbsenceRow:
     remarks: object = None
 
 
-def _fetch_rows(start_date, end_date):
-    """The ONE query layer: APPROVED leave + direct absences + statuses that
-    overlap [start_date, end_date] for ACTIVE people, each ordered platoon
-    NULLS FIRST → display_name. Returns the ORIGINAL model rows as three lists.
+def fetch_absence_rows(start_date, end_date):
+    """The ONE query layer, now the shared public fetch that `absences_between`,
+    `presence_inputs`, and duty availability (P4.4) all read: APPROVED leave +
+    direct absences + statuses that overlap [start_date, end_date] for ACTIVE
+    people, each ordered platoon NULLS FIRST → display_name. Returns the
+    ORIGINAL model rows as three lists.
 
     Extracting the leave/direct/status filter here (written once) is the whole
     point of the task: `absences_between` and `presence_inputs` are two views of
@@ -107,7 +109,7 @@ def absences_between(start_date, end_date):
     panel) dedupe on person_id and so now naturally include MC'd / direct-absent
     people.
     """
-    leaves, directs, statuses = _fetch_rows(start_date, end_date)
+    leaves, directs, statuses = fetch_absence_rows(start_date, end_date)
     by_day = {d: [] for d in iter_days(start_date, end_date)}
     for source, rows in (("leave", leaves), ("direct", directs), ("status", statuses)):
         for row in rows:
@@ -189,14 +191,14 @@ def presence_inputs(day):
     `PersonPresence(person, resolution)` pairs — the one function every parade
     document reads (P3a.6+).
 
-    Shares `_fetch_rows` with the away board (two views of one fetch); here ALL
+    Shares `fetch_absence_rows` with the away board (two views of one fetch); here ALL
     statuses are passed to the engine, so in-camp ones come back as annotations
     (`in_camp_rows`) rather than being dropped. The ORIGINAL model rows go to
     `resolve` — the engine returns the caller's own objects, and downstream
     rendering reads model fields (`.type`, `.remarks`, `.person`). Deactivated
     people are off the roster entirely, matching the away board.
     """
-    leaves, directs, statuses = _fetch_rows(day, day)
+    leaves, directs, statuses = fetch_absence_rows(day, day)
     by_leave, by_direct, by_status = defaultdict(list), defaultdict(list), defaultdict(list)
     for row in leaves:
         by_leave[row.person_id].append(row)
