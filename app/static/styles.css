@@ -67,14 +67,16 @@ body {
   gap: 0.2rem;
 }
 
+/* Nav tabs use the body sans (not the condensed --display face, which is
+   reserved for the brand/headers) — cleaner and more legible, and matches
+   the dropdown items below. */
 .topnav a,
 .topnav .linklike {
   color: var(--muted);
   text-decoration: none;
-  font-family: var(--display);
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   padding: 0.3rem 0.6rem;
   border-radius: 7px;
   transition: background 0.15s ease, color 0.15s ease;
@@ -96,10 +98,9 @@ body {
   list-style: none;
   cursor: pointer;
   color: var(--muted);
-  font-family: var(--display);
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   padding: 0.3rem 0.6rem;
   border-radius: 7px;
   transition: background 0.15s ease, color 0.15s ease;
