@@ -72,18 +72,16 @@ def create_app(config_class=None):
         from flask_login import current_user
 
         from app.domain.types import RequestStatus
-        from app.models import LeaveRequest, Person
+        from app.models import LeaveRequest
 
         if not current_user.is_authenticated:
             return {}
         if policy.is_pc(current_user):
+            # Any PC may approve any PENDING_PC request (owner decision
+            # 2026-07-09), so the badge counts all of them, not just own-platoon.
             count = (
                 db.session.query(LeaveRequest.id)
-                .join(Person, LeaveRequest.person_id == Person.id)
-                .filter(
-                    LeaveRequest.status == RequestStatus.PENDING_PC,
-                    Person.platoon == current_user.platoon,
-                )
+                .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
                 .count()
             )
         elif policy.can_final_approve(current_user):

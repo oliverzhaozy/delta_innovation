@@ -22,9 +22,11 @@ def is_pc(person) -> bool:
     return person.appointment is Appointment.PC
 
 
-def can_approve_as_pc(person, platoon) -> bool:
-    # Object-level scope: a PC only ever acts on their own platoon's requests.
-    return is_pc(person) and person.platoon is not None and person.platoon == platoon
+def can_approve_as_pc(person) -> bool:
+    # Owner decision 2026-07-09 revised decision (b): any PC may approve any
+    # PENDING_PC request; platoon no longer scopes approval. Self-approval stays
+    # impossible structurally — a PC's own request enters PENDING_OC (routing).
+    return is_pc(person)
 
 
 def can_final_approve(person) -> bool:

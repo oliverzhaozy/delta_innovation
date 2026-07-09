@@ -12,6 +12,7 @@ This plan was pressure-tested by a 5-critic review panel (ambiguity, edge cases,
 
 - **(a) Balances:** OFF and OIL only. LL/OL are recorded as absences (parade, clash checks, manning) but hold no in-app balance.
 - **(b) Routing:** only **PS and below** (PS, Det Comd, Opr) route PC → OC. A **PC's own request goes straight to the OC**. Regulars (OC/SM/2IC/P2IC) don't use the request flow at all — their absences are keyed directly by S3/admin (no approval, no ledger) so parade states stay correct.
+  - **Revision (2026-07-09):** own-platoon scoping on PC approval removed — **any PC** may approve/reject any PENDING_PC request, regardless of platoon. Self-approval stays structurally impossible (a PC's own request skips the PC step into PENDING_OC).
 - **(c) PM off:** counts **present at night roll call** (expected back); stay-out personnel simply don't return that night and are counted under the normal stay-out rule.
 - **(d) Half-day vs duty:** anyone with any off/leave that day is **skipped by the roster auto-pick**, but the PS can assign manually with a warning.
 - **(e) Statuses:** MC/course/briefing/site-testing are **date-ranged records that auto-fill** every parade state they cover; the COS adds/ends/overrides, never re-keys.

@@ -17,7 +17,7 @@ from app.domain.types import (
     RequestStatus,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, ManningPeriod, ManningSlot, Person
+from app.models import DutyAssignment, LeaveRequest, ManningPeriod, ManningSlot
 from app.services import approval_service, event_service, leave_service, ledger_service, presence_service
 from app.services.approval_service import NegativeBalanceUnconfirmed, TransitionError
 
@@ -106,11 +106,9 @@ def _may_view(request_row):
         request_row.person_id == current_user.id
         or policy.can_final_approve(current_user)
         or policy.can_manage_ledger(current_user)
-        or (
-            policy.is_pc(current_user)
-            and request_row.person.platoon is not None
-            and request_row.person.platoon == current_user.platoon
-        )
+        # Any PC may view any request — they can act on any PENDING_PC request
+        # (owner decision 2026-07-09; platoon no longer scopes approval).
+        or policy.is_pc(current_user)
     )
 
 
@@ -119,16 +117,12 @@ def _may_view(request_row):
 def pc_queue():
     pending = (
         db.session.query(LeaveRequest)
-        .join(Person, LeaveRequest.person_id == Person.id)
-        .filter(
-            LeaveRequest.status == RequestStatus.PENDING_PC,
-            Person.platoon == current_user.platoon,
-        )
+        .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
         .order_by(LeaveRequest.created_at)
         .all()
     )
     return render_template(
-        "leave/queue.html", pending=pending, title=f"Platoon {current_user.platoon} approvals"
+        "leave/queue.html", pending=pending, title="Pending PC approvals"
     )
 
 
@@ -211,7 +205,7 @@ def detail(request_id):
     )
     can_act_pc = (
         request_row.status is RequestStatus.PENDING_PC
-        and policy.can_approve_as_pc(current_user, request_row.person.platoon)
+        and policy.can_approve_as_pc(current_user)
         and request_row.person_id != current_user.id
     )
     can_act_oc = (
@@ -242,7 +236,7 @@ def detail(request_id):
 def _act(request_id, expected_status, platoon_scoped):
     """Shared guard for the four action endpoints; returns the request row."""
     request_row = db.session.get(LeaveRequest, request_id) or abort(404)
-    if platoon_scoped and not policy.can_approve_as_pc(current_user, request_row.person.platoon):
+    if platoon_scoped and not policy.can_approve_as_pc(current_user):
         abort(403)
     return request_row
 

@@ -21,13 +21,15 @@ def test_command_team_is_oc_through_ps():
         assert policy.is_command_team(person(appt)) == (appt in in_team)
 
 
-def test_pc_approval_is_platoon_scoped():
-    pc1 = person(Appointment.PC, platoon=1)
-    assert policy.can_approve_as_pc(pc1, 1)
-    assert not policy.can_approve_as_pc(pc1, 2)
-    # A PC with no platoon set can approve nothing rather than everything.
-    assert not policy.can_approve_as_pc(person(Appointment.PC, platoon=None), 1)
-    assert not policy.can_approve_as_pc(person(Appointment.OC, platoon=1), 1)
+def test_any_pc_may_approve_regardless_of_platoon():
+    # Owner decision 2026-07-09 revised decision (b): platoon no longer scopes
+    # approval — any PC may approve any PENDING_PC request.
+    assert policy.can_approve_as_pc(person(Appointment.PC, platoon=1))
+    assert policy.can_approve_as_pc(person(Appointment.PC, platoon=2))
+    assert policy.can_approve_as_pc(person(Appointment.PC, platoon=None))
+    # Approval is still PC-only: OC and non-PC appointments cannot.
+    assert not policy.can_approve_as_pc(person(Appointment.OC, platoon=1))
+    assert not policy.can_approve_as_pc(person(Appointment.OPR, platoon=1))
 
 
 def test_only_oc_finally_approves():
@@ -58,4 +60,4 @@ def test_admin_flag_unlocks_admin_and_s3_pages_but_not_approval():
     assert policy.can_manage_ledger(admin)
     # Approval authority comes from appointment, never from the admin flag.
     assert not policy.can_final_approve(admin)
-    assert not policy.can_approve_as_pc(admin, 1)
+    assert not policy.can_approve_as_pc(admin)

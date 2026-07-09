@@ -70,16 +70,21 @@ def give_off(app, cast, username, half_days):
         db.session.commit()
 
 
-def test_pc_queue_is_platoon_scoped(client, cast):
-    submit_as(client, "opr")
-    login(client, "pc1")
+def test_any_pc_sees_and_can_approve_cross_platoon(app, client, cast):
+    # Owner decision 2026-07-09 revised decision (b): platoon no longer scopes PC
+    # approval. A PC from a DIFFERENT platoon sees the request in the PC queue,
+    # can open it by URL, and can endorse it up to the OC.
+    submit_as(client, "opr")  # platoon-1 Opr, enters PENDING_PC
+    req_id = latest_request_id(app)
+    login(client, "pc2")  # platoon 2 — deliberately not the requester's platoon
     assert b"Opr" in client.get("/leave/queue/pc").data
-    client.post("/logout")
-    login(client, "pc2")
-    resp = client.get("/leave/queue/pc")
-    assert b"Opr" not in resp.data
-    # And PC2 cannot open the P1 request by URL either.
-    assert client.get(f"/leave/{latest_request_id(client.application)}").status_code == 403
+    assert client.get(f"/leave/{req_id}").status_code == 200
+    resp = client.post(f"/leave/{req_id}/pc-approve", follow_redirects=True)
+    assert b"Endorsed" in resp.data
+    with app.app_context():
+        row = db.session.get(LeaveRequest, req_id)
+        assert row.status is RequestStatus.PENDING_OC
+        assert row.pc_actor_id == cast["pc2"]
 
 
 def test_full_chain_deducts_working_days_only(app, client, cast):

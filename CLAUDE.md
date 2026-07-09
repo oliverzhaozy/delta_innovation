@@ -63,7 +63,7 @@ Python lives in the repo venv — use `.venv/Scripts/python` (Windows) directly:
 
 - **Two distinct permission concepts**: app access (RBAC from appointment/company_role, in `policy.py`) vs assignment eligibility (rank+appointment predicates, in `eligibility.py`). Don't mix them.
 - **TU Det Comd ≠ Det Comd**: the manning slot "TU Det Comd" is filled by appointment P2IC/PS; company-appointment Det Comds fill "Det Personnel". Keep enum identifiers distinct; there's a regression test for this.
-- **Leave routing**: PS/Det Comd/Opr → own-platoon PC → OC; a PC's own request goes straight to OC; regulars (OC/SM/2IC/P2IC) never use the request flow — S3 keys their absences as `direct_absence` (no ledger). Self-approval is structurally forbidden.
+- **Leave routing**: PS/Det Comd/Opr → any PC → OC; a PC's own request goes straight to OC; regulars (OC/SM/2IC/P2IC) never use the request flow — S3 keys their absences as `direct_absence` (no ledger). Self-approval is structurally forbidden.
 - **Deduction counts working days only** (public_holiday table is a Phase 1 dependency); half-day requests are single-day only; AM+PM same day = one full day.
 - **Parade precedence**: one line per person per parade — deactivated > approved leave > status > duty > stay-out > present; duty overrides stay-out at night; conflicts surface to the COS, never silently resolved.
 - COS/CDO-S duty rules: COS = rank ≤ 2SG AND appointment Det Comd/Opr; CDO/S = rank ≥ 2SG AND appointment PC/P2IC/PS. The appointment sets are disjoint (a person can never be eligible for both).
