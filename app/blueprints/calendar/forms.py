@@ -17,11 +17,16 @@ class EventForm(FlaskForm):
     calendar = SelectField("Calendar", choices=[(c.value, c.label) for c in Calendar])
     title = StringField("Title", validators=[DataRequired(), Length(max=120)])
     all_day = BooleanField("All day")
+    # Two accepted formats: the full datetime-local value, and a date-only value.
+    # When all_day is on, the JS swaps the input to type="date" so the browser
+    # posts "YYYY-MM-DD" (no time) — the second format parses that to midnight,
+    # and _event_times keeps only the date anyway. The first format stays [0] so
+    # _value() still renders the datetime-local value for a timed event.
     start_dt = DateTimeLocalField(
-        "Start", format="%Y-%m-%dT%H:%M", validators=[DataRequired()]
+        "Start", format=["%Y-%m-%dT%H:%M", "%Y-%m-%d"], validators=[DataRequired()]
     )
     end_dt = DateTimeLocalField(
-        "End", format="%Y-%m-%dT%H:%M", validators=[DataRequired()]
+        "End", format=["%Y-%m-%dT%H:%M", "%Y-%m-%d"], validators=[DataRequired()]
     )
     # Labels are optional and calendar-specific; choices are set at request time
     # (routes._set_label_choices). validate_choice=False lets an absent/empty

@@ -88,46 +88,94 @@ function initEventForm() {
 
   const allDay = document.getElementById("all_day");
   if (allDay) {
-    const timed = [document.getElementById("start_dt"), document.getElementById("end_dt")];
+    const timed = [document.getElementById("start_dt"), document.getElementById("end_dt")].filter(
+      Boolean
+    );
+    // All-day events own dates only, so drop the time control entirely rather
+    // than just de-emphasising it: swap each input to type="date" (the form
+    // accepts the resulting date-only value) and back to datetime-local for a
+    // timed event, trimming/padding the value so the field stays populated
+    // across the swap.
     const syncAllDay = () => {
-      timed.forEach((el) => el && el.classList.toggle("time-muted", allDay.checked));
+      timed.forEach((el) => {
+        if (allDay.checked) {
+          if (el.type !== "date") {
+            if (el.value) el.value = el.value.slice(0, 10);
+            el.type = "date";
+          }
+        } else if (el.type !== "datetime-local") {
+          el.type = "datetime-local";
+          if (el.value.length === 10) el.value = el.value + "T08:00";
+        }
+      });
     };
     allDay.addEventListener("change", syncAllDay);
     syncAllDay();
   }
 
-  // Participant picker (UI-11): a person appears in both their service and
-  // platoon dropdown, so keep same-value people checkboxes in sync; show a live
-  // "n selected" count per group; and stop a summary checkbox's click from also
-  // toggling its <details>. All pure enhancement — the server dedupes duplicate
-  // ids, so a no-JS user ticking the same person in two groups still saves one
-  // row.
+  // Participant picker (UI-11): keep each category checkbox and its dropdown in
+  // sync both ways — ticking a group (NSF/REGULAR/PLATOON_x) ticks every member,
+  // and a group whose members are all ticked ticks itself. A person shown in
+  // both their service and platoon group stays consistent across the two, and
+  // each group carries a live "n selected" count. All pure enhancement — the
+  // server dedupes duplicate ids and unions category + person rows, so a no-JS
+  // user still saves a coherent selection.
   const picker = document.querySelector("form[data-label-calendars]");
   if (picker) {
     const peopleBoxes = [...picker.querySelectorAll('input[name="people"]')];
+    const groups = [...picker.querySelectorAll("details.picker")].map((details) => ({
+      details,
+      cat: details.querySelector('summary > input[type="checkbox"]'),
+      members: [...details.querySelectorAll('.picker-body input[name="people"]')],
+    }));
 
-    const refreshCount = (details) => {
-      const badge = details.querySelector("summary [data-count]");
-      if (!badge) return;
-      const n = details.querySelectorAll('.picker-body input[name="people"]:checked').length;
-      badge.textContent = n ? n + " selected" : "";
+    // A person can appear in two groups; mirror any tick to every same-id box.
+    const mirror = (value, checked) => {
+      peopleBoxes.forEach((box) => {
+        if (box.value === value) box.checked = checked;
+      });
     };
-    const refreshAll = () =>
-      picker.querySelectorAll("details.picker").forEach(refreshCount);
+
+    const refreshGroup = (group) => {
+      // Category reflects "all members ticked"; the badge shows the live count.
+      if (group.cat) {
+        group.cat.checked = group.members.length > 0 && group.members.every((b) => b.checked);
+      }
+      const badge = group.details.querySelector("summary [data-count]");
+      if (badge) {
+        const n = group.members.filter((b) => b.checked).length;
+        badge.textContent = n ? n + " selected" : "";
+      }
+    };
+    const refreshAll = () => groups.forEach(refreshGroup);
 
     peopleBoxes.forEach((box) => {
       box.addEventListener("change", () => {
-        peopleBoxes.forEach((other) => {
-          if (other !== box && other.value === box.value) other.checked = box.checked;
-        });
+        mirror(box.value, box.checked);
         refreshAll();
       });
     });
 
-    picker.querySelectorAll('details.picker > summary > input[type="checkbox"]').forEach((box) => {
-      box.addEventListener("click", (event) => event.stopPropagation());
+    groups.forEach((group) => {
+      if (!group.cat) return;
+      // Ticking/clearing the group drives every member (and its duplicates).
+      group.cat.addEventListener("change", () => {
+        group.members.forEach((box) => mirror(box.value, group.cat.checked));
+        refreshAll();
+      });
+      // Keep the summary checkbox from also toggling the <details> open state.
+      group.cat.addEventListener("click", (event) => event.stopPropagation());
     });
 
+    // Initial reconciliation runs in the safe direction only: a server-checked
+    // category (e.g. a pre-existing live NSF event with no person rows) ticks
+    // its members so the two agree, and refreshAll never *clears* such a
+    // category because its members are now ticked too.
+    groups.forEach((group) => {
+      if (group.cat && group.cat.checked) {
+        group.members.forEach((box) => mirror(box.value, true));
+      }
+    });
     refreshAll();
   }
 }

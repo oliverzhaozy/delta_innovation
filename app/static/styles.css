@@ -449,16 +449,21 @@ input[type="checkbox"] {
 
 .participants legend { padding: 0 0.4rem; font-weight: 600; color: var(--muted); }
 
-/* Grouped dropdowns follow the .navgroup <details> idiom: hidden marker, a
-   chevron affordance, and an accent-tint header when open. */
-.picker { border: 1px solid var(--line); border-radius: 8px; margin: 0.35rem 0; }
+/* Every category row — the ALL/Command team checkboxes and each group summary —
+   shares one left edge and rhythm so the list reads as one aligned column. */
+.participants .check { margin: 0.2rem 0; }
+
+/* Grouped dropdowns follow the .navgroup <details> idiom (hidden marker, a
+   chevron affordance) but carry no box of their own: the summary aligns flush
+   with the flat ALL/Command rows above and below it. */
+.picker { margin: 0.2rem 0; }
 
 .picker summary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
-  padding: 0.4rem 0.6rem;
+  padding: 0.2rem 0;
   list-style: none;
   user-select: none;
 }
@@ -469,9 +474,7 @@ input[type="checkbox"] {
 
 .picker summary::after { content: " ▾"; font-size: 0.7em; opacity: 0.7; }
 
-.picker[open] summary { background: var(--accent-tint); border-radius: 8px 8px 0 0; }
-
-.picker-body { list-style: none; margin: 0; padding: 0.3rem 0.6rem 0.5rem 1.4rem; }
+.picker-body { list-style: none; margin: 0; padding: 0.1rem 0 0.4rem 1.6rem; }
 
 button[type="submit"]:not(.linklike),
 .btn {
@@ -623,10 +626,6 @@ table.list a:hover { text-decoration: underline; }
 .cal-title { margin: 0 0 0 0.4rem; font-size: 1.4rem; }
 
 .cal-new { white-space: nowrap; }
-
-/* All-day de-emphasises the time inputs (JS sprinkle) — a hint only; the server
-   ignores the time for all-day events. */
-.time-muted { opacity: 0.55; }
 
 /* ---------- Calendar layer toggles ---------- */
 
