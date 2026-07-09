@@ -4,6 +4,7 @@
 {% block main_class %}wide{% endblock %}
 
 {% block content %}
+{% set can_add = policy.can_edit_events(current_user) %}
 <div class="cal-toolbar">
   <div class="cal-nav">
     <a class="cal-today" href="{{ url_for('calendar.month', ym=today_ym) }}">Today</a>
@@ -43,7 +44,12 @@
         {% for cell in week %}
         <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}">
           {% if cell.in_month %}
-          <a class="day-num" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
+          <div class="cell-head">
+            <a class="day-num" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
+            {% if can_add %}
+            <a class="day-add" href="{{ url_for('calendar.new', date=cell.date.isoformat()) }}" title="New event on {{ cell.date.isoformat() }}" aria-label="New event on {{ cell.date.isoformat() }}">+</a>
+            {% endif %}
+          </div>
           {% for event in cell.events %}
           {# cal-* class drives the on/off filter; ev-<slug> overrides the colour
              when the event is labelled (UI-9). #}

@@ -269,3 +269,31 @@ def test_toolbar_hides_create_for_non_editor(client, make_person):
     body = client.get("/").data
     assert b"Today" in body
     assert b"+ New event" not in body
+
+
+def test_new_event_form_prefills_the_clicked_date(client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = client.get("/calendar/new?date=2026-08-15")
+    assert resp.status_code == 200
+    assert b'value="2026-08-15T08:00"' in resp.data  # start seeded to that day
+    assert b'value="2026-08-15T09:00"' in resp.data  # end default (+1h)
+
+
+def test_new_event_form_ignores_a_bad_date_param(client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = client.get("/calendar/new?date=not-a-date")
+    assert resp.status_code == 200  # falls through to a blank form, no crash
+    assert b'value="not-a-date"' not in resp.data
+
+
+def test_month_grid_shows_day_add_link_for_editor(client, make_person):
+    login(client, make_person(**make_pc()))
+    body = client.get("/calendar/month?ym=2026-08").data
+    assert b"day-add" in body
+    assert b"/calendar/new?date=2026-08-15" in body
+
+
+def test_month_grid_hides_day_add_for_non_editor(client, make_person):
+    login(client, make_person(username="cal_opr_dayadd"))
+    body = client.get("/calendar/month?ym=2026-08").data
+    assert b"day-add" not in body

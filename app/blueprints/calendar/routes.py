@@ -1,3 +1,5 @@
+from datetime import date, datetime, time
+
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
@@ -83,6 +85,20 @@ def _event_times(form):
     return form.start_dt.data, form.end_dt.data
 
 
+def _prefill_date(form, raw):
+    # A day-click on the month grid lands on /calendar/new?date=YYYY-MM-DD; seed
+    # the form to that day (08:00–09:00 default). A bad/missing date falls through
+    # to a blank form — same forgiving convention as parade.away's ?date=.
+    if not raw:
+        return
+    try:
+        day = date.fromisoformat(raw)
+    except ValueError:
+        return
+    form.start_dt.data = datetime.combine(day, time(8, 0))
+    form.end_dt.data = datetime.combine(day, time(9, 0))
+
+
 @bp.route("/month")
 @login_required
 def month():
@@ -128,6 +144,8 @@ def new():
     form = EventForm()
     _set_people_choices(form)
     _set_label_choices(form)
+    if request.method == "GET":
+        _prefill_date(form, request.args.get("date"))
     if form.validate_on_submit():
         start_dt, end_dt = _event_times(form)
         event = Event(

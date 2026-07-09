@@ -702,6 +702,26 @@ table.list a:hover { text-decoration: underline; }
 
 .month-cell .day-num.muted { color: var(--faint); font-weight: 500; }
 
+/* Day-number row with the editor-only "+" create affordance pinned right. */
+.cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.day-add {
+  color: var(--faint);
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+}
+
+.day-add:hover { color: var(--accent); background: var(--accent-tint); }
+
 .month-cell .chip {
   max-width: 100%;
   padding: 0.02rem 0.35rem;
