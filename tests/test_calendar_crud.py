@@ -13,12 +13,14 @@ def make_pc(username="cal_pc"):
     return dict(username=username, rank=Rank.TWO_LT, appointment=Appointment.PC)
 
 
-def create_event(client, calendar, title="Range clearance", start=START, end=END, notes=""):
-    return client.post(
-        "/calendar/new",
-        data={"calendar": calendar, "title": title, "start_dt": start, "end_dt": end, "notes": notes},
-        follow_redirects=True,
-    )
+def create_event(client, calendar, title="Range clearance", start=START, end=END, notes="",
+                 all_day=False, label=None):
+    data = {"calendar": calendar, "title": title, "start_dt": start, "end_dt": end, "notes": notes}
+    if all_day:
+        data["all_day"] = "y"  # checkbox present => True; omitted => False
+    if label is not None:
+        data["label"] = label
+    return client.post("/calendar/new", data=data, follow_redirects=True)
 
 
 def event_id_for(app, title):
@@ -170,3 +172,100 @@ def test_dashboard_hides_arctic_link_for_non_command_team(client, make_person):
     login(client, make_person(username="cal_opr2"))
     body = client.get("/").data
     assert b"ARCTIC FOE" not in body
+
+
+# ---------- UI-9: all-day, labels, toolbar ----------
+
+def test_all_day_event_stored_from_midnight_to_end_of_day(app, client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = create_event(
+        client, "TP", title="All day drill",
+        start="2026-08-05T09:30", end="2026-08-05T14:00", all_day=True,
+    )
+    assert resp.status_code == 200
+    assert b"Event created" in resp.data
+    with app.app_context():
+        row = db.session.query(Event).filter_by(title="All day drill").one()
+        assert row.all_day is True
+        # Time normalized regardless of what the user typed: 00:00 -> end of day,
+        # single day still satisfies end_dt > start_dt.
+        assert row.start_dt == datetime(2026, 8, 5, 0, 0)
+        assert row.end_dt == datetime(2026, 8, 5, 23, 59, 59, 999999)
+
+
+def test_valid_label_is_stored_and_chip_carries_its_colour_class(app, client, make_person):
+    login(client, make_person(**make_pc()))
+    create_event(client, "TP", title="PT session", label="PT")
+    with app.app_context():
+        assert db.session.query(Event).filter_by(title="PT session").one().label == "PT"
+    # The event is in Aug 2026 — navigate there, not the default current month.
+    body = client.get("/calendar/month?ym=2026-08").data
+    assert b"ev-tp-pt" in body       # label colour class on the chip
+    assert b"PT session" in body
+
+
+def test_cross_calendar_label_is_rejected_and_not_persisted(app, client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = create_event(client, "TP", title="Bad label", label="Conducts")  # ARCTIC label on TP
+    assert resp.status_code == 200
+    assert b"available for this calendar" in resp.data
+    with app.app_context():
+        assert db.session.query(Event).filter_by(title="Bad label").count() == 0
+
+
+def test_event_without_a_label_is_allowed(app, client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = create_event(client, "TP", title="No label event", label="")
+    assert resp.status_code == 200
+    assert b"Event created" in resp.data
+    with app.app_context():
+        assert db.session.query(Event).filter_by(title="No label event").one().label is None
+
+
+def test_edit_sets_all_day_and_label(app, client, make_person):
+    login(client, make_person(**make_pc()))
+    create_event(client, "ARCTIC", title="Edit me arctic")
+    event_id = event_id_for(app, "Edit me arctic")
+
+    resp = client.post(
+        f"/calendar/{event_id}/edit",
+        data={
+            "calendar": "ARCTIC", "title": "Edit me arctic",
+            "start_dt": "2026-08-02T10:00", "end_dt": "2026-08-02T12:00",
+            "all_day": "y", "label": "Conducts", "notes": "",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    with app.app_context():
+        row = db.session.get(Event, event_id)
+        assert row.all_day is True
+        assert row.label == "Conducts"
+        assert row.start_dt == datetime(2026, 8, 2, 0, 0)
+        assert row.end_dt == datetime(2026, 8, 2, 23, 59, 59, 999999)
+
+
+def test_new_event_form_renders_with_label_select_and_map(client, make_person):
+    login(client, make_person(**make_pc()))
+    resp = client.get("/calendar/new")
+    assert resp.status_code == 200
+    assert b'id="label"' in resp.data
+    assert b'id="all_day"' in resp.data
+    # The value->calendar map embeds cleanly in the single-quoted data attribute.
+    assert b"data-label-calendars" in resp.data
+    assert b"Conducts" in resp.data  # an ARCTIC label option is present
+
+
+def test_toolbar_shows_nav_and_create_for_editor(client, make_person):
+    login(client, make_person(**make_pc()))
+    body = client.get("/").data
+    assert b"Today" in body
+    assert b"cal-step" in body       # prev/next chevrons
+    assert b"+ New event" in body
+
+
+def test_toolbar_hides_create_for_non_editor(client, make_person):
+    login(client, make_person(username="cal_opr_tb"))
+    body = client.get("/").data
+    assert b"Today" in body
+    assert b"+ New event" not in body

@@ -56,3 +56,45 @@ document.addEventListener("click", (event) => {
   localStorage.setItem(CAL_FILTER_KEY, JSON.stringify([...hidden]));
   applyCalFilters(hidden);
 });
+
+// Event form (UI-9): show only labels belonging to the selected calendar, and
+// de-emphasise the time inputs when the event is all-day. Progressive
+// enhancement only — the server validates the label↔calendar pairing and
+// normalises all-day times regardless, so no-JS still works.
+function initEventForm() {
+  const cal = document.getElementById("calendar");
+  const label = document.getElementById("label");
+  if (cal && label) {
+    const form = label.closest("form");
+    let map = {};
+    try {
+      map = JSON.parse((form && form.dataset.labelCalendars) || "{}");
+    } catch {
+      map = {};
+    }
+    const syncLabels = () => {
+      [...label.options].forEach((opt) => {
+        const owner = map[opt.value]; // undefined for the "" (no label) option
+        const ok = !owner || owner === cal.value;
+        opt.hidden = !ok;
+        opt.disabled = !ok;
+      });
+      const selected = label.options[label.selectedIndex];
+      if (selected && selected.disabled) label.value = "";
+    };
+    cal.addEventListener("change", syncLabels);
+    syncLabels();
+  }
+
+  const allDay = document.getElementById("all_day");
+  if (allDay) {
+    const timed = [document.getElementById("start_dt"), document.getElementById("end_dt")];
+    const syncAllDay = () => {
+      timed.forEach((el) => el && el.classList.toggle("time-muted", allDay.checked));
+    };
+    allDay.addEventListener("change", syncAllDay);
+    syncAllDay();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initEventForm);

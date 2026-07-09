@@ -270,6 +270,43 @@ class ParticipantCategory(str, enum.Enum):
         }[self.value]
 
 
+# Per-calendar event labels (UI-9). The member VALUE is the display string
+# (it can carry slashes/spaces); `.slug` is the css-safe, calendar-prefixed
+# token that keys the label colour class (.ev-<slug>) in styles.css. Values are
+# distinct across the two enums, so a stored label value maps to one calendar.
+class TpLabel(str, enum.Enum):
+    PT = "PT"
+    VOC = "VOC"
+    MPT_PMCS_EAS = "MPT/PMCS/EAS"
+    FFP = "FFP"
+    HRC = "HRC"
+    IPPT = "IPPT"
+    OPS = "Ops"
+    HOLIDAYS = "Holidays"
+    OTHERS = "Others"
+
+    @property
+    def slug(self) -> str:
+        return "tp-" + self.name.lower().replace("_", "-")
+
+
+class ArcticLabel(str, enum.Enum):
+    CONDUCTS = "Conducts"
+    ADMIN_OTHERS = "Admin/Others"
+    LEAVE_OFF_MC_ORD = "Leave/OFF/MC/ORD"
+    DUTIES_NEUTRAL = "Duties/Neutral"
+    ON_COURSE = "On Course"
+    ICT = "ICT"
+    EXERCISES = "Exercises"
+    OPS_OPS_RELATED = "Ops/Ops related"
+    FFP_HRC_TRAINING = "FFP/HRC training"
+    COY_COMMITMENTS = "Coy commitments"
+
+    @property
+    def slug(self) -> str:
+        return "arctic-" + self.name.lower().replace("_", "-")
+
+
 class Duty(str, enum.Enum):
     """The two rotating company duties (P4). Eligibility rules live in
     eligibility.py; the appointment pools are disjoint by design."""

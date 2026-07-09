@@ -6,13 +6,20 @@
   <h1>{{ event.title }}</h1>
   <div class="chips">
     <span class="chip">{{ event.calendar.label }}</span>
+    {% if event.label_enum %}
+    <span class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }} ev-{{ event.label_enum.slug }}">{{ event.label_enum.value }}</span>
+    {% endif %}
   </div>
 </div>
 
 <section class="card">
   <ul class="toollist">
+    {% if event.all_day %}
+    <li><span class="muted">When</span><span>{{ event.start_dt.strftime("%d %b %Y") }}{% if event.start_dt.date() != event.end_dt.date() %} &ndash; {{ event.end_dt.strftime("%d %b %Y") }}{% endif %} &middot; All day</span></li>
+    {% else %}
     <li><span class="muted">Start</span><span>{{ event.start_dt.strftime("%d %b %Y, %H:%M") }}</span></li>
     <li><span class="muted">End</span><span>{{ event.end_dt.strftime("%d %b %Y, %H:%M") }}</span></li>
+    {% endif %}
     {% if event.notes %}<li><span class="muted">Notes</span><span>{{ event.notes }}</span></li>{% endif %}
     <li><span class="muted">Created by</span><span>{{ event.created_by.display_name }}</span></li>
   </ul>

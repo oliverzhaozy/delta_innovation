@@ -265,6 +265,31 @@ h2 {
   margin-right: 0.3rem;
 }
 
+/* Per-label event colours (UI-9). A labelled event chip becomes a solid bar in
+   its label's colour; these rules come AFTER .chip.cal-* so they win by source
+   order (equal specificity). Every colour is a dark shade paired with white text
+   (contrast >= 4.5:1). Unlabelled events keep the tinted calendar colour above.
+   19 distinct hues, one per label; the leading dot (currentColor = white) stays. */
+.chip.ev-tp-pt { background: #b91c1c; color: #fff; }
+.chip.ev-tp-voc { background: #c2410c; color: #fff; }
+.chip.ev-tp-mpt-pmcs-eas { background: #b45309; color: #fff; }
+.chip.ev-tp-ffp { background: #4d7c0f; color: #fff; }
+.chip.ev-tp-hrc { background: #15803d; color: #fff; }
+.chip.ev-tp-ippt { background: #0e7490; color: #fff; }
+.chip.ev-tp-ops { background: #1d4ed8; color: #fff; }
+.chip.ev-tp-holidays { background: #be185d; color: #fff; }
+.chip.ev-tp-others { background: #713f12; color: #fff; }
+.chip.ev-arctic-conducts { background: #0f766e; color: #fff; }
+.chip.ev-arctic-admin-others { background: #374151; color: #fff; }
+.chip.ev-arctic-leave-off-mc-ord { background: #6d28d9; color: #fff; }
+.chip.ev-arctic-duties-neutral { background: #1e3a8a; color: #fff; }
+.chip.ev-arctic-on-course { background: #4338ca; color: #fff; }
+.chip.ev-arctic-ict { background: #9f1239; color: #fff; }
+.chip.ev-arctic-exercises { background: #a21caf; color: #fff; }
+.chip.ev-arctic-ops-ops-related { background: #065f46; color: #fff; }
+.chip.ev-arctic-ffp-hrc-training { background: #7c2d12; color: #fff; }
+.chip.ev-arctic-coy-commitments { background: #831843; color: #fff; }
+
 .tag {
   padding: 0.05rem 0.55rem;
   border-radius: 999px;
@@ -516,6 +541,62 @@ table.list a:hover { text-decoration: underline; }
 .flash-warning { background: var(--amber-bg); color: var(--amber-ink); border-left-color: var(--amber-ink); }
 
 .error { color: var(--danger); font-size: 0.88rem; margin: 0.25rem 0 0; }
+
+/* ---------- Calendar toolbar (month switcher + create) ---------- */
+
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin: 0.4rem 0 1rem;
+}
+
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.cal-today {
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cal-today:hover { border-color: var(--accent); color: var(--accent); }
+
+.cal-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 1.2rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.cal-step:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Reuses the global h1 display styling but sits inline in the toolbar. */
+.cal-title { margin: 0 0 0 0.4rem; font-size: 1.4rem; }
+
+.cal-new { white-space: nowrap; }
+
+/* All-day de-emphasises the time inputs (JS sprinkle) — a hint only; the server
+   ignores the time for all-day events. */
+.time-muted { opacity: 0.55; }
 
 /* ---------- Calendar layer toggles ---------- */
 

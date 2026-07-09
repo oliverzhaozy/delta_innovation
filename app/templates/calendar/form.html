@@ -7,12 +7,15 @@
   <h1>{{ "Edit event" if event else "New event" }}</h1>
 </div>
 
-<form method="post" class="card">
+<form method="post" class="card" data-label-calendars='{{ label_calendars | tojson }}'>
   {{ form.hidden_tag() }}
   <p>{{ form.calendar.label }}{{ form.calendar() }}</p>
   <p>{{ form.title.label }}{{ form.title() }}</p>
+  <p class="check">{{ form.all_day() }}{{ form.all_day.label }}</p>
   <p>{{ form.start_dt.label }}{{ form.start_dt() }}</p>
   <p>{{ form.end_dt.label }}{{ form.end_dt() }}</p>
+  <p class="muted" style="margin:-0.4rem 0 0.6rem; font-size:0.8rem">All-day events use the dates only; the time is ignored.</p>
+  <p>{{ form.label.label }}{{ form.label() }}</p>
   <p>{{ form.notes.label }}{{ form.notes() }}</p>
 
   <p>

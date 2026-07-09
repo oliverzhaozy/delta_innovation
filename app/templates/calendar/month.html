@@ -4,26 +4,17 @@
 {% block main_class %}wide{% endblock %}
 
 {% block content %}
-<div class="page-head">
-  <h1>{{ month_start.strftime("%B %Y") }}</h1>
-  <div class="chips">
-    <a class="chip plain" href="{{ url_for('calendar.tp_list') }}">TP list</a>
-    {% if show_arctic %}
-    <a class="chip plain" href="{{ url_for('calendar.arctic_list') }}">ARCTIC list</a>
-    {% endif %}
-    {% if policy.can_edit_events(current_user) %}
-    <a class="chip plain" href="{{ url_for('calendar.new') }}">New event</a>
-    {% endif %}
+<div class="cal-toolbar">
+  <div class="cal-nav">
+    <a class="cal-today" href="{{ url_for('calendar.month', ym=today_ym) }}">Today</a>
+    <a class="cal-step" href="{{ url_for('calendar.month', ym=prev_ym) }}" aria-label="Previous month">&lsaquo;</a>
+    <a class="cal-step" href="{{ url_for('calendar.month', ym=next_ym) }}" aria-label="Next month">&rsaquo;</a>
+    <h1 class="cal-title">{{ month_start.strftime("%B %Y") }}</h1>
   </div>
+  {% if policy.can_edit_events(current_user) %}
+  <a class="btn cal-new" href="{{ url_for('calendar.new') }}">+ New event</a>
+  {% endif %}
 </div>
-
-<section class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
-    <a href="{{ url_for('calendar.month', ym=prev_ym) }}">&larr; Prev</a>
-    <a href="{{ url_for('calendar.month', ym=today_ym) }}">Today</a>
-    <a href="{{ url_for('calendar.month', ym=next_ym) }}">Next &rarr;</a>
-  </div>
-</section>
 
 {# Cosmetic client-side layer toggles (JS enhances; without JS all layers show).
    ARCTIC pill only for those who may see it — its chips are omitted server-side
@@ -54,7 +45,9 @@
           {% if cell.in_month %}
           <a class="day-num" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
           {% for event in cell.events %}
-          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
+          {# cal-* class drives the on/off filter; ev-<slug> overrides the colour
+             when the event is labelled (UI-9). #}
+          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}{% if event.label_enum %} ev-{{ event.label_enum.slug }}{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{% if event.label_enum %}{{ event.label_enum.value }} · {% endif %}{{ event.title }}</a>
           {% endfor %}
           {% for row in cell.off_leave[:off_leave_limit] %}
           <span class="chip cal-off">{{ row.person.rank.value }} {{ row.person.display_name }} {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span>

@@ -1,3 +1,4 @@
+from app.domain.events import label_class_for
 from app.domain.types import Calendar, ParticipantCategory
 from app.extensions import db
 
@@ -18,6 +19,12 @@ class Event(db.Model):
     title = db.Column(db.String(120), nullable=False)
     start_dt = db.Column(db.DateTime, nullable=False)
     end_dt = db.Column(db.DateTime, nullable=False)
+    # All-day events store 00:00 → 23:59:59.999999 (see domain.events.all_day_bounds);
+    # the flag drives display (date-only, no time) — the times stay valid either way.
+    all_day = db.Column(db.Boolean, nullable=False, default=False)
+    # The label's VALUE string, validated per-calendar on write (UI-9). Kept as a
+    # plain string (not a db.Enum) because the allowed set depends on `calendar`.
+    label = db.Column(db.String(40))
     notes = db.Column(db.String(500))
     created_by_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
 
@@ -33,6 +40,18 @@ class Event(db.Model):
         db.CheckConstraint("end_dt > start_dt", name="ck_event_dt_order"),
         db.Index("ix_event_range", "start_dt", "end_dt"),
     )
+
+    @property
+    def label_enum(self):
+        """The TpLabel/ArcticLabel member for `label` (or None) — one place for
+        templates to read the label's display text (`.value`) and colour slug
+        (`.slug`). Guarded so a legacy/invalid string degrades to None."""
+        if not self.label:
+            return None
+        try:
+            return label_class_for(self.calendar)(self.label)
+        except ValueError:
+            return None
 
     def __repr__(self):
         return f"<Event {self.id} {self.calendar.value} {self.title!r}>"

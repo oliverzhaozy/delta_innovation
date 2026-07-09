@@ -4,8 +4,8 @@ from flask_login import current_user, login_required
 from app.authz import require
 from app.blueprints.calendar import bp
 from app.blueprints.calendar.forms import EventForm
-from app.domain import policy
-from app.domain.types import Calendar, ParticipantCategory
+from app.domain import events, policy
+from app.domain.types import ArcticLabel, Calendar, ParticipantCategory, TpLabel
 from app.extensions import db
 from app.models import Event, EventParticipant
 from app.services import calendar_month, event_service
@@ -56,6 +56,33 @@ def _populate_participant_fields(form, event):
     ]
 
 
+def _set_label_choices(form):
+    # All labels from both calendars in one select; the JS sprinkle filters the
+    # visible options to the chosen calendar, and validate_label enforces the
+    # pairing server-side. "" is the optional "no label" choice.
+    form.label.choices = (
+        [("", "— none —")]
+        + [(m.value, m.value) for m in TpLabel]
+        + [(m.value, m.value) for m in ArcticLabel]
+    )
+
+
+def _label_calendars():
+    # value -> calendar value ("TP"/"ARCTIC"), so the form's JS can hide labels
+    # that don't belong to the currently-selected calendar.
+    mapping = {m.value: Calendar.TP.value for m in TpLabel}
+    mapping.update({m.value: Calendar.ARCTIC.value for m in ArcticLabel})
+    return mapping
+
+
+def _event_times(form):
+    # All-day owns its time convention in one place (domain.events); a timed
+    # event keeps exactly what was entered.
+    if form.all_day.data:
+        return events.all_day_bounds(form.start_dt.data.date(), form.end_dt.data.date())
+    return form.start_dt.data, form.end_dt.data
+
+
 @bp.route("/month")
 @login_required
 def month():
@@ -100,12 +127,16 @@ def detail(event_id):
 def new():
     form = EventForm()
     _set_people_choices(form)
+    _set_label_choices(form)
     if form.validate_on_submit():
+        start_dt, end_dt = _event_times(form)
         event = Event(
             calendar=Calendar(form.calendar.data),
             title=form.title.data.strip(),
-            start_dt=form.start_dt.data,
-            end_dt=form.end_dt.data,
+            all_day=form.all_day.data,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            label=form.label.data or None,
             notes=(form.notes.data or "").strip() or None,
             created_by_id=current_user.id,
         )
@@ -114,7 +145,7 @@ def new():
         db.session.commit()
         flash("Event created.", "success")
         return redirect(url_for("calendar.detail", event_id=event.id))
-    return render_template("calendar/form.html", form=form, event=None)
+    return render_template("calendar/form.html", form=form, event=None, label_calendars=_label_calendars())
 
 
 @bp.route("/<int:event_id>/edit", methods=["GET", "POST"])
@@ -123,22 +154,27 @@ def edit(event_id):
     event = db.session.get(Event, event_id) or abort(404)
     form = EventForm(obj=event)
     _set_people_choices(form)
+    _set_label_choices(form)
     if not form.is_submitted():
         # obj= fills the calendar SelectField with the enum instance; it
         # needs the plain string value (same pattern as admin/person_edit).
+        # all_day/label are plain columns, so obj= populates them directly.
         form.calendar.data = event.calendar.value
         _populate_participant_fields(form, event)
     if form.validate_on_submit():
+        start_dt, end_dt = _event_times(form)
         event.calendar = Calendar(form.calendar.data)
         event.title = form.title.data.strip()
-        event.start_dt = form.start_dt.data
-        event.end_dt = form.end_dt.data
+        event.all_day = form.all_day.data
+        event.start_dt = start_dt
+        event.end_dt = end_dt
+        event.label = form.label.data or None
         event.notes = (form.notes.data or "").strip() or None
         event.participants = _participant_rows_from(form)
         db.session.commit()
         flash("Event updated.", "success")
         return redirect(url_for("calendar.detail", event_id=event.id))
-    return render_template("calendar/form.html", form=form, event=event)
+    return render_template("calendar/form.html", form=form, event=event, label_calendars=_label_calendars())
 
 
 @bp.route("/<int:event_id>/delete", methods=["POST"])
