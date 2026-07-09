@@ -129,12 +129,28 @@ function initEventForm() {
       members: [...details.querySelectorAll('.picker-body input[name="people"]')],
     }));
 
+    // One representative box per person id (a person shown in two groups shares
+    // an id; the checked state is mirrored across duplicates, so any one speaks
+    // for all). ALL covers every id; Command team covers the data-command ids.
+    const boxByValue = new Map();
+    peopleBoxes.forEach((box) => {
+      if (!boxByValue.has(box.value)) boxByValue.set(box.value, box);
+    });
+    const allValues = [...boxByValue.keys()];
+    const commandValues = [
+      ...new Set(peopleBoxes.filter((box) => box.dataset.command).map((box) => box.value)),
+    ];
+    const allBox = document.getElementById("cat_all");
+    const commandBox = document.getElementById("cat_command");
+
     // A person can appear in two groups; mirror any tick to every same-id box.
     const mirror = (value, checked) => {
       peopleBoxes.forEach((box) => {
         if (box.value === value) box.checked = checked;
       });
     };
+    const everyChecked = (values) =>
+      values.length > 0 && values.every((v) => boxByValue.get(v).checked);
 
     const refreshGroup = (group) => {
       // Category reflects "all members ticked"; the badge shows the live count.
@@ -147,7 +163,19 @@ function initEventForm() {
         badge.textContent = n ? n + " selected" : "";
       }
     };
-    const refreshAll = () => groups.forEach(refreshGroup);
+    const refreshAll = () => {
+      groups.forEach(refreshGroup);
+      // ALL and Command team reflect coverage of their whole set — ticked once
+      // every id they stand for is ticked (whichever group the tick came from).
+      if (allBox) allBox.checked = everyChecked(allValues);
+      if (commandBox) commandBox.checked = everyChecked(commandValues);
+    };
+
+    // A covering box (ALL, Command team, or a group) drives its member set.
+    const driveMembers = (box, values) => {
+      values.forEach((v) => mirror(v, box.checked));
+      refreshAll();
+    };
 
     peopleBoxes.forEach((box) => {
       box.addEventListener("change", () => {
@@ -159,18 +187,23 @@ function initEventForm() {
     groups.forEach((group) => {
       if (!group.cat) return;
       // Ticking/clearing the group drives every member (and its duplicates).
-      group.cat.addEventListener("change", () => {
-        group.members.forEach((box) => mirror(box.value, group.cat.checked));
-        refreshAll();
-      });
+      group.cat.addEventListener("change", () =>
+        driveMembers(group.cat, group.members.map((b) => b.value))
+      );
       // Keep the summary checkbox from also toggling the <details> open state.
       group.cat.addEventListener("click", (event) => event.stopPropagation());
     });
+    if (allBox) allBox.addEventListener("change", () => driveMembers(allBox, allValues));
+    if (commandBox) {
+      commandBox.addEventListener("change", () => driveMembers(commandBox, commandValues));
+    }
 
     // Initial reconciliation runs in the safe direction only: a server-checked
-    // category (e.g. a pre-existing live NSF event with no person rows) ticks
-    // its members so the two agree, and refreshAll never *clears* such a
-    // category because its members are now ticked too.
+    // ALL / Command team / group (e.g. a pre-existing live category with no
+    // person rows) ticks its members so the two agree, and refreshAll never
+    // *clears* such a box because its members are now ticked too.
+    if (allBox && allBox.checked) allValues.forEach((v) => mirror(v, true));
+    if (commandBox && commandBox.checked) commandValues.forEach((v) => mirror(v, true));
     groups.forEach((group) => {
       if (group.cat && group.cat.checked) {
         group.members.forEach((box) => mirror(box.value, true));

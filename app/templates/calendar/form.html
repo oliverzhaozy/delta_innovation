@@ -32,6 +32,12 @@
       <label for="cat_all">All (everyone)</label>
     </p>
 
+    <p class="check">
+      <input type="checkbox" name="categories" value="COMMAND_TEAM" id="cat_command"
+        {% if "COMMAND_TEAM" in (form.categories.data or []) %}checked{% endif %}>
+      <label for="cat_command">Command team</label>
+    </p>
+
     {% for category, members in picker_groups %}
     <details class="picker">
       <summary>
@@ -43,17 +49,12 @@
       <ul class="picker-body">
         {% for p in members %}
         <li class="check"><input type="checkbox" name="people" value="{{ p.id }}"
+          {% if p.id in command_ids %}data-command="1"{% endif %}
           {% if p.id in (form.people.data or []) %}checked{% endif %}> {{ p.rank.value }} {{ p.display_name }}</li>
         {% endfor %}
       </ul>
     </details>
     {% endfor %}
-
-    <p class="check">
-      <input type="checkbox" name="categories" value="COMMAND_TEAM" id="cat_command"
-        {% if "COMMAND_TEAM" in (form.categories.data or []) %}checked{% endif %}>
-      <label for="cat_command">Command team</label>
-    </p>
 
     {% if legacy_excludes %}
     <p class="muted" style="font-size:0.8rem">This event has old &quot;except&quot; exclusions ({{ legacy_excludes | map(attribute="display_name") | join(", ") }}); saving will drop them.</p>

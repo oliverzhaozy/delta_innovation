@@ -189,6 +189,7 @@ def new():
         event=None,
         label_calendars=_label_calendars(),
         picker_groups=event_service.picker_groups(),
+        command_ids=event_service.command_person_ids(),
         legacy_excludes=[],
     )
 
@@ -232,6 +233,7 @@ def edit(event_id):
         event=event,
         label_calendars=_label_calendars(),
         picker_groups=event_service.picker_groups(),
+        command_ids=event_service.command_person_ids(),
         # Pre-UI-11 events may still carry person exclude rows; surface them so
         # the editor knows saving will drop them (the picker no longer emits
         # exclude rows). This never shows for events created under UI-11.

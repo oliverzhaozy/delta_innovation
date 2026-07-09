@@ -56,6 +56,20 @@ def picker_groups():
     ]
 
 
+def command_person_ids() -> set:
+    """Ids of the command team (an appointment-based set) among the active
+    roster. The picker marks these person checkboxes so the "Command team"
+    category box and its members stay in sync both ways — reuses the pure
+    `participants.in_category` predicate rather than re-deriving the appointment
+    set here.
+    """
+    return {
+        p.id
+        for p in active_roster()
+        if participants.in_category(p, ParticipantCategory.COMMAND_TEAM)
+    }
+
+
 def resolve_participants(event) -> list:
     """Resolve `event`'s category/person rows against who's active right now
     — categories are never stored membership, they resolve at query time.
