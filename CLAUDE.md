@@ -12,6 +12,15 @@ Every model executing tasks in this repo follows the cognitive profile below (pr
 
 @docs/fable-behavior.md
 
+## Model roles (owner directive, 2026-07-09)
+
+**Fable 5 is the planner; Opus 4.8 is the orchestrator/executor.** Apply this every session and every prompt:
+
+- **Planning** — brainstorming, design decisions, specs, and plan files are Fable 5's job. If the session (main-loop) model is not Fable 5, delegate planning to a subagent with `model: "fable"` (Plan/Explore agents) and review its output before proceeding.
+- **Orchestration & execution** — implementation, multi-step builds, and agent fan-outs run on Opus 4.8. If the session model is not Opus 4.8, delegate execution to subagents with `model: "opus"`; the main loop stays in the role of planner/reviewer.
+- Trivial one-liners (typo fixes, single obvious edits) may be done inline by whichever model is in the main loop — don't spawn an agent to change one word.
+- This is a standing directive: do not ask for re-confirmation each session.
+
 ## What this is
 
 A Flask web app replacing TimeTree as the single source of truth for a ~36-person Singapore army company's manpower admin (leave, parade states, duty rosters, RO, TU manning, meal counts). The two governing ideas:
