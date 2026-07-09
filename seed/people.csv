@@ -1,37 +1,37 @@
 username,display_name,rank,appointment,company_role,platoon,service,stay_out,is_admin
-chan_wl,CPT Chan Wei Liang,CPT,OC,,,REGULAR,1,0
-rahim_b,3WO Rahim Bin Osman,3WO,SM,,,REGULAR,1,0
-tan_jh,LTA Tan Jun Hao,LTA,2IC,,,REGULAR,1,0
-lim_yk,2LT Lim Yong Kiat,2LT,PC,,1,NSF,0,0
-kumar_s,SSG Kumar S/O Rajan,SSG,P2IC,,1,REGULAR,1,0
-ng_jr,3SG Ng Jia Rong,3SG,PS,,1,NSF,0,0
-ong_zh,2LT Ong Zhi Hao,2LT,PC,,2,NSF,0,0
-lee_ck,MSG Lee Chee Keong,MSG,P2IC,,2,REGULAR,1,0
-goh_wj,3SG Goh Wei Jie,3SG,PS,,2,NSF,0,0
-teo_jw,LTA Teo Jing Wen,LTA,PC,,3,NSF,0,0
-halim_m,SSG Halim Bin Mahmud,SSG,P2IC,,3,REGULAR,1,0
-chua_kh,3SG Chua Kai Heng,3SG,PS,,3,NSF,0,0
-yeo_dh,2SG Yeo Dong Hui,2SG,DET_COMD,S3,1,NSF,0,1
-sim_jy,3SG Sim Jun Yang,3SG,DET_COMD,,1,NSF,0,0
-koh_rt,3SG Koh Rui Teng,3SG,DET_COMD,S4,2,NSF,0,0
-phua_zx,3SG Phua Zhi Xuan,3SG,DET_COMD,,2,NSF,0,0
-woon_kt,2SG Woon Kah Teck,2SG,DET_COMD,,3,NSF,0,0
-tay_yh,3SG Tay Yu Heng,3SG,DET_COMD,,3,NSF,0,0
-lim_wh,CFC Lim Wen Hong,CFC,OPR,,1,NSF,0,0
-chen_yx,CFC Chen Yi Xin,CFC,OPR,,1,NSF,0,0
-ismail_h,CPL Ismail Bin Hassan,CPL,OPR,,1,NSF,0,0
-wong_km,CPL Wong Kah Ming,CPL,OPR,,1,NSF,1,0
-raj_a,LCP Rajesh S/O Anand,LCP,OPR,,1,NSF,0,0
-low_jh,PTE Low Jin Hui,PTE,OPR,,1,NSF,0,0
-toh_wl,CFC Toh Wei Lun,CFC,OPR,,2,NSF,0,0
-ang_zy,CFC Ang Zhen Yu,CFC,OPR,,2,NSF,0,0
-faiz_r,CPL Faiz Bin Roslan,CPL,OPR,,2,NSF,0,0
-seah_dk,CPL Seah De Kai,CPL,OPR,,2,NSF,1,0
-tan_yz,LCP Tan Yong Zhe,LCP,OPR,,2,NSF,0,0
-neo_js,PTE Neo Jun Sheng,PTE,OPR,,2,NSF,0,0
-pang_wx,CFC Pang Wei Xiang,CFC,OPR,,3,NSF,0,0
-loh_kj,CFC Loh Kang Jun,CFC,OPR,,3,NSF,0,0
-devan_m,CPL Devan S/O Murali,CPL,OPR,,3,NSF,0,0
-chia_hl,CPL Chia Hong Liang,CPL,OPR,,3,NSF,1,0
-yap_zk,LCP Yap Zhi Kai,LCP,OPR,,3,NSF,0,0
-heng_jw,PTE Heng Jia Wei,PTE,OPR,,3,NSF,0,0
+samuel_c,CPT Samuel Chuang,CPT,OC,,,REGULAR,1,0
+lixuan_w,CPT Wong Li Xuan,CPT,2IC,,,REGULAR,1,0
+jingyu_q,LTA Quek Jing Yu,LTA,PC,,1,REGULAR,1,0
+andy_l,3WO Andy Leow,3WO,SM,,,REGULAR,1,0
+jingheng_w,3WO Wong Jingheng,3WO,P2IC,,,REGULAR,1,0
+marcus_s,MSG Marcus Seah,MSG,P2IC,,,REGULAR,1,0
+carson_j,2SG Carson David Joshua,2SG,P2IC,,,REGULAR,1,0
+changrui_l,LTA Lai Changrui,LTA,PC,,3,NSF,0,0
+shuming_w,LTA Wong Shu Ming,LTA,PC,,2,NSF,0,0
+yaole_c,2SG Cheah Yao Le,2SG,PS,,1,NSF,0,0
+raybriel_w,2SG Raybriel Wong,2SG,PS,,2,NSF,0,0
+oliver_z,2SG Oliver Zhao,2SG,PS,,3,NSF,0,1
+freddy_n,2SG Ng Zheng Swee Freddy,2SG,DET_COMD,,1,NSF,0,0
+jeymus_t,2SG Jeymus Tan,2SG,DET_COMD,,2,NSF,0,0
+jeremy_l,2SG Jeremy Loke,2SG,DET_COMD,,2,NSF,0,0
+jowayne_n,2SG Ng Jo-Wayne,2SG,DET_COMD,,2,NSF,0,0
+ethan_l,2SG Ethan Loh,2SG,DET_COMD,,2,NSF,0,0
+xiangrui_x,2SG Xu Xiangrui,2SG,DET_COMD,,3,NSF,0,0
+branden_t,3SG Branden Tung,3SG,DET_COMD,,1,NSF,0,0
+christopher_d,3SG Christopher Orlando Deng,3SG,DET_COMD,,1,NSF,0,0
+kendrix_y,3SG Kendrix Yap,3SG,DET_COMD,,1,NSF,0,0
+qiyuan_l,3SG Loy Qiyuan,3SG,DET_COMD,,1,NSF,0,0
+weixuan_w,3SG Wong Wei Xuan,3SG,DET_COMD,,1,NSF,0,0
+stanley_l,3SG Stanley Lim,3SG,DET_COMD,S3,3,NSF,0,1
+kaden_t,3SG Kaden Teo,3SG,DET_COMD,,3,NSF,0,0
+ryan_t,3SG Ryan Tan,3SG,DET_COMD,,3,NSF,0,0
+marcus_soh,3SG Marcus Soh,3SG,DET_COMD,,3,NSF,0,0
+yizhou_t,CFC Toh Yi Zhou,CFC,OPR,,2,NSF,0,0
+joshua_t,CFC Joshua Tan,CFC,OPR,,2,NSF,0,0
+wenqi_y,CFC Yu Wenqi,CFC,OPR,,3,NSF,0,0
+yuheng_t,CPL Tan Yu Heng,CPL,OPR,,1,NSF,0,0
+chengze_a,CPL Ang Cheng Ze,CPL,OPR,,3,NSF,0,0
+junzhe_t,CPL Toh Jun Zhe,CPL,OPR,S4,3,NSF,0,0
+jovan_t,LCP Jovan Ting Jun Heng,LCP,OPR,,1,NSF,0,0
+jerriel_l,LCP Lim Wei Jerriel,LCP,OPR,,1,NSF,0,0
+samuel_l,LCP Samuel Lim,LCP,OPR,,2,NSF,0,0
