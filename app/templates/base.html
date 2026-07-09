@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1b4d33">
-  <title>{% block title %}Ops Portal{% endblock %}</title>
+  <meta name="theme-color" content="#ffffff">
+  <title>{% block title %}Delta Coy Admin{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
-    {# Neutral brand everywhere — no unit name, pre- or post-login (CLAUDE.md). #}
-    <span class="brand"><span class="mark">OP</span>Ops Portal</span>
+    {# Brand carries the unit name on every page, pre- and post-login (owner
+       decision 2026-07-09, overriding the CLAUDE.md no-unit-name-pre-login rule). #}
+    <span class="brand">Delta Coy Admin</span>
     {% if current_user.is_authenticated %}
       {# Grouped nav (UI refresh): five rights-gated dropdowns; the group
          holding the current page is highlighted via its blueprint. #}

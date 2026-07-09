@@ -1,15 +1,14 @@
 /* Mobile-first: most access is from phones. Desktop just gets more breathing room. */
 :root {
-  --ink: #1b1f24;
-  --muted: #66707c;
-  --faint: #99a1ab;
-  --line: #e2e6e1;
-  --paper: #f1f3f0;
+  --ink: #1c2024;
+  --muted: #616b78;
+  --faint: #98a1ac;
+  --line: #e5e7eb;
+  --paper: #f6f7f9;
   --card: #ffffff;
-  --green-900: #10331f;
-  --green-800: #1b4d33;
-  --green-700: #226442;
-  --green-100: #e7f2ec;
+  --accent: #4f46e5;        /* indigo — links, primary buttons, active states */
+  --accent-strong: #4338ca; /* hover / pressed / focus border */
+  --accent-tint: #eef0fb;   /* soft indigo wash for subtle backgrounds */
   --amber-bg: #fdf3e0;
   --amber-ink: #8a5a00;
   --danger: #b3261e;
@@ -45,8 +44,9 @@ body {
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
   padding: 0.7rem 1.1rem;
-  background: linear-gradient(180deg, var(--green-800), var(--green-900));
-  color: #fff;
+  background: var(--card);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
 }
 
 .brand {
@@ -60,19 +60,6 @@ body {
   letter-spacing: 0.04em;
 }
 
-.brand .mark {
-  display: inline-grid;
-  place-items: center;
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
 .topnav {
   display: flex;
   align-items: center;
@@ -82,7 +69,7 @@ body {
 
 .topnav a,
 .topnav .linklike {
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--muted);
   text-decoration: none;
   font-family: var(--display);
   font-size: 1rem;
@@ -95,8 +82,8 @@ body {
 
 .topnav a:hover,
 .topnav .linklike:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--accent-tint);
+  color: var(--ink);
 }
 
 .inline-form { display: inline; margin: 0; }
@@ -108,7 +95,7 @@ body {
 .navgroup summary {
   list-style: none;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--muted);
   font-family: var(--display);
   font-size: 1rem;
   text-transform: uppercase;
@@ -129,14 +116,14 @@ body {
 
 .navgroup summary:hover,
 .navgroup[open] summary {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--accent-tint);
+  color: var(--ink);
 }
 
 .navgroup[data-here] summary,
 .topnav a.here {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 
 .navmenu {
@@ -169,8 +156,8 @@ body {
 
 .navmenu a:hover,
 .navmenu .linklike:hover {
-  background: var(--green-100);
-  color: var(--green-800);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 
 /* The last two groups open near the right edge on phones: flip the panel. */
@@ -238,8 +225,8 @@ h2 {
   align-items: center;
   padding: 0.08rem 0.65rem;
   border-radius: 999px;
-  background: var(--green-100);
-  color: var(--green-800);
+  background: var(--accent-tint);
+  color: var(--accent);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -273,7 +260,7 @@ h2 {
   border-radius: 999px;
   background: var(--card);
   border: 1px solid var(--line);
-  color: var(--green-800);
+  color: var(--accent);
   font-size: 0.88rem;
   font-weight: 600;
   text-decoration: none;
@@ -281,12 +268,12 @@ h2 {
 }
 
 .pills a.active {
-  background: var(--green-800);
-  border-color: var(--green-800);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 
-.pills a:hover:not(.active) { background: var(--green-100); }
+.pills a:hover:not(.active) { background: var(--accent-tint); }
 
 /* ---------- Cards & lists ---------- */
 
@@ -348,7 +335,7 @@ h2 {
 .toollist li:first-child { border-top: none; padding-top: 0.1rem; }
 .toollist li:last-child { padding-bottom: 0.1rem; }
 
-.toollist a { color: var(--green-800); font-weight: 600; text-decoration: none; }
+.toollist a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .toollist a:hover { text-decoration: underline; }
 
 /* ---------- Forms ---------- */
@@ -383,8 +370,8 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  border-color: var(--green-700);
-  box-shadow: 0 0 0 3px rgba(34, 100, 66, 0.16);
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .check {
@@ -399,7 +386,7 @@ textarea:focus-visible {
 input[type="checkbox"] {
   width: 1.05rem;
   height: 1.05rem;
-  accent-color: var(--green-800);
+  accent-color: var(--accent);
 }
 
 button[type="submit"]:not(.linklike),
@@ -411,7 +398,7 @@ button[type="submit"]:not(.linklike),
   font-weight: 600;
   font-family: inherit;
   color: #fff;
-  background: var(--green-800);
+  background: var(--accent);
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -422,11 +409,11 @@ button[type="submit"]:not(.linklike),
 }
 
 button[type="submit"]:not(.linklike):hover,
-.btn:hover { background: var(--green-700); }
+.btn:hover { background: var(--accent-strong); }
 
 .btn.secondary {
   background: #fff;
-  color: var(--green-800);
+  color: var(--accent);
   border: 1px solid var(--line);
 }
 
@@ -460,7 +447,7 @@ table.list td {
 }
 
 table.list a {
-  color: var(--green-800);
+  color: var(--accent);
   font-weight: 600;
   text-decoration: none;
 }
@@ -479,7 +466,7 @@ table.list a:hover { text-decoration: underline; }
 }
 
 .badge.pending { background: var(--amber-bg); color: var(--amber-ink); }
-.badge.approved { background: var(--green-100); color: var(--green-800); }
+.badge.approved { background: var(--accent-tint); color: var(--accent); }
 .badge.rejected { background: var(--danger-bg); color: var(--danger); }
 .badge.cancelled { background: #eef0f2; color: var(--muted); }
 
@@ -496,7 +483,7 @@ table.list a:hover { text-decoration: underline; }
 }
 
 .flash-error { background: var(--danger-bg); color: var(--danger); border-left-color: var(--danger); }
-.flash-success { background: var(--green-100); color: var(--green-800); border-left-color: var(--green-800); }
+.flash-success { background: var(--accent-tint); color: var(--accent); border-left-color: var(--accent); }
 .flash-warning { background: var(--amber-bg); color: var(--amber-ink); border-left-color: var(--amber-ink); }
 
 .error { color: var(--danger); font-size: 0.88rem; margin: 0.25rem 0 0; }
@@ -545,7 +532,7 @@ table.list a:hover { text-decoration: underline; }
 .month-cell .day-num {
   font-size: 0.78rem;
   font-weight: 650;
-  color: var(--green-800);
+  color: var(--accent);
   text-decoration: none;
 }
 
