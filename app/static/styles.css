@@ -443,6 +443,36 @@ input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
+/* ---------- Participant picker (UI-11) ---------- */
+
+.participants { border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.9rem; }
+
+.participants legend { padding: 0 0.4rem; font-weight: 600; color: var(--muted); }
+
+/* Grouped dropdowns follow the .navgroup <details> idiom: hidden marker, a
+   chevron affordance, and an accent-tint header when open. */
+.picker { border: 1px solid var(--line); border-radius: 8px; margin: 0.35rem 0; }
+
+.picker summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+  list-style: none;
+  user-select: none;
+}
+
+.picker summary::-webkit-details-marker { display: none; }
+
+.picker summary [data-count] { margin-left: auto; font-size: 0.85rem; }
+
+.picker summary::after { content: " ▾"; font-size: 0.7em; opacity: 0.7; }
+
+.picker[open] summary { background: var(--accent-tint); border-radius: 8px 8px 0 0; }
+
+.picker-body { list-style: none; margin: 0; padding: 0.3rem 0.6rem 0.5rem 1.4rem; }
+
 button[type="submit"]:not(.linklike),
 .btn {
   display: inline-block;

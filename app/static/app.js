@@ -95,6 +95,41 @@ function initEventForm() {
     allDay.addEventListener("change", syncAllDay);
     syncAllDay();
   }
+
+  // Participant picker (UI-11): a person appears in both their service and
+  // platoon dropdown, so keep same-value people checkboxes in sync; show a live
+  // "n selected" count per group; and stop a summary checkbox's click from also
+  // toggling its <details>. All pure enhancement — the server dedupes duplicate
+  // ids, so a no-JS user ticking the same person in two groups still saves one
+  // row.
+  const picker = document.querySelector("form[data-label-calendars]");
+  if (picker) {
+    const peopleBoxes = [...picker.querySelectorAll('input[name="people"]')];
+
+    const refreshCount = (details) => {
+      const badge = details.querySelector("summary [data-count]");
+      if (!badge) return;
+      const n = details.querySelectorAll('.picker-body input[name="people"]:checked').length;
+      badge.textContent = n ? n + " selected" : "";
+    };
+    const refreshAll = () =>
+      picker.querySelectorAll("details.picker").forEach(refreshCount);
+
+    peopleBoxes.forEach((box) => {
+      box.addEventListener("change", () => {
+        peopleBoxes.forEach((other) => {
+          if (other !== box && other.value === box.value) other.checked = box.checked;
+        });
+        refreshAll();
+      });
+    });
+
+    picker.querySelectorAll('details.picker > summary > input[type="checkbox"]').forEach((box) => {
+      box.addEventListener("click", (event) => event.stopPropagation());
+    });
+
+    refreshAll();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", initEventForm);

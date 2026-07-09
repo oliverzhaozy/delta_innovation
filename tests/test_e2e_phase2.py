@@ -1,6 +1,6 @@
 """The Phase 2 promise, exercised through HTTP only — the P2.11 sibling of
-test_e2e_core_loop.py: an ARCTIC event with category + except + also-include
-participants -> a member's overlapping leave surfaces the clash to both PC
+test_e2e_core_loop.py: an ARCTIC event with a category + a person also-include
+(UI-11 picker) -> a member's overlapping leave surfaces the clash to both PC
 and OC (but never to the requester, who can't see ARCTIC) -> OC approves ->
 S3 records an early return -> ledger, balances, and the away board all agree.
 """
@@ -21,7 +21,9 @@ def test_phase2_end_to_end(app, client, make_person):
     requester = make_person(
         username="nh_requester", display_name="Nighthawk Requester", platoon=2,
     )
-    x = make_person(username="nh_x", display_name="Nighthawk Excepted", platoon=2)
+    # X sits in platoon 3, so the "Platoon 2 plus Y" event never tags them — the
+    # resolved list must exclude X and include Y (checked in step 7).
+    x = make_person(username="nh_x", display_name="Nighthawk Untagged", platoon=3)
     y = make_person(username="nh_y", display_name="Nighthawk Included", platoon=1)
     pc2 = make_person(
         username="nh_pc2", display_name="2LT Nighthawk PC2",
@@ -38,7 +40,6 @@ def test_phase2_end_to_end(app, client, make_person):
     )
     with app.app_context():
         requester_id = db.session.query(Person.id).filter_by(username="nh_requester").scalar()
-        x_id = db.session.query(Person.id).filter_by(username="nh_x").scalar()
         y_id = db.session.query(Person.id).filter_by(username="nh_y").scalar()
 
     # 1. S3 keys REQUESTER's opening OFF balance: 4 days, through the UI.
@@ -51,8 +52,8 @@ def test_phase2_end_to_end(app, client, make_person):
     client.post("/logout")
 
     # 2. PC2 (command team) creates an ARCTIC event spanning the 3 working
-    # days: "Platoon 2 except X plus Y" (category include, person except,
-    # person also-include — P2.5's picker).
+    # days: "Platoon 2 plus Y" (a category plus a person also-include — the
+    # UI-11 picker). X is in platoon 3, so they're simply not tagged.
     login(client, pc2)
     resp = client.post(
         "/calendar/new",
@@ -63,8 +64,7 @@ def test_phase2_end_to_end(app, client, make_person):
             "end_dt": "2026-09-03T17:00",
             "notes": "",
             "categories": ["PLATOON_2"],
-            "include_people": [str(y_id)],
-            "except_people": [str(x_id)],
+            "people": [str(y_id)],
         },
         follow_redirects=True,
     )
@@ -142,9 +142,10 @@ def test_phase2_end_to_end(app, client, make_person):
     client.post("/logout")
 
     # 7. Sanity: the resolved participants list (rank-prefixed rows, distinct
-    # from the plain include/except chips above them) excludes X, includes Y.
+    # from the plain include chips above them) excludes the untagged X (platoon
+    # 3), includes the carved-in Y.
     login(client, pc2)
     detail_page = client.get(f"/calendar/{event_id}").data
-    assert b"PTE Nighthawk Excepted" not in detail_page
+    assert b"PTE Nighthawk Untagged" not in detail_page
     assert b"PTE Nighthawk Included" in detail_page
     client.post("/logout")

@@ -18,32 +18,47 @@
   <p>{{ form.label.label }}{{ form.label() }}</p>
   <p>{{ form.notes.label }}{{ form.notes() }}</p>
 
-  <p>
-    {{ form.categories.label }}
-    <ul style="list-style:none;margin:0;padding:0">
-      {% for subfield in form.categories %}
-      <li class="check">{{ subfield() }}{{ subfield.label }}</li>
-      {% endfor %}
-    </ul>
-  </p>
+  {# Participant picker (UI-11): all inputs hand-rendered. Category checkboxes
+     (name="categories") carry LIVE group values that re-resolve against the
+     roster; person checkboxes (name="people") carry include rows. A person
+     legitimately appears in BOTH their service and platoon group — the server
+     dedupes, and app.js keeps the duplicate checkboxes in sync. #}
+  <fieldset class="participants">
+    <legend>{{ form.categories.label.text }}</legend>
 
-  <p>
-    {{ form.include_people.label }}
-    <ul style="list-style:none;margin:0;padding:0">
-      {% for subfield in form.include_people %}
-      <li class="check">{{ subfield() }}{{ subfield.label }}</li>
-      {% endfor %}
-    </ul>
-  </p>
+    <p class="check">
+      <input type="checkbox" name="categories" value="ALL" id="cat_all"
+        {% if "ALL" in (form.categories.data or []) %}checked{% endif %}>
+      <label for="cat_all">All (everyone)</label>
+    </p>
 
-  <p>
-    {{ form.except_people.label }}
-    <ul style="list-style:none;margin:0;padding:0">
-      {% for subfield in form.except_people %}
-      <li class="check">{{ subfield() }}{{ subfield.label }}</li>
-      {% endfor %}
-    </ul>
-  </p>
+    {% for category, members in picker_groups %}
+    <details class="picker">
+      <summary>
+        <input type="checkbox" name="categories" value="{{ category.value }}"
+          {% if category.value in (form.categories.data or []) %}checked{% endif %}>
+        <span>{{ category.label }}</span>
+        <span class="muted" data-count></span>
+      </summary>
+      <ul class="picker-body">
+        {% for p in members %}
+        <li class="check"><input type="checkbox" name="people" value="{{ p.id }}"
+          {% if p.id in (form.people.data or []) %}checked{% endif %}> {{ p.rank.value }} {{ p.display_name }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endfor %}
+
+    <p class="check">
+      <input type="checkbox" name="categories" value="COMMAND_TEAM" id="cat_command"
+        {% if "COMMAND_TEAM" in (form.categories.data or []) %}checked{% endif %}>
+      <label for="cat_command">Command team</label>
+    </p>
+
+    {% if legacy_excludes %}
+    <p class="muted" style="font-size:0.8rem">This event has old &quot;except&quot; exclusions ({{ legacy_excludes | map(attribute="display_name") | join(", ") }}); saving will drop them.</p>
+    {% endif %}
+  </fieldset>
 
   {% for field in form if field.errors %}
     {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}

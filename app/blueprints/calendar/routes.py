@@ -28,33 +28,53 @@ def _list_endpoint(calendar):
 
 def _set_people_choices(form):
     # Request-time roster, not class-level — who's active/what platoon
-    # changes day to day, unlike the fixed category choices.
-    choices = [(p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()]
-    form.include_people.choices = choices
-    form.except_people.choices = choices
+    # changes day to day, unlike the fixed category choices. Only sets the
+    # `people` choices so SelectMultipleField.pre_validate accepts the ids the
+    # grouped dropdowns render (an inactive/unknown id fails as a clean field
+    # error rather than reaching the DB).
+    form.people.choices = [
+        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
+    ]
 
 
 def _participant_rows_from(form):
     # Wholesale replacement, not a diff — the delete-orphan cascade on
     # Event.participants makes `event.participants = [...]` safe (P2.2).
-    rows = [EventParticipant(category=ParticipantCategory(v), include=True) for v in form.categories.data]
-    # Dedupe person ids with set(): the checkbox UI can't produce duplicates,
-    # but a hand-built POST can, and two rows for one person would violate
-    # uq_participant_event_person (a 500 instead of a clean save).
-    rows += [EventParticipant(person_id=pid, include=True) for pid in set(form.include_people.data)]
-    rows += [EventParticipant(person_id=pid, include=False) for pid in set(form.except_people.data)]
+    #
+    # "ALL" is a form-level pseudo-choice: expand it to NSF+REGULAR (the
+    # resolver's whole-company idiom), then dedupe the category VALUES into a
+    # set before building rows — otherwise ALL+NSF would emit two NSF rows and
+    # violate uq_participant_event_category (a 500). The set() also closes a
+    # crafted `categories=NSF&categories=NSF` POST.
+    values = set(form.categories.data)
+    if "ALL" in values:
+        values.discard("ALL")
+        values.update({ParticipantCategory.NSF.value, ParticipantCategory.REGULAR.value})
+    rows = [EventParticipant(category=ParticipantCategory(v), include=True) for v in values]
+    # Dedupe person ids with set() too: the checkbox UI renders a person in
+    # both their service and platoon group, so a no-JS user can legitimately
+    # tick the same person twice — two rows would violate
+    # uq_participant_event_person. Only include rows now (except was cut, UI-11).
+    rows += [EventParticipant(person_id=pid, include=True) for pid in set(form.people.data)]
     return rows
 
 
 def _populate_participant_fields(form, event):
-    form.categories.data = [
+    # Collapse the stored NSF+REGULAR pair back into the "ALL" pseudo-choice so
+    # the round-trip is stable: {NSF,REGULAR} ⊆ stored shows ALL checked with
+    # NSF/REGULAR themselves unchecked; anything else shows as-is.
+    stored = {
         r.category.value for r in event.participants if r.category is not None and r.include
-    ]
-    form.include_people.data = [
+    }
+    selected = []
+    nsf_regular = {ParticipantCategory.NSF.value, ParticipantCategory.REGULAR.value}
+    if nsf_regular <= stored:
+        selected.append("ALL")
+        stored = stored - nsf_regular
+    selected += [c.value for c in ParticipantCategory if c.value in stored]
+    form.categories.data = selected
+    form.people.data = [
         r.person_id for r in event.participants if r.person_id is not None and r.include
-    ]
-    form.except_people.data = [
-        r.person_id for r in event.participants if r.person_id is not None and not r.include
     ]
 
 
@@ -163,7 +183,14 @@ def new():
         db.session.commit()
         flash("Event created.", "success")
         return redirect(url_for("calendar.detail", event_id=event.id))
-    return render_template("calendar/form.html", form=form, event=None, label_calendars=_label_calendars())
+    return render_template(
+        "calendar/form.html",
+        form=form,
+        event=None,
+        label_calendars=_label_calendars(),
+        picker_groups=event_service.picker_groups(),
+        legacy_excludes=[],
+    )
 
 
 @bp.route("/<int:event_id>/edit", methods=["GET", "POST"])
@@ -188,11 +215,30 @@ def edit(event_id):
         event.end_dt = end_dt
         event.label = form.label.data or None
         event.notes = (form.notes.data or "").strip() or None
+        # Flush the delete-orphan of the old rows BEFORE inserting the new ones:
+        # a category that survives the edit (the ALL round-trip, or an
+        # unchanged group) would otherwise insert its new row while the old one
+        # still exists and trip uq_participant_event_category. Clearing then
+        # flushing forces the DELETEs ahead of the INSERTs.
+        event.participants.clear()
+        db.session.flush()
         event.participants = _participant_rows_from(form)
         db.session.commit()
         flash("Event updated.", "success")
         return redirect(url_for("calendar.detail", event_id=event.id))
-    return render_template("calendar/form.html", form=form, event=event, label_calendars=_label_calendars())
+    return render_template(
+        "calendar/form.html",
+        form=form,
+        event=event,
+        label_calendars=_label_calendars(),
+        picker_groups=event_service.picker_groups(),
+        # Pre-UI-11 events may still carry person exclude rows; surface them so
+        # the editor knows saving will drop them (the picker no longer emits
+        # exclude rows). This never shows for events created under UI-11.
+        legacy_excludes=[
+            r.person for r in event.participants if r.person_id is not None and not r.include
+        ],
+    )
 
 
 @bp.route("/<int:event_id>/delete", methods=["POST"])

@@ -180,6 +180,40 @@ green:
 - **Toolbar/nav** — toolbar renders `Today`, `‹`/`›`, and (editor) "+ New event";
   `month-grid` and `chip cal-off` assertions unchanged.
 
+## UI-11 — participant picker
+
+Owner-approved 2026-07-09. The event form's participant picker is redesigned so tagging a
+group is one glance, not a flat wall of checkboxes.
+
+**Decisions locked with the owner:**
+
+1. **"All (everyone)"** joins the categories as a plain checkbox. It is a *form-level
+   pseudo-choice*, never a stored category: on save it expands to NSF + REGULAR category rows
+   (the resolver's whole-company idiom — `app/domain/participants.py` resolution note 4), and
+   on edit it collapses back ({NSF,REGULAR} ⊆ stored → ALL checked, NSF/REGULAR unchecked). No
+   model, migration, or resolver change.
+2. **NSF / Regulars / Platoon 1 / Platoon 2 / Platoon 3** each become a native
+   `<details class="picker">` dropdown listing that group's **active** members as person
+   checkboxes, ordered by appointment then rank (`parade.parade_sort_key`, the owner's
+   never-alphabetize rule) via the new `event_service.picker_groups()`.
+3. **Header checkboxes store LIVE category rows**; individual names store person include rows.
+   A person legitimately appears in both their service and platoon group; the route dedupes
+   person ids (and the post-expansion category **values**) into sets before building rows, so
+   ALL+NSF or a double-ticked name can never violate `uq_participant_event_category` /
+   `uq_participant_event_person` (a 500). `SelectMultipleField.pre_validate` rejects an id
+   outside the active roster as a clean field error.
+4. **Command team** stays a plain checkbox (it has no roster dropdown of its own).
+5. **"Also include" / "Except" are removed.** Person *exclude* rows are no longer emitted by
+   the picker. A pre-UI-11 event that still carries exclude rows shows a muted warning on edit
+   ("This event has old \"except\" exclusions (names); saving will drop them") and drops them
+   on the next save. The schema and pure resolver still support exclude rows; only this UI stops
+   creating them.
+
+**Progressive enhancement.** All picker inputs are hand-rendered; `app.js` adds three sprinkles
+— sync same-person checkboxes across the service/platoon groups, a live "n selected" count per
+dropdown, and a summary-checkbox click guard — but the server dedupe makes the no-JS path
+correct on its own.
+
 ## Cut (deliberately)
 
 - No new stored `Calendar` value or migration — the third layer stays derived.

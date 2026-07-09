@@ -1,8 +1,8 @@
 """DB-aware glue joining the roster onto the pure P2.3 resolver."""
 from datetime import datetime, time, timedelta
 
-from app.domain import clash, participants
-from app.domain.types import RANK_ORDER, Calendar
+from app.domain import clash, parade, participants
+from app.domain.types import RANK_ORDER, Calendar, ParticipantCategory
 from app.extensions import db
 from app.models import Event, Person
 
@@ -25,6 +25,35 @@ def active_roster():
         people,
         key=lambda p: (p.platoon if p.platoon is not None else -1, -RANK_ORDER[p.rank]),
     )
+
+
+_PICKER_CATEGORIES = (
+    ParticipantCategory.NSF,
+    ParticipantCategory.REGULAR,
+    ParticipantCategory.PLATOON_1,
+    ParticipantCategory.PLATOON_2,
+    ParticipantCategory.PLATOON_3,
+)
+
+
+def picker_groups():
+    """The five grouped picker dropdowns (NSF, REGULAR, PLATOON_1..3) as
+    `[(category, [Person, ...]), ...]`. Reuses the two pure functions rather
+    than re-deriving membership or order here: `participants.in_category` for
+    who's in the group and `parade.parade_sort_key` for the display order —
+    appointment then rank, never alphabetical (the owner's parade rule).
+    """
+    roster = active_roster()
+    return [
+        (
+            category,
+            sorted(
+                (p for p in roster if participants.in_category(p, category)),
+                key=parade.parade_sort_key,
+            ),
+        )
+        for category in _PICKER_CATEGORIES
+    ]
 
 
 def resolve_participants(event) -> list:

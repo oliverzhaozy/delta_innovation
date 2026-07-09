@@ -8,7 +8,6 @@ from wtforms import (
     TextAreaField,
 )
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
-from wtforms.widgets import CheckboxInput, ListWidget
 
 from app.domain.events import is_valid_label
 from app.domain.types import Calendar, ParticipantCategory
@@ -31,27 +30,18 @@ class EventForm(FlaskForm):
     notes = TextAreaField("Notes (optional)", validators=[Optional(), Length(max=500)])
     # Include-categories only — category *exclude* is a TECH_PLAN cut for this
     # picker (the schema/pure resolver still support it): "everyone except
-    # NSF" is spelled by tagging REGULAR instead.
+    # NSF" is spelled by tagging REGULAR instead. "ALL" is a form-level
+    # pseudo-choice the route expands to NSF+REGULAR on save (UI-11); it is not
+    # a stored ParticipantCategory. The dropdowns/checkboxes are hand-rendered
+    # in the template, so no widget/option_widget here.
     categories = SelectMultipleField(
-        "Categories",
-        choices=[(c.value, c.label) for c in ParticipantCategory],
-        widget=ListWidget(prefix_label=False),
-        option_widget=CheckboxInput(),
+        "Participants",
+        choices=[(c.value, c.label) for c in ParticipantCategory] + [("ALL", "All (everyone)")],
     )
     # Choices are the active roster at request time (set in routes.py, not
-    # here) — who's active/what platoon they're in changes day to day.
-    include_people = SelectMultipleField(
-        "Also include",
-        coerce=int,
-        widget=ListWidget(prefix_label=False),
-        option_widget=CheckboxInput(),
-    )
-    except_people = SelectMultipleField(
-        "Except",
-        coerce=int,
-        widget=ListWidget(prefix_label=False),
-        option_widget=CheckboxInput(),
-    )
+    # here) — who's active/what platoon they're in changes day to day. Rendered
+    # by hand across the grouped dropdowns; coerce=int so ids match Person.id.
+    people = SelectMultipleField("People", coerce=int)
 
     def validate_end_dt(self, field):
         # Mirrors the model's ck_event_dt_order — catch it in the form too so
@@ -77,10 +67,3 @@ class EventForm(FlaskForm):
             return  # a bad calendar is reported by the calendar field's own check
         if not is_valid_label(calendar, field.data):
             raise ValidationError("That label isn't available for this calendar.")
-
-    def validate_except_people(self, field):
-        # Server-side only (no JS): a person can't be both carved in and
-        # carved out of the same event — the model's unique-per-person
-        # constraint would catch this too, but a 500 isn't the UX we want.
-        if set(self.include_people.data or []) & set(field.data or []):
-            raise ValidationError("A person can't be both included and excepted.")
