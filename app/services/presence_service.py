@@ -16,7 +16,7 @@ from typing import NamedTuple
 
 from app.domain import parade, presence
 from app.domain.dates import iter_days
-from app.domain.types import DayPart, DutyState, RequestStatus
+from app.domain.types import DayPart, DutyState, RequestStatus, Service
 from app.extensions import db
 from app.models import DirectAbsence, DutyAssignment, LeaveRequest, Person, StatusEntry
 
@@ -105,9 +105,10 @@ def absences_between(start_date, end_date):
 
     In-camp statuses are EXCLUDED — in camp is not away; they surface only in
     parade documents (via `presence_inputs`). All day-parts appear (the board
-    shows a PM as a partial); the away-counting surfaces (month view, leave
-    panel) dedupe on person_id and so now naturally include MC'd / direct-absent
-    people.
+    shows a PM as a partial); the away-counting surfaces (the leave panel)
+    dedupe on person_id and so naturally include MC'd / direct-absent people.
+    The home month grid does NOT read this — it reads the leave-only
+    `nsf_leave_between` layer, so MC/direct never appear there.
     """
     leaves, directs, statuses = fetch_absence_rows(start_date, end_date)
     by_day = {d: [] for d in iter_days(start_date, end_date)}
@@ -127,6 +128,22 @@ def absences_between(start_date, end_date):
     for rows in by_day.values():
         rows.sort(key=lambda a: (a.person.platoon or 0, a.person.display_name))
     return by_day
+
+
+def nsf_leave_between(start_date, end_date):
+    """The DELTA NSF OFF/LEAVE calendar layer: per-day buckets of NSF personnel
+    on APPROVED leave (OFF/OIL/LL/OL) over [start_date, end_date].
+
+    A filtered VIEW of `absences_between`, never a second query — same single
+    derivation. Keeps only leave-sourced rows (source == "leave" is exactly the
+    APPROVED LeaveRequest rows; regulars' direct absences and MC/course statuses
+    are other layers) whose person is NSF. Each day's list stays in the parent's
+    platoon → name order.
+    """
+    return {
+        day: [r for r in rows if r.source == "leave" and r.person.service is Service.NSF]
+        for day, rows in absences_between(start_date, end_date).items()
+    }
 
 
 def absences_on(day):

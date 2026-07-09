@@ -23,6 +23,23 @@
   </div>
 </section>
 
+{# Cosmetic client-side layer toggles (JS enhances; without JS all layers show).
+   ARCTIC pill only for those who may see it — its chips are omitted server-side
+   for everyone else, so the toggle is never the security boundary. #}
+<div class="cal-filters" role="group" aria-label="Toggle calendars">
+  <button type="button" class="cal-toggle cal-tp" data-cal-toggle="tp" aria-pressed="true">
+    <span class="cal-dot"></span>TP
+  </button>
+  {% if show_arctic %}
+  <button type="button" class="cal-toggle cal-arctic" data-cal-toggle="arctic" aria-pressed="true">
+    <span class="cal-dot"></span>ARCTIC FOE
+  </button>
+  {% endif %}
+  <button type="button" class="cal-toggle cal-off" data-cal-toggle="off" aria-pressed="true">
+    <span class="cal-dot"></span>NSF OFF/LEAVE
+  </button>
+</div>
+
 <section class="card">
   <div class="month-grid-wrap">
     <div class="month-grid">
@@ -34,11 +51,15 @@
         <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}">
           {% if cell.in_month %}
           <a class="day-num" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
-          {% if cell.away %}<span class="chip plain">{{ cell.away }} away</span>{% endif %}
           {% for event in cell.events %}
-          {# TP vs ARCTIC distinguished with the existing chip/plain-chip variants, not new CSS. #}
-          <a class="chip{% if event.calendar.value == 'ARCTIC' %} plain{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
+          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
           {% endfor %}
+          {% for row in cell.off_leave[:off_leave_limit] %}
+          <span class="chip cal-off">{{ row.person.rank.value }} {{ row.person.display_name }} {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span>
+          {% endfor %}
+          {% if cell.off_leave | length > off_leave_limit %}
+          <a class="chip cal-off more" href="{{ url_for('parade.away', date=cell.date.isoformat()) }}">+{{ cell.off_leave | length - off_leave_limit }} more</a>
+          {% endif %}
           {% else %}
           <span class="day-num muted">{{ cell.date.day }}</span>
           {% endif %}

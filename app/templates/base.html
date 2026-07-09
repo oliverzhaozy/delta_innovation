@@ -70,9 +70,13 @@
         <details class="navgroup" {% if section == "calendar" %}data-here{% endif %}>
           <summary>Calendar</summary>
           <div class="navmenu">
-            <a href="{{ url_for('calendar.month') }}">TP month</a>
+            <a href="{{ url_for('calendar.month') }}">Month view</a>
+            <a href="{{ url_for('calendar.tp_list') }}">TP events</a>
             {% if policy.can_view_arctic(current_user) %}
               <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
+            {% endif %}
+            {% if policy.can_edit_events(current_user) %}
+              <a href="{{ url_for('calendar.new') }}">New event</a>
             {% endif %}
           </div>
         </details>

@@ -9,6 +9,14 @@
   --accent: #4f46e5;        /* indigo — links, primary buttons, active states */
   --accent-strong: #4338ca; /* hover / pressed / focus border */
   --accent-tint: #eef0fb;   /* soft indigo wash for subtle backgrounds */
+  /* Per-calendar identity colours (chips + toggle pills). Cool, distinct hues,
+     each reinforced by a text label and a leading dot for non-colour cueing. */
+  --cal-tp: #4f46e5;        /* TP — indigo */
+  --cal-tp-tint: #eef0fb;
+  --cal-arctic: #0d9488;    /* ARCTIC FOE — teal */
+  --cal-arctic-tint: #d7f0ec;
+  --cal-off: #7c3aed;       /* NSF OFF/LEAVE — violet */
+  --cal-off-tint: #f0e9fd;
   --amber-bg: #fdf3e0;
   --amber-ink: #8a5a00;
   --danger: #b3261e;
@@ -235,6 +243,22 @@ h2 {
 .chip.plain {
   background: #eef0f2;
   color: var(--muted);
+}
+
+/* Per-calendar chips — tinted background + calendar colour, with a leading dot
+   so the calendar is legible without relying on colour alone. */
+.chip.cal-tp { background: var(--cal-tp-tint); color: var(--cal-tp); }
+.chip.cal-arctic { background: var(--cal-arctic-tint); color: var(--cal-arctic); }
+.chip.cal-off { background: var(--cal-off-tint); color: var(--cal-off); }
+
+.chip[class*="cal-"]::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+  margin-right: 0.3rem;
 }
 
 .tag {
@@ -488,6 +512,60 @@ table.list a:hover { text-decoration: underline; }
 .flash-warning { background: var(--amber-bg); color: var(--amber-ink); border-left-color: var(--amber-ink); }
 
 .error { color: var(--danger); font-size: 0.88rem; margin: 0.25rem 0 0; }
+
+/* ---------- Calendar layer toggles ---------- */
+
+.cal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.1rem;
+}
+
+.cal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.cal-toggle .cal-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.cal-toggle.cal-tp { color: var(--cal-tp); }
+.cal-toggle.cal-tp .cal-dot { background: var(--cal-tp); }
+.cal-toggle.cal-arctic { color: var(--cal-arctic); }
+.cal-toggle.cal-arctic .cal-dot { background: var(--cal-arctic); }
+.cal-toggle.cal-off { color: var(--cal-off); }
+.cal-toggle.cal-off .cal-dot { background: var(--cal-off); }
+
+.cal-toggle[aria-pressed="true"] { background: currentColor; }
+/* Keep the label/dot readable on the filled (active) pill. */
+.cal-toggle[aria-pressed="true"] { color: #fff; }
+.cal-toggle.cal-tp[aria-pressed="true"] { background: var(--cal-tp); }
+.cal-toggle.cal-arctic[aria-pressed="true"] { background: var(--cal-arctic); }
+.cal-toggle.cal-off[aria-pressed="true"] { background: var(--cal-off); }
+.cal-toggle[aria-pressed="true"] .cal-dot { background: #fff; }
+
+.cal-toggle[aria-pressed="false"] { opacity: 0.55; }
+
+/* Off layers are hidden cosmetically; the chips are still in the DOM (except
+   ARCTIC, which the server omits for non-command users). */
+.month-grid.hide-cal-tp .chip.cal-tp,
+.month-grid.hide-cal-arctic .chip.cal-arctic,
+.month-grid.hide-cal-off .chip.cal-off { display: none; }
 
 /* ---------- Month calendar (Phase 2) ---------- */
 

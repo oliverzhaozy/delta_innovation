@@ -74,9 +74,9 @@ def test_nav_highlights_the_current_section(app, client, make_person):
     assert match and match.group(1) == "Duty"
 
 
-def test_dashboard_links_resolve_for_every_role(app, client, make_person):
-    # Rendering IS the test: a broken url_for throws at render. Cover the
-    # widest role (admin sees every card) and the narrowest (a plain Opr).
+def test_home_calendar_renders_for_every_role(app, client, make_person):
+    # Home is the calendar. Rendering IS the test: a broken url_for throws at
+    # render. Cover the widest role (admin) and the narrowest (a plain Opr).
     make_person(username="admin", company_role="S3", is_admin=True)
     make_viewer(make_person, username="opr_only")
 
@@ -84,22 +84,19 @@ def test_dashboard_links_resolve_for_every_role(app, client, make_person):
         client.post("/logout")
         login(client, username)
         html = client.get("/").get_data(as_text=True)
-        assert html.count("</section>") >= 3  # grouped cards, not one flat list
-        # The stale placeholder the refresh removed must never come back.
+        assert "month-grid" in html  # the calendar overlay, not the old tiles
         assert "Phase 4" not in html
-        assert 'class="tag"' not in html  # no "Live"/"Phase N" tags anymore
 
-    # The admin's dashboard reaches the staff-only surfaces.
+    # Staff-only nav surfaces reach the admin (nav is on every page)...
     client.post("/logout")
     login(client, "admin")
     html = client.get("/").get_data(as_text=True)
-    assert "People admin" in html
-    assert "NSF meal counter" in html
-    assert "TU manning" in html
+    for visible in (">People<", "NSF meals", "Manning"):
+        assert visible in html, visible
 
     # ...which a plain Opr never sees.
     client.post("/logout")
     login(client, "opr_only")
     opr_html = client.get("/").get_data(as_text=True)
-    for hidden in ("People admin", "NSF meal counter", "TU manning", "OFF/OIL ledger"):
+    for hidden in (">People<", "NSF meals", "Manning", "OFF/OIL ledger"):
         assert hidden not in opr_html, hidden

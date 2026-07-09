@@ -219,9 +219,11 @@ def test_away_board_page_shows_mc_and_direct_absence(app, client, make_person):
     assert b"PTE Brief Guy" not in resp.data  # in-camp briefing excluded
 
 
-# --- consumer: month view away chip (HTTP) -------------------------------
+# --- consumer: month view NSF OFF/LEAVE chip (HTTP) ----------------------
 
-def test_month_view_counts_mc_but_not_in_camp_briefing(app, client, make_person):
+def test_month_view_shows_no_off_leave_chip_for_mc_or_briefing(app, client, make_person):
+    # The violet layer is APPROVED leave ONLY; MC and briefing are away sources
+    # that live on the away board, never the home grid. Neither shows a chip.
     make_person(username="mv_brief", platoon=1)
     make_person(username="mv_mc", platoon=2)
     plant_status(app, "mv_brief", type_=StatusType.BRIEFING, start=DAY, end=DAY, in_camp=True)
@@ -230,11 +232,12 @@ def test_month_view_counts_mc_but_not_in_camp_briefing(app, client, make_person)
     login(client, make_person(username="mv_v"))
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    # Only NEXT (the out-of-camp MC) shows a chip; the in-camp briefing day shows none.
-    assert resp.data.count(b"1 away") == 1
+    assert b"chip cal-off" not in resp.data
 
 
-def test_month_view_overlapping_leave_and_mc_counts_person_once(app, client, make_person):
+def test_month_view_leave_and_mc_same_person_shows_one_chip(app, client, make_person):
+    # A person on BOTH leave and MC the same day: the leave-only filter drops the
+    # MC row, so the person's single OFF chip is the only one — never two.
     make_person(username="mv_both", platoon=1)
     plant_leave(app, "mv_both", start=DAY, end=DAY)
     plant_status(app, "mv_both", type_=StatusType.MC, start=DAY, end=DAY, in_camp=False)
@@ -242,8 +245,7 @@ def test_month_view_overlapping_leave_and_mc_counts_person_once(app, client, mak
     login(client, make_person(username="mv_both_v"))
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    assert b"1 away" in resp.data
-    assert b"2 away" not in resp.data  # same person, two sources → one distinct
+    assert resp.data.count(b"chip cal-off") == 1
 
 
 # --- consumer: leave-detail projected-away panel (HTTP) ------------------

@@ -68,22 +68,23 @@ def test_arctic_chip_hidden_from_opr_but_visible_to_command_team(app, client, ma
     assert b"Arctic drill" in resp.data
 
 
-# ---------- Criterion 3: away-count chip from absences_between ----------
+# ---------- Criterion 3: NSF OFF/LEAVE name chips from the derivation ----------
 
-def test_day_with_approved_leave_shows_one_away_and_other_days_show_none(app, client, make_person):
-    make_person(username="mv_leave_guy", platoon=1)
+def test_day_with_approved_leave_shows_an_nsf_off_leave_name_chip(app, client, make_person):
+    make_person(username="mv_leave_guy", platoon=1)  # NSF by default
     login(client, make_person(username="mv_viewer"))
     plant_leave(app, "mv_leave_guy", date(2026, 7, 8))
 
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    assert b"1 away" in resp.data
-    assert b"0 away" not in resp.data
+    # A violet OFF/LEAVE chip naming the person, not a generic away count.
+    assert resp.data.count(b"chip cal-off") == 1
+    assert b"PTE Mv Leave Guy OFF" in resp.data
 
 
-def test_two_overlapping_requests_for_same_person_count_as_one_away(app, client, make_person):
+def test_two_overlapping_requests_for_same_person_show_one_chip(app, client, make_person):
     # Overlaps are soft-warned, never blocked — the same person can hold two
-    # APPROVED requests covering one day. The cell counts people, not rows,
+    # APPROVED requests covering one day. The cell shows people, not rows,
     # matching away_summary's per-person dedupe on the board itself.
     make_person(username="mv_double_guy", platoon=1)
     login(client, make_person(username="mv_double_viewer"))
@@ -92,8 +93,19 @@ def test_two_overlapping_requests_for_same_person_count_as_one_away(app, client,
 
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    assert b"1 away" in resp.data
-    assert b"2 away" not in resp.data
+    assert resp.data.count(b"chip cal-off") == 1
+
+
+def test_regular_leave_is_not_in_the_nsf_off_leave_layer(app, client, make_person):
+    from app.domain.types import Service
+
+    make_person(username="mv_reg_guy", platoon=1, service=Service.REGULAR)
+    login(client, make_person(username="mv_reg_viewer"))
+    plant_leave(app, "mv_reg_guy", date(2026, 7, 8))
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert b"chip cal-off" not in resp.data  # NSF-only layer
 
 
 # ---------- Criterion 4: absences_on still delegates correctly ----------
