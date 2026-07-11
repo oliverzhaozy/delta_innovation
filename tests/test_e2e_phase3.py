@@ -3,16 +3,15 @@
 One S3 keys everything a real evening needs, then every Phase-3 surface is
 checked against the SAME derivation: S3 keys an MC and a regular's direct
 absence -> COS message (compiled D-1) categorizes both -> roll call balances ->
-FP quick-add moves a man to OTHERS IN CAMP -> morning parade -> all three
-variants snapshot -> the NSF meal counters read the same derivation (decision
-j) -> the away board agrees -> and the ledger is untouched, because keying
-parade data never moves a balance.
+FP quick-add moves a man to OTHERS IN CAMP -> morning parade shows both
+absences -> the NSF meal counters read the same derivation (decision j) -> and
+the ledger is untouched, because keying parade data never moves a balance.
 """
 from datetime import date, timedelta
 
-from app.domain.types import Appointment, ParadeVariant, Rank, Service
+from app.domain.types import Appointment, Rank, Service
 from app.extensions import db
-from app.models import LedgerEntry, ParadeSnapshot, Person
+from app.models import LedgerEntry, Person
 from app.services import meal_service
 from tests.conftest import login
 
@@ -56,15 +55,11 @@ def test_phase3_end_to_end(app, client, make_person):
     assert page.status_code == 200
     assert b"CALEB ZHUO" in page.data          # MC category
     assert b"MARCUS LEONG" in page.data        # regular's keyed absence
-    resp = client.post("/parade/cos-message/finalize", data={"date": D.isoformat()})
-    assert resp.status_code == 302
 
-    # --- Roll call for D balances and finalizes ------------------------------
+    # --- Roll call for D balances --------------------------------------------
     page = client.get(f"/parade/roll-call?date={D.isoformat()}")
     assert b"CURRENT STRENGTH" in page.data
     assert b"out of balance" not in page.data
-    resp = client.post("/parade/roll-call/finalize", data={"date": D.isoformat()})
-    assert resp.status_code == 302
 
     # --- FP quick-add moves the stay-in man to OTHERS IN CAMP ----------------
     resp = client.post("/parade/morning/fp", data={
@@ -73,16 +68,6 @@ def test_phase3_end_to_end(app, client, make_person):
     assert resp.status_code == 302
     page = client.get(f"/parade/morning?date={D.isoformat()}")
     assert b"ETHAN SIOW (BDO)" in page.data
-    resp = client.post("/parade/morning/finalize", data={"date": D.isoformat()})
-    assert resp.status_code == 302
-
-    # --- All three variants are snapshotted ----------------------------------
-    with app.app_context():
-        snaps = db.session.query(ParadeSnapshot).all()
-        assert {s.variant for s in snaps} == {
-            ParadeVariant.COS_MESSAGE, ParadeVariant.ROLL_CALL, ParadeVariant.MORNING,
-        }
-        assert all(s.finalized_by.username == "s3_keyer" for s in snaps)
 
     # --- NSF counters read the SAME derivation (decision j) ------------------
     # Hand-derived: day = s3, opr_in (in camp, just not at FP), opr_out
@@ -97,10 +82,12 @@ def test_phase3_end_to_end(app, client, make_person):
     assert b'id="nsf-day">3<' in page.data
     assert b'id="nsf-overnight">2<' in page.data
 
-    # --- Away board agrees ----------------------------------------------------
-    page = client.get(f"/parade/away?date={D.isoformat()}")
-    assert b"Caleb Zhuo" in page.data or b"CALEB ZHUO" in page.data
-    assert b"Marcus Leong" in page.data or b"MARCUS LEONG" in page.data
+    # --- Morning parade agrees ------------------------------------------------
+    absent = client.get(
+        f"/parade/morning?date={D.isoformat()}"
+    ).data.split(b"NOT PRESENT IN CAMP")[1]
+    assert b"CALEB ZHUO" in absent    # MC
+    assert b"MARCUS LEONG" in absent  # regular's keyed direct absence
 
     # --- Keying parade data never touches a balance ---------------------------
     with app.app_context():

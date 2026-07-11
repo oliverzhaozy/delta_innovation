@@ -32,8 +32,6 @@ def test_parade_pills_and_active_states(app, client, make_person):
         (f"/parade/morning?date={DAY.isoformat()}", "Morning"),
         (f"/parade/cos-message?date={DAY.isoformat()}", "COS message"),
         (f"/parade/roll-call?date={DAY.isoformat()}", "Roll call"),
-        (f"/parade/away?date={DAY.isoformat()}", "Away board"),
-        ("/parade/snapshots", "Snapshots"),
     ):
         html = client.get(path).get_data(as_text=True)
         assert active_pill(html) == label, path

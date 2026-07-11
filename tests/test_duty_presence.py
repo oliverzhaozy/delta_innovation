@@ -12,7 +12,7 @@ from app.domain.types import (
     RequestStatus, Service,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, ParadeSnapshot, Person
+from app.models import DutyAssignment, LeaveRequest, Person
 from app.services import meal_service, parade_service, presence_service
 from tests.conftest import login
 
@@ -202,17 +202,14 @@ def test_meals_page_notice(app, client, make_person):
     assert notice_duties(html) == "CDO/S"
 
 
-def test_snapshot_text_never_contains_notice(app, client, make_person):
+def test_notice_is_page_chrome_never_document_text(app, client, make_person):
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
     login(client, "ps2")
 
-    resp = client.post(
-        "/parade/roll-call/finalize", data={"date": D.isoformat()},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    with app.app_context():
-        snap = db.session.query(ParadeSnapshot).one()
-        # The notice is page chrome, never document text — a snapshot frozen on
-        # a duty-less night must not carry it.
-        assert NOTICE not in snap.rendered_text
+    page = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
+    # On a duty-less night the missing-duty notice shows as page chrome...
+    assert NOTICE in page
+    # ...but never bleeds into the copyable document text (the <pre>) itself.
+    match = re.search(r'<pre id="[^"]*"[^>]*>(.*?)</pre>', page, re.S)
+    assert match, "roll call rendered no document <pre>"
+    assert NOTICE not in match.group(1)

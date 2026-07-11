@@ -1,5 +1,5 @@
-"""Who is away / who is present — the single derivation that the away board,
-month view, leave panel, and (from P3a.6) every parade document read.
+"""Who is away / who is present — the single derivation that the month view,
+leave panel, and (from P3a.6) every parade document read.
 
 There is exactly ONE fetch of the three presence sources (APPROVED leave +
 regulars' direct absences + COS-keyed statuses). `absences_between` normalises
@@ -150,45 +150,6 @@ def absences_on(day):
     """Away rows covering `day` for active people — delegates to the range
     query so there is a single derivation."""
     return absences_between(day, day)[day]
-
-
-def away_summary(day):
-    """Board data: total strength, away rows grouped by platoon, and counts."""
-    total = db.session.query(Person.id).filter_by(is_active=True).count()
-    rows = absences_on(day)
-    full_ids = {r.person_id for r in rows if r.day_part is DayPart.FULL}
-    partial_ids = {r.person_id for r in rows if r.day_part is not DayPart.FULL} - full_ids
-    groups: dict = {}
-    for row in rows:
-        key = f"Platoon {row.person.platoon}" if row.person.platoon else "HQ"
-        groups.setdefault(key, []).append(row)
-    return {
-        "total": total,
-        "away_full": len(full_ids),
-        "away_partial": len(partial_ids),
-        "groups": groups,
-    }
-
-
-def away_text(day, summary) -> str:
-    """Plain-text rendition for pasting into WhatsApp."""
-    lines = [
-        f"AWAY — {day.strftime('%a %d %b %Y')}",
-        f"Total strength: {summary['total']}",
-        f"Away: {summary['away_full']} full-day, {summary['away_partial']} half-day",
-    ]
-    for group, rows in summary["groups"].items():
-        lines.append("")
-        lines.append(f"{group}:")
-        for r in rows:
-            part = "" if r.day_part is DayPart.FULL else f" ({r.day_part.value})"
-            # Tag comes from the normalised label (MC/On course/Leave/OFF), so
-            # every away surface shows the same word for the same row.
-            lines.append(f"- {r.person.display_name} — {r.label}{part}")
-    if not summary["groups"]:
-        lines.append("")
-        lines.append("Nobody away.")
-    return "\n".join(lines)
 
 
 class PersonPresence(NamedTuple):

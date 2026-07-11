@@ -108,7 +108,7 @@ def _event_times(form):
 def _prefill_date(form, raw):
     # A day-click on the month grid lands on /calendar/new?date=YYYY-MM-DD; seed
     # the form to that day (08:00–09:00 default). A bad/missing date falls through
-    # to a blank form — same forgiving convention as parade.away's ?date=.
+    # to a blank form — same forgiving convention as the parade morning page's ?date=.
     if not raw:
         return
     try:

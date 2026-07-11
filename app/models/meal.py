@@ -16,8 +16,8 @@ class MealAdjustment(db.Model):
     Original design (P3b.5): S4's manual per-meal ± (people added/removed from
     a food order).
 
-    Append-only, like the ledger and the parade snapshot: there is NO update or
-    delete function or route anywhere for this model, and no unique(date, meal)
+    Append-only, like the ledger: there is NO update or delete function or
+    route anywhere for this model, and no unique(date, meal)
     constraint. A correction is a second, compensating row; the rows together
     ARE the audit trail. It is a persisted row (not a form one-shot) precisely
     so the ± survives a recompile of the live-derived counts. `reason` is

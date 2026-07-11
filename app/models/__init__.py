@@ -15,7 +15,6 @@ from app.models.ro import (
     RoStandingItem,
     WeeklyKeyEvents,
 )
-from app.models.snapshot import ParadeSnapshot
 from app.models.status import StatusEntry
 
 __all__ = [
@@ -30,7 +29,6 @@ __all__ = [
     "ManningSlot",
     "MealAdjustment",
     "OverseasDeclaration",
-    "ParadeSnapshot",
     "Person",
     "PublicHoliday",
     "RoBoilerplate",

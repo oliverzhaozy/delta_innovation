@@ -27,8 +27,6 @@
           <summary>Parade</summary>
           <div class="navmenu">
             <a href="{{ url_for('parade.morning') }}">Parade state</a>
-            <a href="{{ url_for('parade.away') }}">Away board</a>
-            <a href="{{ url_for('parade.snapshots_list') }}">Snapshots</a>
             {% if can_key_parade_today(current_user) %}
               <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
             {% endif %}

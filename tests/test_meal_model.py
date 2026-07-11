@@ -51,7 +51,7 @@ def test_meal_adjustment_persists_with_defaults(app, make_person):
 
 def test_append_only_allows_repeat_rows_for_same_date_and_meal(app, make_person):
     # No unique(date, meal): a correction is a second (compensating) row, and
-    # the two rows together ARE the audit trail — mirrors ledger/snapshot posture.
+    # the two rows together ARE the audit trail — mirrors the ledger's posture.
     make_person(username="meal_repeat")
     with app.app_context():
         pid = person_id_of(app, "meal_repeat")

@@ -19,8 +19,8 @@ from app.domain.types import (
     StatusType,
 )
 from app.extensions import db
-from app.models import DirectAbsence, ParadeSnapshot, Person, StatusEntry
-from app.services import duty_service, event_service, parade_service, presence_service
+from app.models import DirectAbsence, Person, StatusEntry
+from app.services import duty_service, event_service, parade_service
 
 
 def _set_status_person_choices(form):
@@ -32,28 +32,9 @@ def _set_status_person_choices(form):
     ]
 
 
-@bp.route("/away")
-@login_required
-def away():
-    raw = request.args.get("date", "")
-    try:
-        day = date.fromisoformat(raw)
-    except ValueError:
-        day = today_sgt()
-    summary = presence_service.away_summary(day)
-    return render_template(
-        "parade/away.html",
-        day=day,
-        prev_day=day - timedelta(days=1),
-        next_day=day + timedelta(days=1),
-        summary=summary,
-        text=presence_service.away_text(day, summary),
-    )
-
-
 def _parse_day(raw: str, default: date = None) -> date:
-    # Shared away/morning convention: a bad or missing ?date= falls back to a
-    # page-specific default rather than 400ing — the page must always render
+    # The parade pages' ?date= convention: a bad or missing ?date= falls back to
+    # a page-specific default rather than 400ing — the page must always render
     # something. `default` lets the COS message page fall back to tomorrow
     # (compiled D-1, assumption 4) while every other page keeps falling back
     # to today.
@@ -69,9 +50,9 @@ def _validate_cos_person(raw, day, roster=None):
     the P3 hook this function's comment has named since P3b.3). An explicit
     valid `?cos=` always wins — auto-fill must not override a deliberate
     hand-selection. Invalid or inactive ids never 400 — a keying mistake costs
-    one reload — and the finalize route re-runs this same resolution so a
-    tampered hidden field can't name someone off-roster. `roster` lets a
-    caller that already fetched the active roster pass it in.
+    one reload — and resolving against the active roster means a tampered
+    query value can't name someone off-roster. `roster` lets a caller that
+    already fetched the active roster pass it in.
     """
     roster = roster if roster is not None else event_service.active_roster()
     try:
@@ -144,8 +125,8 @@ def _fp_rows(day):
 @login_required
 def morning():
     day = _parse_day(request.args.get("date", ""))
-    # One pipeline for page, finalize, and meals (addendum A2). On imbalance
-    # the template renders the error card and no <pre> — a wrong document is
+    # One pipeline for the page and meals (addendum A2). On imbalance the
+    # template renders the error card and no <pre> — a wrong document is
     # worse than none (plan).
     built = parade_service.build_doc(day, ParadeVariant.MORNING)
     conflicts = _conflict_lines(built.pairs)
@@ -204,8 +185,7 @@ def morning_fp_remove(entry_id):
     row = db.session.get(StatusEntry, entry_id)
     # Guard: only a same-shaped quick-add row for the page the keyer is
     # actually viewing may be hard-deleted here — this is a same-morning
-    # correction of a seconds-old slip, not general status deletion (P3a.8's
-    # snapshots protect finalized documents; this route never touches those).
+    # correction of a seconds-old slip, not general status deletion.
     is_quick_add = (
         row is not None
         and row.type is StatusType.OTHER
@@ -218,22 +198,6 @@ def morning_fp_remove(entry_id):
     db.session.commit()
     flash("Removed.", "success")
     return redirect(url_for("parade.morning", date=day.isoformat()))
-
-
-@bp.route("/morning/finalize", methods=["POST"])
-@require(duty_service.can_key_parade_today)
-def morning_finalize():
-    day = _parse_day(request.form.get("date", ""))
-    # Recompute server-side through the same build_doc the GET page uses —
-    # never trust the posted body for the archival record, or a tampered
-    # hidden field could falsify what the app actually finalized.
-    built = parade_service.build_doc(day, ParadeVariant.MORNING)
-    if built.imbalance:
-        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
-        return redirect(url_for("parade.morning", date=day.isoformat()))
-    snap = parade_service.finalize(day, ParadeVariant.MORNING, built.text, current_user)
-    flash("Finalized and copied.", "success")
-    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 
 
 @bp.route("/cos-message")
@@ -260,23 +224,6 @@ def cos_message():
         imbalance=built.imbalance,
         conflicts=conflicts,
     )
-
-
-@bp.route("/cos-message/finalize", methods=["POST"])
-@require(duty_service.can_key_parade_today)
-def cos_message_finalize():
-    day = _parse_day(request.form.get("date", ""), default=today_sgt() + timedelta(days=1))
-    # Re-validate the posted cos id against the active roster here too — never
-    # trust the hidden field, exactly like the recompute below never trusts
-    # posted text.
-    cos_person = _validate_cos_person(request.form.get("cos", ""), day)
-    built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
-    if built.imbalance:
-        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
-        return redirect(url_for("parade.cos_message", date=day.isoformat(), cos=cos_person.id))
-    snap = parade_service.finalize(day, ParadeVariant.COS_MESSAGE, built.text, current_user)
-    flash("Finalized and copied.", "success")
-    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
 
 
 @bp.route("/roll-call")
@@ -312,39 +259,6 @@ def roll_call():
         missing_duties=missing_duties,
         absent_holders=absent_holders,
     )
-
-
-@bp.route("/roll-call/finalize", methods=["POST"])
-@require(duty_service.can_key_parade_today)
-def roll_call_finalize():
-    day = _parse_day(request.form.get("date", ""))
-    # Recompute server-side through the same build_doc the GET page uses (same
-    # posture as morning_finalize) — never trust the posted body.
-    built = parade_service.build_doc(day, ParadeVariant.ROLL_CALL)
-    if built.imbalance:
-        flash(f"Cannot finalize — parade state out of balance: {built.imbalance}", "error")
-        return redirect(url_for("parade.roll_call", date=day.isoformat()))
-    snap = parade_service.finalize(day, ParadeVariant.ROLL_CALL, built.text, current_user)
-    flash("Finalized and copied.", "success")
-    return redirect(url_for("parade.snapshot_view", snapshot_id=snap.id))
-
-
-# --- Snapshots (append-only finalize archive) --------------------------------
-
-@bp.route("/snapshots")
-@login_required
-def snapshots_list():
-    # Any logged-in user may view the archive — it's a read of history, not a
-    # keying surface.
-    rows = parade_service.snapshots()
-    return render_template("parade/snapshots.html", rows=rows)
-
-
-@bp.route("/snapshots/<int:snapshot_id>")
-@login_required
-def snapshot_view(snapshot_id):
-    snap = db.session.get(ParadeSnapshot, snapshot_id) or abort(404)
-    return render_template("parade/snapshot_detail.html", snap=snap)
 
 
 # --- Statuses (MC/course/briefing/site-testing/other) -----------------------

@@ -2,7 +2,7 @@
 test_e2e_core_loop.py: an ARCTIC event with a category + a person also-include
 (UI-11 picker) -> a member's overlapping leave surfaces the clash to both PC
 and OC (but never to the requester, who can't see ARCTIC) -> OC approves ->
-S3 records an early return -> ledger, balances, and the away board all agree.
+S3 records an early return -> ledger, balances, and the morning parade all agree.
 """
 from datetime import date
 
@@ -115,8 +115,13 @@ def test_phase2_end_to_end(app, client, make_person):
     client.post("/logout")
 
     login(client, s3)
+    # The morning parade renders names uppercased and lists the fully-absent
+    # requester under NOT PRESENT IN CAMP for every covered day.
     for d in (TUE, WED, THU):
-        assert b"Nighthawk Requester" in client.get(f"/parade/away?date={d.isoformat()}").data
+        absent = client.get(f"/parade/morning?date={d.isoformat()}").data.split(
+            b"NOT PRESENT IN CAMP"
+        )[1]
+        assert b"NIGHTHAWK REQUESTER" in absent
     # 3 working days x 2 half-days = 6 half-days deducted from the 8 opened.
     assert b"OFF: 1" in client.get(f"/ledger/person/{requester_id}").data
 
@@ -130,9 +135,15 @@ def test_phase2_end_to_end(app, client, make_person):
     )
     assert b"Early return recorded" in resp.data
 
-    assert b"Nighthawk Requester" in client.get(f"/parade/away?date={TUE.isoformat()}").data
-    assert b"Nighthawk Requester" not in client.get(f"/parade/away?date={WED.isoformat()}").data
-    assert b"Nighthawk Requester" not in client.get(f"/parade/away?date={THU.isoformat()}").data
+    tue_absent = client.get(f"/parade/morning?date={TUE.isoformat()}").data.split(
+        b"NOT PRESENT IN CAMP"
+    )[1]
+    assert b"NIGHTHAWK REQUESTER" in tue_absent
+    for d in (WED, THU):
+        absent = client.get(f"/parade/morning?date={d.isoformat()}").data.split(
+            b"NOT PRESENT IN CAMP"
+        )[1]
+        assert b"NIGHTHAWK REQUESTER" not in absent
 
     person_page = client.get(f"/ledger/person/{requester_id}").data
     # Balance = opening (4 days) - cost of the single remaining day (1 day) = 3.

@@ -4,8 +4,8 @@ The route is a thin wire: presence_service.presence_inputs -> parade.categorize
 -> parade.render_morning. These tests hit the real DB/app (unlike the pure
 compute tests in test_morning_parade.py) so the wiring, rights, and the
 quick-add/remove round trip are pinned through the actual `<pre>` text the
-document renders — the same derivation the away board and every parade
-document read (never a second check).
+document renders — the same derivation every parade document reads (never a
+second check).
 """
 from datetime import date, timedelta
 
@@ -22,7 +22,7 @@ from app.extensions import db
 from app.models import LeaveRequest, Person, StatusEntry
 from tests.conftest import login
 
-DAY = date(2026, 7, 8)  # Wednesday, matches test_away_board's WED convention
+DAY = date(2026, 7, 8)  # Wednesday — the parade day under test
 
 
 def pid(app, username):

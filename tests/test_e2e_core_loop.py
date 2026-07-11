@@ -1,6 +1,7 @@
 """The whole Phase 1 promise, exercised through HTTP only:
 opening balance -> request -> PC endorse -> OC approve (one transaction) ->
-balance changed -> away board shows it -> cancel -> everything reversed.
+balance changed -> morning parade shows the absence -> cancel -> everything
+reversed.
 """
 from datetime import date
 
@@ -69,11 +70,19 @@ def test_core_loop_end_to_end(app, client, make_person):
     assert b"request" in person_page
     client.post("/logout")
 
-    # The absence appears on the away board for a covered day — including the
-    # weekend inside the range — with no extra plotting step.
+    # The absence appears on the morning parade state for a covered day —
+    # including the weekend inside the range — with no extra plotting step.
+    # The document renders names uppercased (parade_line), and the absent
+    # person lands under NOT PRESENT IN CAMP, never CURRENT STRENGTH.
     login(client, opr)
-    assert b"PTE E2E Opr" in client.get(f"/parade/away?date={FRI.isoformat()}").data
-    assert b"PTE E2E Opr" in client.get("/parade/away?date=2026-07-11").data
+    fri_absent = client.get(f"/parade/morning?date={FRI.isoformat()}").data.split(
+        b"NOT PRESENT IN CAMP"
+    )[1]
+    assert b"PTE E2E OPR" in fri_absent
+    sat_absent = client.get("/parade/morning?date=2026-07-11").data.split(
+        b"NOT PRESENT IN CAMP"
+    )[1]
+    assert b"PTE E2E OPR" in sat_absent
     balances = client.get("/leave/").data
     assert b"OFF: 1" in balances
     client.post("/logout")
@@ -83,4 +92,8 @@ def test_core_loop_end_to_end(app, client, make_person):
     resp = client.post(f"/leave/{req_id}/cancel-approved", follow_redirects=True)
     assert b"reversed" in resp.data
     assert b"OFF: 3" in client.get(f"/ledger/person/{opr_id}").data
-    assert b"PTE E2E Opr" not in client.get(f"/parade/away?date={FRI.isoformat()}").data
+    # No longer absent: the person is back present, off the NOT-PRESENT list.
+    fri_after_absent = client.get(f"/parade/morning?date={FRI.isoformat()}").data.split(
+        b"NOT PRESENT IN CAMP"
+    )[1]
+    assert b"PTE E2E OPR" not in fri_after_absent

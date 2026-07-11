@@ -3,9 +3,13 @@
 PS/S3/admin key statuses (MC/course/briefing/...); S3/admin key direct
 absences for regulars. Rights (policy.can_key_parade / can_key_direct_absence),
 the 3-way in-camp resolution, end-today, and remarks-required-for-direct-
-absence are all pinned here against the away board so a keyed row's effect is
-asserted through the SAME derivation the rest of the app reads (never a
-second check — presence_service is the only thing that decides "away").
+absence are all pinned here against the morning parade state so a keyed row's
+effect is asserted through the SAME derivation the rest of the app reads (never
+a second check — presence_service is the only thing that decides "away").
+
+The morning document renders names uppercased (parade_line) and splits into a
+PRESENT IN CAMP half and a NOT PRESENT IN CAMP half; an out-of-camp absence
+lands in the latter, an in-camp status in OTHERS IN CAMP under the former.
 """
 from datetime import timedelta
 from types import SimpleNamespace
@@ -114,9 +118,9 @@ def test_can_key_direct_absence_is_s3_or_admin_only():
     assert not policy.can_key_direct_absence(_person(Appointment.OPR))
 
 
-# --- criterion 1: PS keys an MC -> list + away board (derivation, not a second write) --
+# --- criterion 1: PS keys an MC -> list + morning parade (derivation, not a second write) --
 
-def test_ps_keys_mc_appears_in_list_and_away_board(app, client, make_person):
+def test_ps_keys_mc_appears_in_list_and_morning_parade(app, client, make_person):
     make_person(username="c1_ps", appointment=Appointment.PS)
     make_person(username="c1_opr", display_name="PTE Mc Target")
     login(client, "c1_ps")
@@ -128,9 +132,10 @@ def test_ps_keys_mc_appears_in_list_and_away_board(app, client, make_person):
     assert b"PTE Mc Target" in list_resp.data
     assert b"MC" in list_resp.data
 
-    board_resp = client.get(f"/parade/away?date={TODAY.isoformat()}")
-    assert b"PTE Mc Target" in board_resp.data
-    assert b"MC" in board_resp.data
+    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    absent = morning.split(b"NOT PRESENT IN CAMP")[1]
+    assert b"PTE MC TARGET" in absent  # in the MC category, uppercased
+    assert b"MC (1):" in morning
     with app.app_context():
         assert db.session.query(StatusEntry).count() == 1
 
@@ -181,7 +186,7 @@ def test_ps_403_on_all_direct_absence_urls(app, client, make_person):
 
 # --- criterion 3: S3 keys the OC's absence; NSF rejected with a form error --
 
-def test_s3_keys_direct_absence_for_oc_shows_leave_on_board(app, client, make_person):
+def test_s3_keys_direct_absence_for_oc_shows_leave_on_morning(app, client, make_person):
     make_person(username="c3_s3", company_role="S3")
     make_person(username="c3_oc", display_name="CPT The Boss", appointment=Appointment.OC,
                 platoon=None, service=Service.REGULAR)
@@ -189,9 +194,10 @@ def test_s3_keys_direct_absence_for_oc_shows_leave_on_board(app, client, make_pe
 
     key_direct(client, pid(app, "c3_oc"), type_="LEAVE", remarks="on leave")
 
-    board_resp = client.get(f"/parade/away?date={TODAY.isoformat()}")
-    assert b"CPT The Boss" in board_resp.data
-    assert b"Leave" in board_resp.data
+    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    absent = morning.split(b"NOT PRESENT IN CAMP")[1]
+    assert b"CPT THE BOSS" in absent  # a direct LEAVE lands in the LEAVE category
+    assert b"LEAVE (1):" in morning
     with app.app_context():
         assert db.session.query(DirectAbsence).count() == 1
 
@@ -210,7 +216,7 @@ def test_s3_direct_absence_for_nsf_rejected_form_error_nothing_saved(app, client
 
 # --- criterion 4: 3-way in-camp resolution --------------------------------
 
-def test_in_camp_default_resolves_per_type_and_board_respects_it(app, client, make_person):
+def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, make_person):
     make_person(username="c4_ps", appointment=Appointment.PS)
     make_person(username="c4_brief_default", display_name="PTE Brief Default")
     make_person(username="c4_brief_out", display_name="PTE Brief Out")
@@ -230,10 +236,19 @@ def test_in_camp_default_resolves_per_type_and_board_respects_it(app, client, ma
         assert rows["c4_brief_out"] is False
         assert rows["c4_mc_default"] is False
 
-    board = client.get(f"/parade/away?date={TODAY.isoformat()}").data
-    assert b"PTE Brief Default" not in board  # BRIEFING+DEFAULT -> in camp -> absent from board
-    assert b"PTE Brief Out" in board          # BRIEFING+OUT -> out of camp -> on board
-    assert b"PTE Mc Default" in board         # MC+DEFAULT -> out of camp -> on board
+    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    present, absent = (
+        morning.split(b"NOT PRESENT IN CAMP")[0],
+        morning.split(b"NOT PRESENT IN CAMP")[1],
+    )
+    # BRIEFING+DEFAULT -> in camp -> OTHERS IN CAMP, under PRESENT IN CAMP, never absent.
+    # (reason is the keyer's remark "flu", uppercased by _in_camp_reason.)
+    assert b"OTHERS IN CAMP (1):" in morning
+    assert b"PTE BRIEF DEFAULT (FLU)" in present
+    assert b"PTE BRIEF DEFAULT" not in absent
+    # BRIEFING+OUT and MC+DEFAULT -> out of camp -> the NOT PRESENT IN CAMP half.
+    assert b"PTE BRIEF OUT" in absent
+    assert b"PTE MC DEFAULT" in absent
 
 
 # --- criterion 5: end-today ------------------------------------------------
@@ -252,11 +267,16 @@ def test_end_today_ends_ongoing_mc_stays_today_gone_tomorrow(app, client, make_p
         row = db.session.get(StatusEntry, entry_id)
         assert row.end_date == TODAY
 
-    today_board = client.get(f"/parade/away?date={TODAY.isoformat()}").data
-    assert b"PTE Ongoing Mc" in today_board  # still away today
+    today_absent = client.get(
+        f"/parade/morning?date={TODAY.isoformat()}"
+    ).data.split(b"NOT PRESENT IN CAMP")[1]
+    assert b"PTE ONGOING MC" in today_absent  # still absent (MC) today
 
-    tomorrow_board = client.get(f"/parade/away?date={TOMORROW.isoformat()}").data
-    assert b"PTE Ongoing Mc" not in tomorrow_board  # gone from tomorrow's derivation
+    tomorrow_absent = client.get(
+        f"/parade/morning?date={TOMORROW.isoformat()}"
+    ).data.split(b"NOT PRESENT IN CAMP")[1]
+    # Gone from tomorrow's derivation — back present, no longer in the absent half.
+    assert b"PTE ONGOING MC" not in tomorrow_absent
 
 
 def test_end_today_on_future_entry_errors_and_leaves_unchanged(app, client, make_person):

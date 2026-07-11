@@ -307,7 +307,7 @@ def test_zero_credit_off_still_records_trace(app, make_person):
         assert "end 16 Aug -> 14 Aug" in req_after.remarks
 
 
-# --- Criterion 6: route authz + the away board shortens end-to-end -----------
+# --- Criterion 6: route authz + the morning parade absence shortens end-to-end --
 
 def _people(make_person):
     make_person(username="er_opr", display_name="PTE Away Board", platoon=1)
@@ -365,7 +365,15 @@ def test_route_authz_and_success(app, client, make_person):
         assert ledger_service.balance(_pid("er_opr"), BalanceKind.OFF) == -4
 
 
-def test_route_early_return_shortens_away_board(app, client, make_person):
+def _morning_absent(client, day):
+    # The morning parade renders names uppercased; a person is "away" when they
+    # appear in the NOT PRESENT IN CAMP half of the document, not CURRENT STRENGTH.
+    return client.get(f"/parade/morning?date={day.isoformat()}").data.split(
+        b"NOT PRESENT IN CAMP"
+    )[1]
+
+
+def test_route_early_return_shortens_morning_absence(app, client, make_person):
     make_person(username="ab_opr", display_name="PTE Away Board", platoon=1)
     make_person(username="ab_s3", company_role="S3")
     with app.app_context():
@@ -376,16 +384,16 @@ def test_route_early_return_shortens_away_board(app, client, make_person):
         rid = req.id
 
     login(client, "ab_s3")
-    # Before: Fri inside the range shows the person away.
-    assert b"PTE Away Board" in client.get(f"/parade/away?date={FRI.isoformat()}").data
+    # Before: Fri inside the range shows the person absent.
+    assert b"PTE AWAY BOARD" in _morning_absent(client, FRI)
     resp = client.post(
         f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()},
         follow_redirects=True,
     )
     assert resp.status_code == 200
-    # After: Thu still away, Fri no longer (absence derived from the shortened range).
-    assert b"PTE Away Board" in client.get(f"/parade/away?date={THU.isoformat()}").data
-    assert b"PTE Away Board" not in client.get(f"/parade/away?date={FRI.isoformat()}").data
+    # After: Thu still absent, Fri no longer (absence derived from the shortened range).
+    assert b"PTE AWAY BOARD" in _morning_absent(client, THU)
+    assert b"PTE AWAY BOARD" not in _morning_absent(client, FRI)
     with app.app_context():
         assert ledger_service.balance(_pid("ab_opr"), BalanceKind.OFF) == -2
 

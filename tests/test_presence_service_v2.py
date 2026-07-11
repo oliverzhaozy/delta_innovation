@@ -163,62 +163,6 @@ def test_absences_on_delegates_to_absences_between(app, make_person):
         assert len(on_ids) == 1
 
 
-# --- away_summary / away_text (labels + counts include the new sources) ---
-
-def test_away_summary_counts_mc_and_direct_but_not_in_camp(app, make_person):
-    make_person(username="s_leave", platoon=1)
-    make_person(username="s_direct", appointment=Appointment.OC, platoon=None,
-                service=Service.REGULAR)
-    make_person(username="s_mc", platoon=2)
-    make_person(username="s_brief", platoon=2)
-    plant_leave(app, "s_leave")
-    plant_direct(app, "s_direct")
-    plant_status(app, "s_mc", type_=StatusType.MC, in_camp=False)
-    plant_status(app, "s_brief", type_=StatusType.BRIEFING, in_camp=True)
-
-    with app.app_context():
-        summary = presence_service.away_summary(DAY)
-        assert summary["away_full"] == 3   # leave + direct + MC; briefing excluded
-        assert summary["away_partial"] == 0
-        text = presence_service.away_text(DAY, summary)
-    assert "— OFF" in text
-    assert "— Leave" in text
-    assert "— MC" in text
-    assert "S Brief" not in text  # in-camp briefing never on the away board
-
-
-def test_away_text_tags_half_day_status(app, make_person):
-    make_person(username="half_mc", platoon=1)
-    plant_status(app, "half_mc", type_=StatusType.MC, day_part=DayPart.AM, in_camp=False)
-    with app.app_context():
-        summary = presence_service.away_summary(DAY)
-        text = presence_service.away_text(DAY, summary)
-    assert summary["away_partial"] == 1
-    assert "— MC (AM)" in text
-
-
-# --- consumer: away board page (HTTP) ------------------------------------
-
-def test_away_board_page_shows_mc_and_direct_absence(app, client, make_person):
-    make_person(username="b_mc", display_name="PTE Mc Man", platoon=1)
-    make_person(username="b_direct", display_name="CPT Reg Ular", appointment=Appointment.OC,
-                platoon=None, service=Service.REGULAR)
-    make_person(username="b_brief", display_name="PTE Brief Guy", platoon=1)
-    viewer = make_person(username="b_viewer", platoon=3)
-    plant_status(app, "b_mc", type_=StatusType.MC, in_camp=False)
-    plant_direct(app, "b_direct")
-    plant_status(app, "b_brief", type_=StatusType.BRIEFING, in_camp=True)
-
-    login(client, viewer)
-    resp = client.get(f"/parade/away?date={DAY.isoformat()}")
-    assert resp.status_code == 200
-    assert b"PTE Mc Man" in resp.data
-    assert b"MC" in resp.data
-    assert b"CPT Reg Ular" in resp.data
-    assert b"Leave" in resp.data
-    assert b"PTE Brief Guy" not in resp.data  # in-camp briefing excluded
-
-
 # --- consumer: month view NSF OFF/LEAVE chip (HTTP) ----------------------
 
 def test_month_view_shows_no_off_leave_chip_for_mc_or_briefing(app, client, make_person):

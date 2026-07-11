@@ -3,9 +3,9 @@ Pure: stdlib + sibling app.domain modules only, so the ordering, category
 mapping, and byte-exact rendering are all testable without an app or a DB.
 
 The renderer is deliberately pure Python, NOT a Jinja text template (the
-TECH_PLAN "Jinja text templates" line): following the away_text precedent,
-hand-built strings dodge template-whitespace landmines so the golden tests can
-pin the output to docs/PARADE_FORMATS.md byte-for-byte.
+TECH_PLAN "Jinja text templates" line): hand-built strings dodge
+template-whitespace landmines so the golden tests can pin the output to
+docs/PARADE_FORMATS.md byte-for-byte.
 """
 from dataclasses import dataclass
 from datetime import date

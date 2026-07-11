@@ -168,10 +168,10 @@ class DirectAbsenceType(str, enum.Enum):
 
 
 class ParadeVariant(str, enum.Enum):
-    """Which of the 3 WhatsApp parade documents a ParadeSnapshot freezes.
+    """Which of the 3 WhatsApp parade documents the build pipeline renders.
     Distinct from the lowercase "morning"/"roll_call" strings domain.parade's
     compute pipeline takes — that's an internal compute-shape switch; this is
-    the persisted, human-labelled kind of document that was finalized."""
+    the human-labelled kind of document `build_doc` is asked to produce."""
 
     COS_MESSAGE = "COS_MESSAGE"
     ROLL_CALL = "ROLL_CALL"

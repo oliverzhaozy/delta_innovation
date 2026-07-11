@@ -84,8 +84,8 @@ def test_day_with_approved_leave_shows_an_nsf_off_leave_name_chip(app, client, m
 
 def test_two_overlapping_requests_for_same_person_show_one_chip(app, client, make_person):
     # Overlaps are soft-warned, never blocked — the same person can hold two
-    # APPROVED requests covering one day. The cell shows people, not rows,
-    # matching away_summary's per-person dedupe on the board itself.
+    # APPROVED requests covering one day. The cell shows people, not rows:
+    # the NSF OFF/LEAVE layer dedupes on person_id.
     make_person(username="mv_double_guy", platoon=1)
     login(client, make_person(username="mv_double_viewer"))
     plant_leave(app, "mv_double_guy", date(2026, 7, 8))
@@ -152,10 +152,10 @@ def test_ym_param_navigates_to_requested_month(client, make_person):
     assert b"July 2026" in resp.data
 
 
-def test_malformed_ym_falls_back_like_away_board_bad_date(client, make_person):
-    # away.py's ?date= convention falls back to today rather than 404ing;
-    # this route mirrors that (the brief's default guess of 404 doesn't
-    # match the sibling route it told us to check against).
+def test_malformed_ym_falls_back_to_today(client, make_person):
+    # The parade morning page's ?date= convention falls back to today rather
+    # than 404ing; this route mirrors that (the brief's default guess of 404
+    # doesn't match the sibling route it told us to check against).
     login(client, make_person(username="mv_bad_ym_viewer"))
     resp = client.get("/calendar/month?ym=garbage")
     assert resp.status_code == 200
@@ -170,7 +170,7 @@ def test_prev_next_today_links_present(client, make_person):
     assert b"Today" in resp.data
 
 
-def test_day_number_links_to_away_board(client, make_person):
+def test_day_number_links_to_morning_parade(client, make_person):
     login(client, make_person(username="mv_dayno_viewer"))
     resp = client.get("/calendar/month?ym=2026-07")
-    assert b"/parade/away?date=2026-07-08" in resp.data
+    assert b"/parade/morning?date=2026-07-08" in resp.data

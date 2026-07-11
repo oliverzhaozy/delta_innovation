@@ -2,29 +2,20 @@
 
 One function owns the presence_inputs -> categorize/compute -> render pipeline
 (and, from P4.7 on, the duty_day offset convention). Before it existed the
-pipeline was re-derived at six route call sites — an offset convention added at
-five of six sites would make the page and the archival snapshot silently
-diverge. Hence the permanent invariant pinned here: for every variant, the
-finalize route's stored text equals the GET page's rendered text for identical
-inputs.
+pipeline was re-derived at several route call sites — an offset convention added
+at some but not all of them would make the parade surfaces silently diverge.
+Hence the invariant pinned here: for every variant, build_doc's text equals the
+domain pipeline's render for identical inputs.
 """
-import html
-import re
 from datetime import date
 
 from app.domain import parade as parade_domain
 from app.domain.types import Appointment, ParadeVariant, StatusType
 from app.extensions import db
-from app.models import ParadeSnapshot, Person, StatusEntry
+from app.models import Person, StatusEntry
 from app.services import parade_service, presence_service
-from tests.conftest import login
 
 DAY = date(2026, 7, 8)  # Wednesday — same convention as the other parade tests
-
-
-def _person(app, username):
-    with app.app_context():
-        return db.session.query(Person).filter_by(username=username).one()
 
 
 def _plant_mc(app, username, day=DAY):
@@ -111,59 +102,3 @@ def test_build_doc_cos_message_without_cos_person_raises(app, make_person):
             pass
         else:
             raise AssertionError("COS_MESSAGE without cos_person must raise ValueError")
-
-
-# --- permanent invariant: page text == finalized snapshot text ----------------
-
-def _pre_text(page_data: bytes) -> str:
-    m = re.search(rb'<pre id="[^"]*"[^>]*>(.*?)</pre>', page_data, re.S)
-    assert m, "page rendered no document <pre>"
-    return html.unescape(m.group(1).decode())
-
-
-def _latest_snapshot_text(app, variant):
-    with app.app_context():
-        snap = (
-            db.session.query(ParadeSnapshot)
-            .filter_by(variant=variant)
-            .order_by(ParadeSnapshot.id.desc())
-            .first()
-        )
-        assert snap is not None
-        return snap.rendered_text
-
-
-def test_page_equals_snapshot_morning(app, client, make_person):
-    make_person(username="ps_keyer", appointment=Appointment.PS)
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
-    _plant_mc(app, "off_guy")
-    login(client, "ps_keyer")
-
-    page = client.get(f"/parade/morning?date={DAY.isoformat()}")
-    client.post("/parade/morning/finalize", data={"date": DAY.isoformat()})
-    assert _pre_text(page.data) == _latest_snapshot_text(app, ParadeVariant.MORNING)
-
-
-def test_page_equals_snapshot_roll_call(app, client, make_person):
-    make_person(username="ps_keyer", appointment=Appointment.PS)
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
-    _plant_mc(app, "off_guy")
-    login(client, "ps_keyer")
-
-    page = client.get(f"/parade/roll-call?date={DAY.isoformat()}")
-    client.post("/parade/roll-call/finalize", data={"date": DAY.isoformat()})
-    assert _pre_text(page.data) == _latest_snapshot_text(app, ParadeVariant.ROLL_CALL)
-
-
-def test_page_equals_snapshot_cos_message(app, client, make_person):
-    make_person(username="ps_keyer", appointment=Appointment.PS)
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
-    _plant_mc(app, "off_guy")
-    login(client, "ps_keyer")
-    keyer = _person(app, "ps_keyer")
-
-    page = client.get(f"/parade/cos-message?date={DAY.isoformat()}&cos={keyer.id}")
-    client.post(
-        "/parade/cos-message/finalize", data={"date": DAY.isoformat(), "cos": str(keyer.id)}
-    )
-    assert _pre_text(page.data) == _latest_snapshot_text(app, ParadeVariant.COS_MESSAGE)

@@ -47,8 +47,8 @@ def build_month_context(user, ym_raw):
     """Return the template context for `calendar/month.html` for `user`.
 
     `ym_raw` is the raw `?ym=YYYY-MM` string ("" for the current month); a bad
-    value falls back to today, mirroring parade.away's bad-?date= convention
-    (fall back, never 404).
+    value falls back to today, mirroring the parade morning page's bad-?date=
+    convention (fall back, never 404).
     """
     today = today_sgt()
     year, month_num = today.year, today.month

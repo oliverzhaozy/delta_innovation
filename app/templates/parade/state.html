@@ -1,8 +1,8 @@
 {# The ONE parade-documents page (UI refresh, owner-approved 2026-07-07):
    Morning / COS message / Roll call are URL-backed tabs over this single
    template — `doc` picks the chrome, the document pipeline stays build_doc's.
-   Document <pre> CONTENT is untouched chrome-wise: goldens and the
-   page==snapshot invariant read the same bytes as before the merge. #}
+   The document is copy-only: the <pre> text is exactly what build_doc renders,
+   and the Copy button is the only action on it. #}
 {% extends "base.html" %}
 {% block title %}{{ {"morning": "Morning parade", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
 
@@ -79,18 +79,6 @@
     <button type="button" class="btn secondary" data-copy="#{{ pre_id }}">Copy</button>
   </div>
   <pre id="{{ pre_id }}" style="white-space:pre-wrap; margin:0">{{ text }}</pre>
-</section>
-<section class="card">
-  {% if can_key_parade_today(current_user) %}
-  <form method="post" action="{{ url_for(endpoint ~ '_finalize') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="date" value="{{ day.isoformat() }}">
-    {% if doc == "cos" %}<input type="hidden" name="cos" value="{{ cos_person.id }}">{% endif %}
-    <button type="submit" class="btn">Finalize &amp; copy</button>
-  </form>
-  {% else %}
-  <p class="muted">Finalizing is for the COS of the day, PS, or S3.</p>
-  {% endif %}
 </section>
 {% endif %}
 
