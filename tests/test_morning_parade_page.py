@@ -106,7 +106,7 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
 
     resp = client.post(
         "/parade/morning/fp",
-        data={"person_id": str(target_id), "reason": "BDO", "date": DAY.isoformat()},
+        data={"people": [str(target_id)], "reason": "BDO", "date": DAY.isoformat()},
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -127,6 +127,68 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
     assert b"OTHERS IN CAMP (1):" in second.data
     with app.app_context():
         assert db.session.query(StatusEntry).count() == 1
+
+
+def test_bulk_add_expands_category_dedupes_and_skips_tagged(app, client, make_person):
+    # UI-19: a category + an overlapping individual tick lands ONE row per
+    # person; a re-post with a new reason skips everyone already tagged.
+    make_person(username="ps_keyer_bulk", appointment=Appointment.PS,
+                display_name="Percy Sim", rank=Rank.THREE_SG, platoon=2)
+    make_person(username="p1_a", display_name="Alpha Guy", platoon=1)
+    make_person(username="p1_b", display_name="Bravo Guy", platoon=1)
+    make_person(username="p2_c", display_name="Charlie Guy", platoon=2)
+    login(client, "ps_keyer_bulk")
+
+    resp = client.post(
+        "/parade/morning/fp",
+        data={
+            "categories": ["PLATOON_1"],
+            "people": [str(pid(app, "p1_a")), str(pid(app, "p2_c"))],
+            "reason": "BDO",
+            "date": DAY.isoformat(),
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Added 3." in resp.data
+    assert b"OTHERS IN CAMP (3):" in resp.data
+    with app.app_context():
+        rows = db.session.query(StatusEntry).all()
+        assert len(rows) == 3
+        assert all(row.remarks == "BDO" for row in rows)
+
+    # Skip, never overwrite (owner decision 2026-07-11): the original reason
+    # survives a re-post and the flash names the skip count.
+    resp = client.post(
+        "/parade/morning/fp",
+        data={
+            "categories": ["PLATOON_1"],
+            "people": [str(pid(app, "p1_a")), str(pid(app, "p2_c"))],
+            "reason": "NEW REASON",
+            "date": DAY.isoformat(),
+        },
+        follow_redirects=True,
+    )
+    assert b"Added 0. Skipped 3 already tagged." in resp.data
+    with app.app_context():
+        rows = db.session.query(StatusEntry).all()
+        assert len(rows) == 3
+        assert all(row.remarks == "BDO" for row in rows)
+
+
+def test_bulk_add_empty_selection_creates_nothing(app, client, make_person):
+    make_person(username="ps_keyer_none", appointment=Appointment.PS)
+    login(client, "ps_keyer_none")
+
+    resp = client.post(
+        "/parade/morning/fp",
+        data={"reason": "BDO", "date": DAY.isoformat()},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Select at least one person or group." in resp.data
+    with app.app_context():
+        assert db.session.query(StatusEntry).count() == 0
 
 
 # --- done-criterion 3: remove round-trips; guarded against non-quick-add rows --
@@ -185,7 +247,7 @@ def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, 
     target_id = pid(app, "target3")
     post_resp = client.post(
         "/parade/morning/fp",
-        data={"person_id": str(target_id), "reason": "BDO", "date": DAY.isoformat()},
+        data={"people": [str(target_id)], "reason": "BDO", "date": DAY.isoformat()},
     )
     assert post_resp.status_code == 403
 

@@ -5,14 +5,15 @@ from flask_login import current_user, login_required
 
 from app.authz import require
 from app.blueprints.parade import bp
-from app.blueprints.parade.forms import DirectAbsenceForm, FpQuickAddForm, StatusEntryForm
-from app.domain import policy, presence
+from app.blueprints.parade.forms import DirectAbsenceForm, FpBulkAddForm, StatusEntryForm
+from app.domain import participants, policy, presence
 from app.domain.dates import today_sgt
 from app.domain.types import (
     DayPart,
     DirectAbsenceType,
     LeaveType,
     ParadeVariant,
+    ParticipantCategory,
     STATUS_IN_CAMP_DEFAULT,
     Service,
     StatusType,
@@ -22,10 +23,18 @@ from app.models import DirectAbsence, Person, StatusEntry
 from app.services import duty_service, event_service, parade_service
 
 
+def _set_fp_people_choices(form):
+    # Same request-time reasoning as _set_status_person_choices below: the
+    # picker's person checkboxes must validate against today's active roster,
+    # so an inactive/unknown id fails as a clean field error, never a write.
+    form.people.choices = [
+        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
+    ]
+
+
 def _set_status_person_choices(form):
     # Request-time roster, not class-level, same reasoning as calendar's
-    # _set_people_choices — who's active changes day to day. Shared by the
-    # statuses form and the morning-parade quick-add (both key a StatusEntry).
+    # _set_people_choices — who's active changes day to day.
     form.person_id.choices = [
         (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
     ]
@@ -132,10 +141,14 @@ def morning():
 
     fp_form = None
     fp_rows = ()
+    picker_groups = ()
+    command_ids = frozenset()
     if duty_service.can_key_parade_today(current_user):
-        fp_form = FpQuickAddForm()
-        _set_status_person_choices(fp_form)
+        fp_form = FpBulkAddForm()
+        _set_fp_people_choices(fp_form)
         fp_rows = _fp_rows(day)
+        picker_groups = event_service.picker_groups()
+        command_ids = event_service.command_person_ids()
 
     return render_template(
         "parade/state.html",
@@ -149,6 +162,8 @@ def morning():
         conflicts=conflicts,
         fp_form=fp_form,
         fp_rows=fp_rows,
+        picker_groups=picker_groups,
+        command_ids=command_ids,
     )
 
 
@@ -156,24 +171,54 @@ def morning():
 @require(duty_service.can_key_parade_today)
 def morning_fp_new():
     day = _parse_day(request.form.get("date", ""))
-    form = FpQuickAddForm()
-    _set_status_person_choices(form)
-    if form.validate_on_submit():
-        row = StatusEntry(
-            person_id=form.person_id.data,
-            type=StatusType.OTHER,
-            start_date=day,
-            end_date=day,
-            day_part=DayPart.FULL,
-            in_camp=True,
-            remarks=form.reason.data.strip(),
-            created_by_id=current_user.id,
+    form = FpBulkAddForm()
+    _set_fp_people_choices(form)
+    if not form.validate_on_submit():
+        flash("Could not add — check the selection and reason.", "error")
+        return redirect(url_for("parade.morning", date=day.isoformat()))
+
+    # Categories expand to concrete people NOW (unlike calendar events, an FP
+    # row is per-person state for one morning, so nothing category-shaped is
+    # stored); ALL covers the whole active roster.
+    roster = event_service.active_roster()
+    values = set(form.categories.data)
+    selected = set(form.people.data)
+    if "ALL" in values:
+        values.discard("ALL")
+        selected.update(p.id for p in roster)
+    selected.update(
+        p.id
+        for p in roster
+        if any(participants.in_category(p, ParticipantCategory(v)) for v in values)
+    )
+    if not selected:
+        flash("Select at least one person or group.", "error")
+        return redirect(url_for("parade.morning", date=day.isoformat()))
+
+    # Already-tagged people are skipped, never overwritten (owner decision
+    # 2026-07-11) — Remove + re-add is how a keyed reason gets changed.
+    existing = {row.person_id for row in _fp_rows(day)}
+    reason = form.reason.data.strip()
+    to_add = sorted(selected - existing)
+    for person_id in to_add:
+        db.session.add(
+            StatusEntry(
+                person_id=person_id,
+                type=StatusType.OTHER,
+                start_date=day,
+                end_date=day,
+                day_part=DayPart.FULL,
+                in_camp=True,
+                remarks=reason,
+                created_by_id=current_user.id,
+            )
         )
-        db.session.add(row)
-        db.session.commit()
-        flash("Added.", "success")
-    else:
-        flash("Could not add — check the person and reason.", "error")
+    db.session.commit()  # the whole batch lands or fails as one transaction
+    skipped = len(selected & existing)
+    message = f"Added {len(to_add)}."
+    if skipped:
+        message += f" Skipped {skipped} already tagged."
+    flash(message, "success")
     return redirect(url_for("parade.morning", date=day.isoformat()))
 
 

@@ -91,11 +91,14 @@
 {% if doc == "morning" and fp_form %}
 <section class="card">
   <h2>Not joining FP</h2>
-  <form method="post" action="{{ url_for('parade.morning_fp_new') }}">
+  {# Bulk add (UI-19): the same category+people picker as the calendar event
+     form, with ONE reason applied to everyone selected. The route expands
+     categories to person rows at submit time and skips already-tagged people. #}
+  <form method="post" action="{{ url_for('parade.morning_fp_new') }}" data-people-picker>
     {{ fp_form.hidden_tag() }}
     <input type="hidden" name="date" value="{{ day.isoformat() }}">
-    <p>{{ fp_form.person_id.label }}{{ fp_form.person_id() }}</p>
     <p>{{ fp_form.reason.label }}{{ fp_form.reason() }}</p>
+    {% with form = fp_form %}{% include "_people_picker.html" %}{% endwith %}
     {% for field in fp_form if field.errors %}
       {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
     {% endfor %}

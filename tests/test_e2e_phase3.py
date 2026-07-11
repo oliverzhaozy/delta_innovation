@@ -63,7 +63,7 @@ def test_phase3_end_to_end(app, client, make_person):
 
     # --- FP quick-add moves the stay-in man to OTHERS IN CAMP ----------------
     resp = client.post("/parade/morning/fp", data={
-        "date": D.isoformat(), "person_id": str(_pid(app, "opr_in")), "reason": "BDO",
+        "date": D.isoformat(), "people": [str(_pid(app, "opr_in"))], "reason": "BDO",
     })
     assert resp.status_code == 302
     page = client.get(f"/parade/morning?date={D.isoformat()}")

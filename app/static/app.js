@@ -113,14 +113,15 @@ function initEventForm() {
     syncAllDay();
   }
 
-  // Participant picker (UI-11): keep each category checkbox and its dropdown in
-  // sync both ways — ticking a group (NSF/REGULAR/PLATOON_x) ticks every member,
+  // People picker (UI-11, shared since UI-19 by the calendar event form and the
+  // parade FP bulk-add): keep each category checkbox and its dropdown in sync
+  // both ways — ticking a group (NSF/REGULAR/PLATOON_x) ticks every member,
   // and a group whose members are all ticked ticks itself. A person shown in
   // both their service and platoon group stays consistent across the two, and
   // each group carries a live "n selected" count. All pure enhancement — the
   // server dedupes duplicate ids and unions category + person rows, so a no-JS
   // user still saves a coherent selection.
-  const picker = document.querySelector("form[data-label-calendars]");
+  const picker = document.querySelector("form[data-people-picker]");
   if (picker) {
     const peopleBoxes = [...picker.querySelectorAll('input[name="people"]')];
     const groups = [...picker.querySelectorAll("details.picker")].map((details) => ({

@@ -1,8 +1,8 @@
 from flask_wtf import FlaskForm
-from wtforms import DateField, SelectField, StringField
+from wtforms import DateField, SelectField, SelectMultipleField, StringField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
-from app.domain.types import DayPart, DirectAbsenceType, StatusType
+from app.domain.types import DayPart, DirectAbsenceType, ParticipantCategory, StatusType
 
 # Field name is `person_id` (not `person`) so obj= prefill on edit binds
 # straight to the FK column, exactly like the enum-backed fields below need
@@ -43,14 +43,23 @@ class StatusEntryForm(FlaskForm):
             raise ValidationError("A half-day entry must be a single day.")
 
 
-class FpQuickAddForm(FlaskForm):
-    """Not-joining-FP quick-add form (P3a.7): person + a required reason. The
-    viewed date rides along as a plain hidden input in the template, not a
-    form field here — it is route state (which day's page posted this), not
-    user input to validate.
+class FpBulkAddForm(FlaskForm):
+    """Not-joining-FP bulk add (UI-19): categories + specific people (the same
+    picker wire format as the calendar event form) and ONE required reason for
+    everyone selected. The viewed date rides along as a plain hidden input in
+    the template, not a form field here — it is route state (which day's page
+    posted this), not user input to validate.
     """
 
-    person_id = SelectField("Person", coerce=int)
+    # "ALL" is a form-level pseudo-choice; the route expands every category to
+    # concrete person ids at submit time — an FP row is per-person state for
+    # one morning, so nothing category-shaped is ever stored.
+    categories = SelectMultipleField(
+        "Who's not joining",
+        choices=[(c.value, c.label) for c in ParticipantCategory] + [("ALL", "All (everyone)")],
+    )
+    # Choices are the active roster at request time (set in routes.py).
+    people = SelectMultipleField("People", coerce=int)
     reason = StringField("Reason", validators=[DataRequired(), Length(max=300)])
 
 
