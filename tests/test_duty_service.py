@@ -44,7 +44,7 @@ def plant_leave(app, person_id, day, *, day_part=DayPart.FULL,
         db.session.commit()
 
 
-def plant_status(app, person_id, start, end, *, in_camp, type_=StatusType.BRIEFING):
+def plant_status(app, person_id, start, end, *, in_camp, type_=StatusType.OTHER):
     with app.app_context():
         db.session.add(
             StatusEntry(
@@ -127,7 +127,7 @@ def test_availability_in_camp_status_does_not_block(app, make_person):
     with app.app_context():
         _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
-        # In camp is not away — a briefing can hold a duty.
+        # In camp is not away — an in-camp status can hold a duty.
         assert availability(person, date(2026, 7, 11)) is True
         # An out-of-camp course blocks.
         assert availability(person, date(2026, 7, 20)) is False

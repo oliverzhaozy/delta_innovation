@@ -174,8 +174,8 @@ def test_in_camp_briefing_roll_call_vs_morning_contrast():
     # in CURRENT STRENGTH at roll call, but the SAME data promotes them to
     # OTHERS IN CAMP on the morning variant.
     p = person("3SG Oliver Zhao", id=1)
-    briefing = status_row(StatusType.BRIEFING, start=YESTERDAY,
-                          end=DAY + timedelta(days=1), in_camp=True)
+    briefing = status_row(StatusType.OTHER, start=YESTERDAY,
+                          end=DAY + timedelta(days=1), in_camp=True, remarks="Briefing")
     pr = pair(p, statuses=[briefing])
 
     roll = parade.categorize(DAY, [pr], "roll_call")
@@ -263,8 +263,6 @@ def test_am_off_is_absent_pm_off_is_present():
         (direct_row(DirectAbsenceType.OTHER), "others"),
         (status_row(StatusType.MC, in_camp=False), "mc"),
         (status_row(StatusType.COURSE, in_camp=False), "on_course"),
-        (status_row(StatusType.BRIEFING, in_camp=False), "others"),
-        (status_row(StatusType.SITE_TESTING, in_camp=False), "others"),
         (status_row(StatusType.OTHER, in_camp=False), "others"),
     ],
 )

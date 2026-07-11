@@ -189,8 +189,6 @@ def test_golden_empty_categories_header_only():
         (direct_row(DirectAbsenceType.OTHER), "others", "OTHERS"),
         (status_row(StatusType.MC), "mc", "MC"),
         (status_row(StatusType.COURSE), "on_course", "ON COURSE"),
-        (status_row(StatusType.BRIEFING), "others", "OTHERS"),      # out-of-camp briefing
-        (status_row(StatusType.SITE_TESTING), "others", "OTHERS"),
         (status_row(StatusType.OTHER), "others", "OTHERS"),
     ],
 )
@@ -206,9 +204,9 @@ def test_absent_row_kind_maps_to_category(row, category, header):
 def test_others_in_camp_reason_falls_back_to_type_label_when_no_remarks():
     # First in-camp row with no remarks → uppercased type label, not blank.
     pairs = [(person("3SG Test Person", 1),
-              present(in_camp_rows=[status_row(StatusType.BRIEFING)]))]
+              present(in_camp_rows=[status_row(StatusType.OTHER)]))]
     doc = parade.categorize(DAY, pairs, "morning")
-    assert doc.others_in_camp == ("3SG TEST PERSON (BRIEFING)",)
+    assert doc.others_in_camp == ("3SG TEST PERSON (OTHER)",)
 
 
 def test_stay_out_regular_with_in_camp_row_promotes_to_others_in_camp():

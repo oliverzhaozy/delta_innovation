@@ -6,7 +6,7 @@ day-part semantics are the semantic core of the phase.
 The caller pre-filters and passes rows for a SINGLE person: `leaves` are
 APPROVED leave rows only (this module never sees a status field — the approval
 decision is upstream in the leave flow), `direct_absences` are S3-keyed regular
-absences, `statuses` are COS-keyed exceptions (MC/course/briefing/…), and
+absences, `statuses` are COS-keyed exceptions (MC/course/other), and
 `duties` is reserved for P4 (empty until duty_assignment exists). Rows are
 duck-typed: every row exposes `.start_date`, `.end_date`, `.day_part`; status
 rows additionally expose `.in_camp`. The engine never copies a row — it returns
@@ -16,7 +16,7 @@ Precedence (highest wins), matching TECH_PLAN's parade precedence rule:
 
     deactivated
       > approved leave / direct absence   (leave first, then direct absence)
-      > out-of-camp status                (MC / course / site-testing / other…)
+      > out-of-camp status                (MC / course / other…)
       > duty                              (P4 hook)
       > stay-out                          (stay_out flag OR REGULAR service)
       > present
@@ -25,8 +25,9 @@ Only FULL and AM absences take the person off the parade for the day
 (`absent_for_day`, decision (i)); a PM absence leaves them PRESENT but is
 surfaced in `partial_rows` so callers can tag "(PM)". In-camp statuses are
 NEVER absences: they are annotations returned in `in_camp_rows` regardless of
-which state wins — a stay-out regular on an in-camp briefing is STAY_OUT for the
-night documents, with the briefing feeding OTHERS IN CAMP on the morning one.
+which state wins — a stay-out regular on an in-camp OTHER (e.g. a briefing) is
+STAY_OUT for the night documents, with the annotation feeding OTHERS IN CAMP on
+the morning one.
 Every covering absent-making row that does not win is returned in `conflicts`
 (e.g. an MC keyed while the person is already on approved leave), so the keyer
 sees it; nothing a covering row says is ever silently dropped.

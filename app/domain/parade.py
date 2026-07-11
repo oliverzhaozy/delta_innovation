@@ -206,7 +206,7 @@ def _absent_category(row) -> str:
             return "mc"
         if kind is StatusType.COURSE:
             return "on_course"
-        return "others"  # out-of-camp BRIEFING / SITE_TESTING / OTHER
+        return "others"  # out-of-camp OTHER
     raise ParadeImbalance(f"unclassifiable absence row: {row!r}")
 
 

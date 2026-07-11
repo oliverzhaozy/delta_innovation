@@ -303,7 +303,7 @@ def roll_call():
     )
 
 
-# --- Statuses (MC/course/briefing/site-testing/other) -----------------------
+# --- Statuses (MC/course/other) ----------------------------------------------
 
 def _resolve_in_camp(type_value, in_camp_choice):
     if in_camp_choice == "IN":

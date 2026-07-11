@@ -88,7 +88,7 @@ def test_out_of_camp_status_and_declaration_flag_in_camp_status_does_not(app, ma
             day_part=DayPart.FULL, in_camp=False, created_by_id=pid(app, "opr1"),
         ))
         db.session.add(StatusEntry(
-            person_id=pid(app, "det1"), type=StatusType.BRIEFING,
+            person_id=pid(app, "det1"), type=StatusType.OTHER,
             start_date=date(2026, 7, 6), end_date=date(2026, 7, 6),
             day_part=DayPart.FULL, in_camp=True, created_by_id=pid(app, "det1"),
         ))

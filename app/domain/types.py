@@ -128,11 +128,12 @@ OCCUPYING_STATUSES = frozenset(
 )
 
 
+# BRIEFING and SITE_TESTING were removed 2026-07-11 (owner directive) — a
+# migration remaps any stored rows to OTHER, so the enum must never regrow
+# those values without a matching data plan.
 class StatusType(str, enum.Enum):
     MC = "MC"
     COURSE = "COURSE"
-    BRIEFING = "BRIEFING"
-    SITE_TESTING = "SITE_TESTING"
     OTHER = "OTHER"
 
     @property
@@ -140,20 +141,15 @@ class StatusType(str, enum.Enum):
         return {
             "MC": "MC",
             "COURSE": "On course",
-            "BRIEFING": "Briefing",
-            "SITE_TESTING": "Site testing",
             "OTHER": "Other",
         }[self.value]
 
 
-# Convenience default for the P3a.5 keying form, not a rule: BRIEFING is
-# usually in-camp and the rest usually aren't, but any row can override it
-# (e.g. an out-of-camp briefing, or an in-camp "not joining FP" OTHER).
+# Convenience default for the P3a.5 keying form, not a rule: any row can
+# override it (e.g. an in-camp "not joining FP" OTHER).
 STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
     StatusType.MC: False,
     StatusType.COURSE: False,
-    StatusType.BRIEFING: True,
-    StatusType.SITE_TESTING: False,
     StatusType.OTHER: False,
 }
 

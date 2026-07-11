@@ -148,8 +148,8 @@ def test_in_camp_briefing_covering_d_absent_from_message():
     # An in-camp briefing spanning D is an annotation, never absent-making, and
     # Message 1 has no OTHERS IN CAMP category — so the person appears nowhere.
     p = person("3SG Oliver Zhao", id=1)
-    briefing = status_row(StatusType.BRIEFING, start=YESTERDAY,
-                          end=DAY + timedelta(days=1), in_camp=True)
+    briefing = status_row(StatusType.OTHER, start=YESTERDAY,
+                          end=DAY + timedelta(days=1), in_camp=True, remarks="Briefing")
     doc = parade.compute_cos_message(DAY, COS, [pair(p, statuses=[briefing])])
     assert "OLIVER ZHAO" not in parade.render_cos(doc)
 
@@ -184,8 +184,6 @@ def test_present_and_duty_nsfs_are_omitted():
         (direct_row(DirectAbsenceType.OTHER), "others"),
         (status_row(StatusType.MC, in_camp=False), "mc"),
         (status_row(StatusType.COURSE, in_camp=False), "on_course"),
-        (status_row(StatusType.BRIEFING, in_camp=False), "others"),
-        (status_row(StatusType.SITE_TESTING, in_camp=False), "others"),
         (status_row(StatusType.OTHER, in_camp=False), "others"),
     ],
 )

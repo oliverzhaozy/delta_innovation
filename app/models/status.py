@@ -8,7 +8,7 @@ def _values(enum_cls):
 
 
 class StatusEntry(db.Model):
-    """COS-keyed date-ranged exception (MC/course/briefing/site-testing/other).
+    """COS-keyed date-ranged exception (MC/course/other).
 
     No ledger effect — this is a presence input for the Phase 3 parade engine,
     not a leave type. `in_camp` is per-row, not derived from `type`: the same

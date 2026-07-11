@@ -121,7 +121,7 @@ def test_absences_between_merges_leave_direct_and_out_of_camp_status(app, make_p
 def test_absences_between_excludes_in_camp_status(app, make_person):
     make_person(username="ic_brief", platoon=1)
     make_person(username="oc_mc", platoon=1)
-    plant_status(app, "ic_brief", type_=StatusType.BRIEFING, in_camp=True)
+    plant_status(app, "ic_brief", type_=StatusType.OTHER, in_camp=True)
     plant_status(app, "oc_mc", type_=StatusType.MC, in_camp=False)
 
     people = {r.person.username for r in rows_on(app)}
@@ -170,7 +170,7 @@ def test_month_view_shows_no_off_leave_chip_for_mc_or_briefing(app, client, make
     # that live on the away board, never the home grid. Neither shows a chip.
     make_person(username="mv_brief", platoon=1)
     make_person(username="mv_mc", platoon=2)
-    plant_status(app, "mv_brief", type_=StatusType.BRIEFING, start=DAY, end=DAY, in_camp=True)
+    plant_status(app, "mv_brief", type_=StatusType.OTHER, start=DAY, end=DAY, in_camp=True)
     plant_status(app, "mv_mc", type_=StatusType.MC, start=NEXT, end=NEXT, in_camp=False)
 
     login(client, make_person(username="mv_v"))
@@ -202,7 +202,7 @@ def test_leave_panel_projected_away_includes_status_absent_person(app, client, m
     plant_status(app, "lp_mc", type_=StatusType.MC, start=DAY, end=DAY, in_camp=False)
     # ...and an in-camp briefing person who must NOT be counted.
     make_person(username="lp_brief", platoon=2)
-    plant_status(app, "lp_brief", type_=StatusType.BRIEFING, start=DAY, end=DAY, in_camp=True)
+    plant_status(app, "lp_brief", type_=StatusType.OTHER, start=DAY, end=DAY, in_camp=True)
 
     login(client, make_person(username="lp_oc", rank=Rank.CPT, appointment=Appointment.OC,
                               platoon=None))
@@ -242,7 +242,7 @@ def test_presence_inputs_resolves_each_active_person_parade_sorted(app, make_per
     make_person(username="pi_opr", rank=Rank.PTE, appointment=Appointment.OPR, platoon=1,
                 service=Service.NSF)
     plant_leave(app, "pi_pc", start=DAY, end=DAY)  # approved leave → ABSENT
-    plant_status(app, "pi_opr", type_=StatusType.BRIEFING, start=DAY, end=DAY, in_camp=True)
+    plant_status(app, "pi_opr", type_=StatusType.OTHER, start=DAY, end=DAY, in_camp=True)
 
     with app.app_context():
         entries = presence_service.presence_inputs(DAY)

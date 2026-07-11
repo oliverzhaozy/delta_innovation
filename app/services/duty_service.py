@@ -48,7 +48,7 @@ def availability_for_month(month: str):
     the generator and the manual-assign checks (P4.6) both consume.
 
     One shared absence fetch for the whole month; in-camp statuses do NOT
-    block (in camp is not away — a briefing eats meals and can hold a duty).
+    block (in camp is not away — an in-camp status eats meals and can hold a duty).
     Only OVERNIGHT TP events block (P4.2's stated v1 definition); ARCTIC rows
     are contingency plans, not scheduled conducts, and never block.
     """

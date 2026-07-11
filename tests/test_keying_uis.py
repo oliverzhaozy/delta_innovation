@@ -224,8 +224,8 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
     make_person(username="c4_mc_default", display_name="Mc Default")
     login(client, "c4_ps")
 
-    key_status(client, pid(app, "c4_brief_default"), type_="BRIEFING", in_camp="DEFAULT")
-    key_status(client, pid(app, "c4_brief_out"), type_="BRIEFING", in_camp="OUT")
+    key_status(client, pid(app, "c4_brief_default"), type_="OTHER", in_camp="IN")
+    key_status(client, pid(app, "c4_brief_out"), type_="OTHER", in_camp="OUT")
     key_status(client, pid(app, "c4_mc_default"), type_="MC", in_camp="DEFAULT")
 
     with app.app_context():
@@ -242,12 +242,13 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
         morning.split(b"NOT PRESENT IN CAMP")[0],
         morning.split(b"NOT PRESENT IN CAMP")[1],
     )
-    # BRIEFING+DEFAULT -> in camp -> OTHERS IN CAMP, under PRESENT IN CAMP, never absent.
+    # OTHER+IN (an in-camp briefing, keyed explicitly since UI-21 removed the
+    # BRIEFING type) -> OTHERS IN CAMP, under PRESENT IN CAMP, never absent.
     # (reason is the keyer's remark "flu", uppercased by _in_camp_reason.)
     assert b"OTHERS IN CAMP (1):" in morning
     assert b"PTE BRIEF DEFAULT (FLU)" in present
     assert b"PTE BRIEF DEFAULT" not in absent
-    # BRIEFING+OUT and MC+DEFAULT -> out of camp -> the NOT PRESENT IN CAMP half.
+    # OTHER+OUT and MC+DEFAULT -> out of camp -> the NOT PRESENT IN CAMP half.
     assert b"PTE BRIEF OUT" in absent
     assert b"PTE MC DEFAULT" in absent
 
@@ -340,7 +341,7 @@ def test_remarks_optional_for_status_but_required_for_direct_absence(app, client
 def test_edit_status_prefill_in_camp_is_explicit_not_default(app, client, make_person):
     make_person(username="c7_ps", appointment=Appointment.PS)
     make_person(username="c7_target")
-    entry_id = plant_status(app, "c7_target", type_=StatusType.BRIEFING, in_camp=True)
+    entry_id = plant_status(app, "c7_target", type_=StatusType.OTHER, in_camp=True)
     login(client, "c7_ps")
 
     resp = client.get(f"/parade/statuses/{entry_id}/edit")

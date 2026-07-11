@@ -19,11 +19,11 @@ def person_id_of(app, username):
 # --- enums -------------------------------------------------------------
 
 def test_status_type_enum_members_and_labels():
-    assert [t.value for t in StatusType] == ["MC", "COURSE", "BRIEFING", "SITE_TESTING", "OTHER"]
+    # BRIEFING and SITE_TESTING were removed UI-21 (owner directive 2026-07-11);
+    # a briefing/site-testing is keyed as OTHER with the reason in remarks.
+    assert [t.value for t in StatusType] == ["MC", "COURSE", "OTHER"]
     assert StatusType.MC.label == "MC"
     assert StatusType.COURSE.label == "On course"
-    assert StatusType.BRIEFING.label == "Briefing"
-    assert StatusType.SITE_TESTING.label == "Site testing"
     assert StatusType.OTHER.label == "Other"
 
 
@@ -37,8 +37,6 @@ def test_status_in_camp_default_pinned_and_total():
     assert STATUS_IN_CAMP_DEFAULT == {
         StatusType.MC: False,
         StatusType.COURSE: False,
-        StatusType.BRIEFING: True,
-        StatusType.SITE_TESTING: False,
         StatusType.OTHER: False,
     }
     # Totality: every enum member must have a default, so a new member
@@ -72,7 +70,7 @@ def test_status_entry_half_day_spanning_multiple_days_rejected(app, make_person)
         pid = person_id_of(app, "status_halfday")
         row = StatusEntry(
             person_id=pid,
-            type=StatusType.BRIEFING,
+            type=StatusType.OTHER,
             start_date=TODAY,
             end_date=TOMORROW,
             day_part=DayPart.AM,
@@ -91,7 +89,7 @@ def test_status_entry_half_day_single_day_accepted(app, make_person):
         pid = person_id_of(app, "status_halfday_ok")
         row = StatusEntry(
             person_id=pid,
-            type=StatusType.BRIEFING,
+            type=StatusType.OTHER,
             start_date=TODAY,
             end_date=TODAY,
             day_part=DayPart.PM,
