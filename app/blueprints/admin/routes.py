@@ -1,13 +1,24 @@
 import secrets
 
 from flask import abort, flash, redirect, render_template, url_for
+from flask_login import current_user
+from sqlalchemy.exc import IntegrityError
 
 from app.authz import require
 from app.blueprints.admin import bp
 from app.blueprints.admin.forms import PersonForm
 from app.domain import policy
 from app.domain.dates import today_sgt
-from app.domain.types import Appointment, CompanyRole, PENDING_STATUSES, Rank, RequestStatus, Service
+from app.domain.types import (
+    APPOINTMENT_ORDER,
+    Appointment,
+    CompanyRole,
+    PENDING_STATUSES,
+    RANK_ORDER,
+    Rank,
+    RequestStatus,
+    Service,
+)
 from app.extensions import db
 from app.models import LeaveRequest, Person
 
@@ -36,10 +47,17 @@ def _username_taken(username, exclude_id=None):
 @bp.route("/people")
 @require(policy.can_manage_people)
 def people():
-    everyone = (
-        db.session.query(Person)
-        .order_by(Person.is_active.desc(), Person.platoon.nulls_first(), Person.display_name)
-        .all()
+    # Appointment then rank isn't an alphabetical order, so sort in Python by the
+    # declared seniority maps (36 rows — a CASE ladder would just restate them).
+    # Active first keeps ORD/posted-out members from interleaving the live roster.
+    everyone = db.session.query(Person).all()
+    everyone.sort(
+        key=lambda p: (
+            not p.is_active,
+            APPOINTMENT_ORDER[p.appointment],
+            -RANK_ORDER[p.rank],
+            p.display_name,
+        )
     )
     return render_template("admin/people.html", people=everyone)
 
@@ -106,6 +124,33 @@ def person_edit(person_id):
         .all()
     )
     return render_template("admin/person_form.html", form=form, person=person, open_items=open_items)
+
+
+@bp.route("/people/<int:person_id>/delete", methods=["POST"])
+@require(policy.can_manage_people)
+def person_delete(person_id):
+    person = db.session.get(Person, person_id) or abort(404)
+    # Deleting the row you're signed in as would strand the session; block it.
+    if person.id == current_user.id:
+        flash("You can't delete your own account.", "error")
+        return redirect(url_for("admin.person_edit", person_id=person.id))
+    name = person.display_name
+    db.session.delete(person)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # A person referenced by leave/ledger/duty/parade rows can't be hard-
+        # deleted — foreign keys (ON) reject it. History is the source of truth
+        # (TECH_PLAN.md:58); deactivating is the reversible alternative.
+        db.session.rollback()
+        flash(
+            f"Can't delete {name} — they're still referenced by leave, ledger, "
+            "or duty history. Deactivate them instead (uncheck Active).",
+            "error",
+        )
+        return redirect(url_for("admin.person_edit", person_id=person.id))
+    flash(f"Deleted {name}.", "success")
+    return redirect(url_for("admin.people"))
 
 
 @bp.route("/people/<int:person_id>/reset-password", methods=["POST"])

@@ -19,7 +19,7 @@
       {% set section = {
         "parade": "parade", "duty": "duty", "ro": "duty", "manning": "duty",
         "leave": "leave", "overseas": "leave", "ledger": "leave",
-        "calendar": "calendar", "admin": "account", "meals": "account", "auth": "account",
+        "calendar": "calendar", "admin": "people", "meals": "account", "auth": "account",
       }.get(request.blueprint) %}
       <nav class="topnav">
         <a href="{{ url_for('main.dashboard') }}" {% if request.blueprint == "main" %}class="here"{% endif %}>Home</a>
@@ -70,22 +70,18 @@
         <details class="navgroup" {% if section == "calendar" %}data-here{% endif %}>
           <summary>Calendar</summary>
           <div class="navmenu">
-            <a href="{{ url_for('calendar.month') }}">Month view</a>
             <a href="{{ url_for('calendar.tp_list') }}">TP events</a>
             {% if policy.can_view_arctic(current_user) %}
               <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>
             {% endif %}
-            {% if policy.can_edit_events(current_user) %}
-              <a href="{{ url_for('calendar.new') }}">New event</a>
-            {% endif %}
           </div>
         </details>
+        {% if policy.can_manage_people(current_user) %}
+          <a href="{{ url_for('admin.people') }}" {% if section == "people" %}class="here"{% endif %}>People</a>
+        {% endif %}
         <details class="navgroup" {% if section == "account" %}data-here{% endif %}>
           <summary>Account</summary>
           <div class="navmenu">
-            {% if policy.can_manage_people(current_user) %}
-              <a href="{{ url_for('admin.people') }}">People</a>
-            {% endif %}
             {% if policy.can_manage_meals(current_user) %}
               <a href="{{ url_for('meals.index') }}">NSF meals</a>
             {% endif %}

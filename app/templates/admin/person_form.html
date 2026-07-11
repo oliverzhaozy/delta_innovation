@@ -50,5 +50,17 @@
   </form>
   <p class="muted" style="margin-top:0.6rem">Issues a temporary password (shown once) and forces a change at next login.</p>
 </section>
+
+<section class="card">
+  <h2>Delete</h2>
+  <p class="muted">Permanently removes this person. Only possible when they have no
+    leave, ledger, or duty history — otherwise deactivate instead (uncheck Active above).</p>
+  <form action="{{ url_for('admin.person_delete', person_id=person.id) }}" method="post"
+        class="inline-form"
+        onsubmit="return confirm('Delete {{ person.display_name }}? This cannot be undone.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn danger">Delete person</button>
+  </form>
+</section>
 {% endif %}
 {% endblock %}

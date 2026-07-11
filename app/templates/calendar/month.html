@@ -51,9 +51,10 @@
             {% endif %}
           </div>
           {% for event in cell.events %}
-          {# cal-* class drives the on/off filter; ev-<slug> overrides the colour
-             when the event is labelled (UI-9). #}
-          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}{% if event.label_enum %} ev-{{ event.label_enum.slug }}{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{% if event.label_enum %}{{ event.label_enum.value }} · {% endif %}{{ event.title }}</a>
+          {# cal-* class drives the on/off filter; ev-<slug> still colours the
+             chip by label (UI-9), but the label TEXT is omitted in the grid —
+             the month view shows titles only; the label stays on the list/detail. #}
+          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}{% if event.label_enum %} ev-{{ event.label_enum.slug }}{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
           {% endfor %}
           {% for row in cell.off_leave[:off_leave_limit] %}
           <span class="chip cal-off">{{ row.person.rank.value }} {{ row.person.display_name }} {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span>

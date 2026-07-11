@@ -52,6 +52,12 @@ class Appointment(str, enum.Enum):
         return {"DET_COMD": "Det Comd", "OPR": "Opr"}.get(self.value, self.value)
 
 
+# Roster/list display order (most senior appointment first), mirroring the
+# declaration order above. Parallels RANK_ORDER so the People page can sort by
+# appointment then rank without re-deriving seniority anywhere else.
+APPOINTMENT_ORDER = {appt: order for order, appt in enumerate(Appointment)}
+
+
 COMMAND_TEAM = frozenset({
     Appointment.OC,
     Appointment.SM,

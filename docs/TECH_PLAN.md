@@ -55,7 +55,7 @@ This plan was pressure-tested by a 5-critic review panel (ambiguity, edge cases,
 
 ## Data model
 
-SQLite via SQLAlchemy + Alembic. Dates ISO, times naive SGT. People are never hard-deleted.
+SQLite via SQLAlchemy + Alembic. Dates ISO, times naive SGT. People are soft-deleted (is_active=False) once they have any history; hard delete is offered from the People admin but the DB's `foreign_keys=ON` rejects it for anyone referenced by leave/ledger/duty/parade rows, so it only ever removes history-free rows (mistaken adds) — owner directive 2026-07-11 revising the original "never hard-deleted" rule.
 
 - **person** — username (unique), display_name, rank (enum CPT..PTE + explicit integer order), appointment (OC/SM/2IC/PC/P2IC/PS/DET_COMD/OPR), company_role (S3/S4/null), platoon (1–3/null), service (NSF/REGULAR), stay_out, is_active, is_admin, password_hash, must_change_pw.
   *Why one table for person+user: strict 1:1 at this scale; a separate accounts table is indirection with no payoff.*

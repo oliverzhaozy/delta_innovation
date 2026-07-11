@@ -1,6 +1,8 @@
-from app.domain.types import Appointment, Rank
+import datetime
+
+from app.domain.types import Appointment, DayPart, LeaveType, Rank, RequestStatus
 from app.extensions import db
-from app.models import Person
+from app.models import LeaveRequest, Person
 from tests.conftest import login
 
 
@@ -92,6 +94,52 @@ def test_deactivate_via_edit_blocks_login(app, client, make_person):
     client.post("/logout")
     resp = login(client, victim)
     assert b"Invalid credentials." in resp.data
+
+
+def test_delete_person_without_history(app, client, make_person):
+    make_person(username="mistake")
+    login(client, make_s3(make_person))
+    with app.app_context():
+        target_id = db.session.query(Person.id).filter_by(username="mistake").scalar()
+    resp = client.post(f"/admin/people/{target_id}/delete", follow_redirects=True)
+    assert b"Deleted" in resp.data
+    with app.app_context():
+        assert db.session.get(Person, target_id) is None
+
+
+def test_delete_person_with_history_blocked(app, client, make_person):
+    make_person(username="hashistory")
+    login(client, make_s3(make_person))
+    with app.app_context():
+        target_id = db.session.query(Person.id).filter_by(username="hashistory").scalar()
+        db.session.add(
+            LeaveRequest(
+                person_id=target_id,
+                type=LeaveType.OFF,
+                start_date=datetime.date(2026, 1, 1),
+                end_date=datetime.date(2026, 1, 1),
+                day_part=DayPart.FULL,
+                status=RequestStatus.APPROVED,
+            )
+        )
+        db.session.commit()
+    resp = client.post(f"/admin/people/{target_id}/delete", follow_redirects=True)
+    assert b"Can&#39;t delete" in resp.data
+    with app.app_context():
+        # The referencing leave row and the person both survive intact.
+        assert db.session.get(Person, target_id) is not None
+        assert db.session.query(LeaveRequest).filter_by(person_id=target_id).count() == 1
+
+
+def test_cannot_delete_own_account(app, client, make_person):
+    make_s3(make_person)
+    login(client, "s3_admin")
+    with app.app_context():
+        own_id = db.session.query(Person.id).filter_by(username="s3_admin").scalar()
+    resp = client.post(f"/admin/people/{own_id}/delete", follow_redirects=True)
+    assert b"can&#39;t delete your own account" in resp.data
+    with app.app_context():
+        assert db.session.get(Person, own_id) is not None
 
 
 def test_password_reset_forces_change(app, client, make_person):
