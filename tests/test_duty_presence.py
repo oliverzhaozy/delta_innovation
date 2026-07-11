@@ -173,19 +173,17 @@ def notice_duties(html):
     return match.group(1) if match else None
 
 
-def test_roll_call_page_notice_when_no_confirmed_duty(app, client, make_person):
+def test_roll_call_page_has_no_missing_duty_notice(app, client, make_person):
+    # UI-20 (owner directive 2026-07-11): the roll-call page no longer shows
+    # the missing-duty notice — that chrome now lives on the meals page only.
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
     make_stay_out_opr(make_person)
     login(client, "ps2")
 
-    html = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
-    assert notice_duties(html) == "COS, CDO/S"
-
-    # The night covered by roll_call(D) is D−1→D: a CONFIRMED COS dated D−1
-    # covers it, so only CDO/S is still missing.
-    plant_duty(app, "cos_guy", D - timedelta(days=1))
-    html = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
-    assert notice_duties(html) == "CDO/S"
+    page = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
+    assert NOTICE not in page
+    # The document itself still renders on a duty-less night.
+    assert re.search(r'<pre id="[^"]*"[^>]*>(.*?)</pre>', page, re.S)
 
 
 def test_meals_page_notice(app, client, make_person):
@@ -202,14 +200,14 @@ def test_meals_page_notice(app, client, make_person):
     assert notice_duties(html) == "CDO/S"
 
 
-def test_notice_is_page_chrome_never_document_text(app, client, make_person):
-    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
-    login(client, "ps2")
+def test_meals_notice_never_names_a_covered_duty(app, client, make_person):
+    # The meals notice is derived chrome: once every duty for the night is
+    # CONFIRMED, it disappears entirely rather than rendering an empty shell.
+    make_person(username="s4b", is_admin=True)
+    make_stay_out_opr(make_person)
+    login(client, "s4b")
 
-    page = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
-    # On a duty-less night the missing-duty notice shows as page chrome...
-    assert NOTICE in page
-    # ...but never bleeds into the copyable document text (the <pre>) itself.
-    match = re.search(r'<pre id="[^"]*"[^>]*>(.*?)</pre>', page, re.S)
-    assert match, "roll call rendered no document <pre>"
-    assert NOTICE not in match.group(1)
+    plant_duty(app, "cos_guy", D, duty=Duty.COS)
+    plant_duty(app, "cos_guy", D, duty=Duty.CDOS)
+    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    assert NOTICE not in html

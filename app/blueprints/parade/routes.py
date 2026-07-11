@@ -11,7 +11,6 @@ from app.domain.dates import today_sgt
 from app.domain.types import (
     DayPart,
     DirectAbsenceType,
-    Duty,
     LeaveType,
     ParadeVariant,
     STATUS_IN_CAMP_DEFAULT,
@@ -235,7 +234,6 @@ def roll_call():
     # The night this document covers is day−1 → day (A7 notice reads the same
     # duty date build_doc does).
     night_rows = duty_service.confirmed_on(day - timedelta(days=1))
-    missing_duties = [duty for duty in Duty if duty not in {r.duty for r in night_rows}]
     # Absent holders derive from built.pairs — those resolutions were computed
     # with the right duty_day; re-resolving here could disagree with the
     # document below the chrome.
@@ -256,7 +254,6 @@ def roll_call():
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,
-        missing_duties=missing_duties,
         absent_holders=absent_holders,
     )
 

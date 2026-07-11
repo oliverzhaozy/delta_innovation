@@ -56,11 +56,6 @@
 {% endif %}
 
 {% if doc == "roll_call" %}
-  {% if missing_duties %}
-  <p class="flash flash-error">No confirmed duty for this night:
-    {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
-    — this document counts nobody as on duty.</p>
-  {% endif %}
   {% for a in absent_holders %}
   <p class="flash flash-error">CONFIRMED {{ a.row.duty.label }}
      {{ a.person.rank.value }} {{ a.person.display_name }} is absent
