@@ -29,7 +29,7 @@ def test_parade_pills_and_active_states(app, client, make_person):
     login(client, "opr1")
 
     for path, label in (
-        (f"/parade/morning?date={DAY.isoformat()}", "Morning"),
+        (f"/parade/morning?date={DAY.isoformat()}", "Morning parade state"),
         (f"/parade/cos-message?date={DAY.isoformat()}", "COS message"),
         (f"/parade/roll-call?date={DAY.isoformat()}", "Roll call"),
     ):

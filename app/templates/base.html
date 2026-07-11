@@ -26,7 +26,7 @@
         <details class="navgroup" {% if section == "parade" %}data-here{% endif %}>
           <summary>Parade</summary>
           <div class="navmenu">
-            <a href="{{ url_for('parade.morning') }}">Parade state</a>
+            <a href="{{ url_for('parade.cos_message') }}">Parade state</a>
             {% if can_key_parade_today(current_user) %}
               <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
             {% endif %}

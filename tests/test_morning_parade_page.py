@@ -260,4 +260,4 @@ def test_nav_shows_morning_parade_link_to_every_logged_in_user(app, client, make
     make_person(username="anyviewer", appointment=Appointment.OPR)
     login(client, "anyviewer")
     home = client.get("/").data
-    assert b'href="/parade/morning"' in home
+    assert b'href="/parade/cos-message"' in home

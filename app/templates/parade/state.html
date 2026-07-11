@@ -4,7 +4,7 @@
    The document is copy-only: the <pre> text is exactly what build_doc renders,
    and the Copy button is the only action on it. #}
 {% extends "base.html" %}
-{% block title %}{{ {"morning": "Morning parade", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
+{% block title %}{{ {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
 
 {% set endpoint = {"morning": "parade.morning", "cos": "parade.cos_message", "roll_call": "parade.roll_call"}[doc] %}
 {% set pre_id = {"morning": "paradetext", "cos": "costext", "roll_call": "rollcalltext"}[doc] %}

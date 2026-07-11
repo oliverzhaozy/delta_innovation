@@ -163,7 +163,7 @@ def test_nav_reaches_cos_message_and_roll_call_for_every_logged_in_user(client, 
     # the path is Home -> Parade state -> pills.
     login(client, make_person(username="anyviewer2", appointment=Appointment.OPR))
     home = client.get("/", follow_redirects=True).data
-    assert b'href="/parade/morning"' in home  # the Parade-state entry point
-    pills = client.get("/parade/morning").data
-    assert b'/parade/cos-message' in pills
+    assert b'href="/parade/cos-message"' in home  # the Parade-state entry point (lands on COS message)
+    pills = client.get("/parade/cos-message").data
+    assert b'/parade/morning' in pills
     assert b'/parade/roll-call' in pills
