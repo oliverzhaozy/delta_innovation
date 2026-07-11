@@ -17,14 +17,25 @@
 
 {% with active = doc %}{% include "parade/_pills.html" %}{% endwith %}
 
-<section class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
-    {% set cos_arg = cos_person.id if doc == "cos" else None %}
-    <a href="{{ url_for(endpoint, date=prev_day.isoformat(), cos=cos_arg) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
-    <a href="{{ url_for(endpoint, date=today.isoformat(), cos=cos_arg) }}">Today</a>
-    <a href="{{ url_for(endpoint, date=next_day.isoformat(), cos=cos_arg) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+{# Day navigation (UI-17): arrows flank the date; cos_arg rides on every link
+   so the selected COS survives day changes on the COS tab. The "Back to today"
+   chip shows only when the page is off today. #}
+{% set cos_arg = cos_person.id if doc == "cos" else None %}
+<nav class="day-nav card" aria-label="Change day">
+  <a class="day-nav-arrow" rel="prev"
+     href="{{ url_for(endpoint, date=prev_day.isoformat(), cos=cos_arg) }}"
+     aria-label="Previous day, {{ prev_day.strftime('%d %b') }}">&lsaquo;</a>
+  <div class="day-nav-center">
+    <span class="day-nav-date">{{ day.strftime("%A, %d %b %Y") }}</span>
+    {% if day != today %}
+    <a class="day-nav-today"
+       href="{{ url_for(endpoint, date=today.isoformat(), cos=cos_arg) }}">Back to today</a>
+    {% endif %}
   </div>
-</section>
+  <a class="day-nav-arrow" rel="next"
+     href="{{ url_for(endpoint, date=next_day.isoformat(), cos=cos_arg) }}"
+     aria-label="Next day, {{ next_day.strftime('%d %b') }}">&rsaquo;</a>
+</nav>
 
 {% if doc == "cos" %}
 <section class="card">

@@ -246,7 +246,8 @@ def test_date_param_navigation_and_nav_links(app, client, make_person):
     prev_day = DAY - timedelta(days=1)
     assert f"/parade/morning?date={prev_day.isoformat()}".encode() in day_resp.data
     assert f"/parade/morning?date={next_day.isoformat()}".encode() in day_resp.data
-    assert b"Today" in day_resp.data
+    # DAY is off today, so the day-nav shows the "Back to today" chip (UI-17).
+    assert b"Back to today" in day_resp.data
 
 
 def test_bad_date_falls_back_to_today(client, make_person):
