@@ -22,7 +22,7 @@ from app.domain import parade
 from app.domain.meals import NsfPresence, nsf_presence
 from app.domain.presence import PresenceState, Resolution, resolve
 from app.domain.types import (
-    DayPart, DirectAbsenceType, LeaveType, Meal, Service, StatusType,
+    DayPart, DirectAbsenceType, LeaveType, Meal, Rank, Service, StatusType,
 )
 
 D = date(2026, 7, 6)      # the day meals are computed for
@@ -33,10 +33,14 @@ DAY = D                   # alias used by the parade-people section
 # --- duck-typed fakes ----------------------------------------------------
 
 def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True, id):
-    # resolve() reads service/stay_out/is_active; parade_line reads display_name;
-    # the NSF sub-count and person-identity dedup read service and id.
+    # `display_name` is passed "RANK Name" for brevity; the fake mirrors the real
+    # Person, which since ee20005 holds the plain name with rank as a separate enum
+    # column. Split them here so parade_line pairs them back into "RANK NAME".
+    # resolve() reads service/stay_out/is_active; the NSF sub-count and
+    # person-identity dedup read service and id.
+    rank_token, _, plain = display_name.partition(" ")
     return SimpleNamespace(
-        id=id, display_name=display_name, service=service,
+        id=id, display_name=plain, rank=Rank(rank_token), service=service,
         stay_out=stay_out, is_active=is_active,
     )
 

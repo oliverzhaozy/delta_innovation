@@ -57,9 +57,10 @@ def _make_person(rng, idx):
     rank = rng.choice(_RANKS)
     return SimpleNamespace(
         id=idx,
-        # Rank-prefix style, unique per idx (fixed 3-digit width keeps one
-        # person's line from ever being a startswith-prefix of another's).
-        display_name=f"{rank.value} Fake{idx:03d}",
+        # Plain name (rank is its own enum column since ee20005; parade_line pairs
+        # them). Fixed 3-digit width keeps one person's rendered line from ever
+        # being a startswith-prefix of another's.
+        display_name=f"Fake{idx:03d}",
         appointment=rng.choice(_APPOINTMENTS),
         rank=rank,
         platoon=rng.choice(_PLATOONS),

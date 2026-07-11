@@ -6,7 +6,7 @@ more. Meal indents are NSF-only, so the per-meal counts and the manual ±
 """
 from datetime import date
 
-from app.domain.types import CompanyRole, Service
+from app.domain.types import CompanyRole, Rank, Service
 from tests.conftest import login
 
 DAY = date(2026, 7, 8)  # Wednesday — same convention as the other parade tests
@@ -16,7 +16,7 @@ def _s4(make_person):
     # A regular S4: keeps the fixture numbers purely about the NSFs below.
     return make_person(
         username="s4_guy", company_role=CompanyRole.S4, service=Service.REGULAR,
-        display_name="1SG Siti Rahim",
+        display_name="Siti Rahim", rank=Rank.ONE_SG,
     )
 
 
@@ -34,8 +34,9 @@ def test_adjust_route_is_gone(app, client, make_person):
 
 def test_counters_render_engine_derived_numbers(app, client, make_person):
     _s4(make_person)
-    make_person(username="stay_in", display_name="CFC Daniel Lim")
-    make_person(username="stay_out_guy", display_name="CPL Marcus Tan", stay_out=True)
+    make_person(username="stay_in", display_name="Daniel Lim", rank=Rank.CFC)
+    make_person(username="stay_out_guy", display_name="Marcus Tan", rank=Rank.CPL,
+                stay_out=True)
     login(client, "s4_guy")
 
     page = client.get(f"/meals?date={DAY.isoformat()}")

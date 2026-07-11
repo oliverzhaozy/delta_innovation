@@ -14,7 +14,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import PresenceState, Resolution
-from app.domain.types import DirectAbsenceType, LeaveType, StatusType
+from app.domain.types import DirectAbsenceType, LeaveType, Rank, StatusType
 
 DAY = date(2026, 7, 6)  # → DDMMYY "060726"
 
@@ -22,8 +22,11 @@ DAY = date(2026, 7, 6)  # → DDMMYY "060726"
 # --- duck-typed fakes ----------------------------------------------------
 
 def person(display_name, id=0):
-    # parade_line reads display_name only; id rides along for realism.
-    return SimpleNamespace(id=id, display_name=display_name)
+    # `display_name` is passed "RANK Name" for brevity; the fake mirrors the real
+    # Person, which since ee20005 holds the plain name with rank as a separate enum
+    # column. Split them here so parade_line pairs them back into "RANK NAME".
+    rank_token, _, plain = display_name.partition(" ")
+    return SimpleNamespace(id=id, display_name=plain, rank=Rank(rank_token))
 
 
 def leave_row(type):

@@ -18,7 +18,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import PresenceState, Resolution, resolve
-from app.domain.types import DayPart, DirectAbsenceType, LeaveType, Service, StatusType
+from app.domain.types import DayPart, DirectAbsenceType, LeaveType, Rank, Service, StatusType
 
 DAY = date(2026, 7, 6)  # D, the next duty day → DDMMYY "060726"
 YESTERDAY = DAY - timedelta(days=1)
@@ -27,9 +27,12 @@ YESTERDAY = DAY - timedelta(days=1)
 # --- duck-typed fakes (feed the real resolve engine) ---------------------
 
 def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True, id=0):
-    # resolve() reads service/stay_out/is_active; parade_line reads display_name.
+    # `display_name` is passed "RANK Name" for brevity; the fake mirrors the real
+    # Person, which since ee20005 holds the plain name with rank as a separate enum
+    # column. Split them here so parade_line pairs them back into "RANK NAME".
+    rank_token, _, plain = display_name.partition(" ")
     return SimpleNamespace(
-        id=id, display_name=display_name, service=service,
+        id=id, display_name=plain, rank=Rank(rank_token), service=service,
         stay_out=stay_out, is_active=is_active,
     )
 

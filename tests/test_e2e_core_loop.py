@@ -15,7 +15,7 @@ MON = date(2026, 7, 13)
 
 
 def test_core_loop_end_to_end(app, client, make_person):
-    opr = make_person(username="e2e_opr", display_name="PTE E2E Opr", platoon=1)
+    opr = make_person(username="e2e_opr", display_name="E2E Opr", platoon=1)
     pc = make_person(username="e2e_pc", rank=Rank.TWO_LT, appointment=Appointment.PC, platoon=1)
     oc = make_person(username="e2e_oc", rank=Rank.CPT, appointment=Appointment.OC, platoon=None)
     s3 = make_person(
@@ -50,7 +50,7 @@ def test_core_loop_end_to_end(app, client, make_person):
 
     # PC sees it in the platoon queue, endorses.
     login(client, pc)
-    assert b"PTE E2E Opr" in client.get("/leave/queue/pc").data
+    assert b"E2E Opr" in client.get("/leave/queue/pc").data
     detail = client.get(f"/leave/{req_id}").data
     assert b"2 OFF deducted" in detail  # working-days breakdown visible pre-decision
     client.post(f"/leave/{req_id}/pc-approve")
@@ -58,7 +58,7 @@ def test_core_loop_end_to_end(app, client, make_person):
 
     # OC approves — the one action that plots AND deducts.
     login(client, oc)
-    assert b"PTE E2E Opr" in client.get("/leave/queue/oc").data
+    assert b"E2E Opr" in client.get("/leave/queue/oc").data
     resp = client.post(f"/leave/{req_id}/oc-approve", follow_redirects=True)
     assert b"Approved" in resp.data
     client.post("/logout")

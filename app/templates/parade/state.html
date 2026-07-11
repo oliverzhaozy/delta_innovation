@@ -73,7 +73,7 @@
   <h2>Conflicts</h2>
   <ul class="toollist">
     {% for c in conflicts %}
-    <li>{{ c.person.display_name }}: {{ c.winner_label }} ({{ c.winner_range }}) is showing on the parade; {{ c.shadow_label }} ({{ c.shadow_range }}) is also keyed for this day and is not shown.</li>
+    <li>{{ c.person.rank.value }} {{ c.person.display_name }}: {{ c.winner_label }} ({{ c.winner_range }}) is showing on the parade; {{ c.shadow_label }} ({{ c.shadow_range }}) is also keyed for this day and is not shown.</li>
     {% endfor %}
   </ul>
 </section>

@@ -20,6 +20,7 @@ from app.domain.types import (
     Appointment,
     CompanyRole,
     DirectAbsenceType,
+    Rank,
     Service,
     StatusType,
 )
@@ -122,7 +123,7 @@ def test_can_key_direct_absence_is_s3_or_admin_only():
 
 def test_ps_keys_mc_appears_in_list_and_morning_parade(app, client, make_person):
     make_person(username="c1_ps", appointment=Appointment.PS)
-    make_person(username="c1_opr", display_name="PTE Mc Target")
+    make_person(username="c1_opr", display_name="Mc Target")
     login(client, "c1_ps")
 
     key_status(client, pid(app, "c1_opr"), type_="MC", remarks="fever")
@@ -188,8 +189,8 @@ def test_ps_403_on_all_direct_absence_urls(app, client, make_person):
 
 def test_s3_keys_direct_absence_for_oc_shows_leave_on_morning(app, client, make_person):
     make_person(username="c3_s3", company_role="S3")
-    make_person(username="c3_oc", display_name="CPT The Boss", appointment=Appointment.OC,
-                platoon=None, service=Service.REGULAR)
+    make_person(username="c3_oc", display_name="The Boss", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None, service=Service.REGULAR)
     login(client, "c3_s3")
 
     key_direct(client, pid(app, "c3_oc"), type_="LEAVE", remarks="on leave")
@@ -218,9 +219,9 @@ def test_s3_direct_absence_for_nsf_rejected_form_error_nothing_saved(app, client
 
 def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, make_person):
     make_person(username="c4_ps", appointment=Appointment.PS)
-    make_person(username="c4_brief_default", display_name="PTE Brief Default")
-    make_person(username="c4_brief_out", display_name="PTE Brief Out")
-    make_person(username="c4_mc_default", display_name="PTE Mc Default")
+    make_person(username="c4_brief_default", display_name="Brief Default")
+    make_person(username="c4_brief_out", display_name="Brief Out")
+    make_person(username="c4_mc_default", display_name="Mc Default")
     login(client, "c4_ps")
 
     key_status(client, pid(app, "c4_brief_default"), type_="BRIEFING", in_camp="DEFAULT")
@@ -255,7 +256,7 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
 
 def test_end_today_ends_ongoing_mc_stays_today_gone_tomorrow(app, client, make_person):
     make_person(username="c5_ps", appointment=Appointment.PS)
-    make_person(username="c5_mc", display_name="PTE Ongoing Mc")
+    make_person(username="c5_mc", display_name="Ongoing Mc")
     entry_id = plant_status(app, "c5_mc", type_=StatusType.MC, start=YESTERDAY,
                              end=TODAY + timedelta(days=5), in_camp=False)
     login(client, "c5_ps")

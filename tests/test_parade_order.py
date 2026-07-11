@@ -62,7 +62,7 @@ def test_parade_sort_key_orders_mixed_roster_per_decision_g():
 # --- done-criterion 4: line format + date format ---------------------------
 
 def test_parade_line_uppercases_display_name():
-    p = person(1, Appointment.OPR, Rank.CPL, 2, "CPL Ismail Bin Hassan")
+    p = person(1, Appointment.OPR, Rank.CPL, 2, "Ismail Bin Hassan")
     assert parade.parade_line(p) == "CPL ISMAIL BIN HASSAN"
 
 

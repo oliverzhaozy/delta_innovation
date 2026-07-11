@@ -73,9 +73,10 @@ def parade_sort_key(person) -> tuple:
 
 
 def parade_line(person) -> str:
-    # display_name already embeds the rank prefix ("CPT Chan Wei Liang"), so
-    # uppercasing it alone yields the required "RANK NAME" format.
-    return person.display_name.upper()
+    # display_name holds the plain name only; rank is a separate enum column
+    # (since ee20005). This is the SINGLE place the "RANK NAME" pairing happens —
+    # every renderer, the COS greeting, and the OTHERS-IN-CAMP lines go through it.
+    return f"{person.rank.value} {person.display_name}".upper()
 
 
 # --- morning parade compute (P3a.6) --------------------------------------

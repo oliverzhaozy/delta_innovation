@@ -42,15 +42,15 @@ def _switch(client, username):
 def test_phase4_end_to_end(app, client, make_person):
     # --- 1. Seed: PS (CDOS pool of one, stay-out NSF), OC, PC, two-man COS pool
     make_person(username="ps_boss", rank=Rank.TWO_SG, appointment=Appointment.PS,
-                platoon=2, stay_out=True, display_name="2SG Benny Foo")
+                platoon=2, stay_out=True, display_name="Benny Foo")
     make_person(username="oc_boss", rank=Rank.CPT, appointment=Appointment.OC,
-                service=Service.REGULAR, platoon=None, display_name="CPT Marcus Leong")
+                service=Service.REGULAR, platoon=None, display_name="Marcus Leong")
     make_person(username="pc1", rank=Rank.LTA, appointment=Appointment.PC,
-                service=Service.REGULAR, platoon=1, display_name="LTA Shawn Koh")
+                service=Service.REGULAR, platoon=1, display_name="Shawn Koh")
     make_person(username="opr_a", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
-                platoon=1, display_name="3SG Adam Tan")
+                platoon=1, display_name="Adam Tan")
     make_person(username="opr_b", rank=Rank.CPL, appointment=Appointment.OPR,
-                platoon=1, display_name="CPL Bryan Lim")
+                platoon=1, display_name="Bryan Lim")
 
     today = today_sgt()
     month = today.strftime("%Y-%m")

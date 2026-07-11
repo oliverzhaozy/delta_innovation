@@ -28,12 +28,12 @@ def test_phase3_end_to_end(app, client, make_person):
     # Roster: the keying S3 (det comd, admin — mirrors the real seed), a
     # regular OC, a stay-in NSF, a stay-out NSF, and an NSF about to be MC.
     make_person(username="s3_keyer", rank=Rank.TWO_SG, appointment=Appointment.DET_COMD,
-                company_role="S3", is_admin=True, display_name="2SG Dylan Chey")
+                company_role="S3", is_admin=True, display_name="Dylan Chey")
     make_person(username="oc_boss", rank=Rank.CPT, appointment=Appointment.OC,
-                service=Service.REGULAR, platoon=None, display_name="CPT Marcus Leong")
-    make_person(username="opr_in", display_name="CFC Ethan Siow")
-    make_person(username="opr_out", stay_out=True, display_name="CPL Wayne Loo")
-    make_person(username="opr_mc", display_name="PTE Caleb Zhuo")
+                service=Service.REGULAR, platoon=None, display_name="Marcus Leong")
+    make_person(username="opr_in", rank=Rank.CFC, display_name="Ethan Siow")
+    make_person(username="opr_out", rank=Rank.CPL, stay_out=True, display_name="Wayne Loo")
+    make_person(username="opr_mc", display_name="Caleb Zhuo")
     login(client, "s3_keyer")
 
     # --- S3 keys an MC (covers D..D+1) and the OC's direct absence (D only) --

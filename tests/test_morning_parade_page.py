@@ -70,10 +70,10 @@ def plant_multiday_status(app, username, type_=StatusType.MC, start=DAY,
 # --- done-criterion 1: document renders real keyed data byte-for-byte -----
 
 def test_renders_document_with_mc_off_and_stay_out(app, client, make_person):
-    make_person(username="viewer", display_name="PTE Viewer Guy", rank=Rank.PTE, platoon=1)
-    make_person(username="mc_guy", display_name="3SG Ravi Kumar", rank=Rank.THREE_SG, platoon=2)
-    make_person(username="off_guy", display_name="CFC Daniel Lim", rank=Rank.CFC, platoon=2)
-    make_person(username="stayout_guy", display_name="SSG Stay Out Guy", rank=Rank.SSG,
+    make_person(username="viewer", display_name="Viewer Guy", rank=Rank.PTE, platoon=1)
+    make_person(username="mc_guy", display_name="Ravi Kumar", rank=Rank.THREE_SG, platoon=2)
+    make_person(username="off_guy", display_name="Daniel Lim", rank=Rank.CFC, platoon=2)
+    make_person(username="stayout_guy", display_name="Stay Out Guy", rank=Rank.SSG,
                 platoon=3, service=Service.REGULAR)
     plant_status(app, "mc_guy", type_=StatusType.MC)
     plant_leave(app, "off_guy", type_=LeaveType.OFF)
@@ -98,8 +98,9 @@ def test_renders_document_with_mc_off_and_stay_out(app, client, make_person):
 # --- done-criterion 2: quick-add moves the person, counts rebalance, refresh is idempotent --
 
 def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client, make_person):
-    make_person(username="ps_keyer", appointment=Appointment.PS, display_name="3SG Percy Sim")
-    make_person(username="target", display_name="PTE Wong Kai", rank=Rank.PTE, platoon=1)
+    make_person(username="ps_keyer", appointment=Appointment.PS, display_name="Percy Sim",
+                rank=Rank.THREE_SG)
+    make_person(username="target", display_name="Wong Kai", rank=Rank.PTE, platoon=1)
     login(client, "ps_keyer")
     target_id = pid(app, "target")
 
@@ -132,7 +133,7 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
 
 def test_remove_quick_add_row_restores_current_strength(app, client, make_person):
     make_person(username="ps_keyer2", appointment=Appointment.PS)
-    make_person(username="target2", display_name="PTE Wong Kai", rank=Rank.PTE, platoon=1)
+    make_person(username="target2", display_name="Wong Kai", rank=Rank.PTE, platoon=1)
     entry_id = plant_status(app, "target2", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     login(client, "ps_keyer2")
 
@@ -153,7 +154,7 @@ def test_remove_quick_add_row_restores_current_strength(app, client, make_person
 
 def test_remove_on_non_quick_add_row_404s_and_leaves_row_untouched(app, client, make_person):
     make_person(username="ps_keyer3", appointment=Appointment.PS)
-    make_person(username="mc_target", display_name="PTE Multi Day Mc")
+    make_person(username="mc_target", display_name="Multi Day Mc")
     entry_id = plant_multiday_status(app, "mc_target", type_=StatusType.MC)
     login(client, "ps_keyer3")
 
@@ -172,7 +173,7 @@ def test_remove_on_non_quick_add_row_404s_and_leaves_row_untouched(app, client, 
 
 def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, make_person):
     make_person(username="opr_viewer", appointment=Appointment.OPR)
-    make_person(username="target3", display_name="PTE Some Guy")
+    make_person(username="target3", display_name="Some Guy")
     login(client, "opr_viewer")
 
     resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
@@ -199,8 +200,8 @@ def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, 
 # --- done-criterion 5: conflicts panel surfaces both rows, never silently ---
 
 def test_conflict_panel_shows_both_rows_when_mc_overlaps_approved_leave(app, client, make_person):
-    make_person(username="viewer5", display_name="PTE Viewer Five")
-    make_person(username="conflicted", display_name="3SG Conflicted Guy", rank=Rank.THREE_SG)
+    make_person(username="viewer5", display_name="Viewer Five")
+    make_person(username="conflicted", display_name="Conflicted Guy", rank=Rank.THREE_SG)
     plant_leave(app, "conflicted", type_=LeaveType.OFF, status=RequestStatus.APPROVED)
     plant_status(app, "conflicted", type_=StatusType.MC)
     login(client, "viewer5")
@@ -218,7 +219,7 @@ def test_conflict_panel_shows_both_rows_when_mc_overlaps_approved_leave(app, cli
 
 
 def test_no_conflict_panel_when_nothing_conflicts(app, client, make_person):
-    make_person(username="viewer6", display_name="PTE Viewer Six")
+    make_person(username="viewer6", display_name="Viewer Six")
     login(client, "viewer6")
     resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
     assert resp.status_code == 200
@@ -228,8 +229,8 @@ def test_no_conflict_panel_when_nothing_conflicts(app, client, make_person):
 # --- done-criterion 6: ?date= navigation + prev/next/Today links ------------
 
 def test_date_param_navigation_and_nav_links(app, client, make_person):
-    make_person(username="viewer7", display_name="PTE Viewer Seven")
-    make_person(username="dated_guy", display_name="PTE Dated Guy")
+    make_person(username="viewer7", display_name="Viewer Seven")
+    make_person(username="dated_guy", display_name="Dated Guy")
     plant_status(app, "dated_guy", type_=StatusType.MC, day=DAY)
     login(client, "viewer7")
 

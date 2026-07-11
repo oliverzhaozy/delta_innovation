@@ -10,7 +10,7 @@ domain pipeline's render for identical inputs.
 from datetime import date
 
 from app.domain import parade as parade_domain
-from app.domain.types import Appointment, ParadeVariant, StatusType
+from app.domain.types import Appointment, ParadeVariant, Rank, StatusType
 from app.extensions import db
 from app.models import Person, StatusEntry
 from app.services import parade_service, presence_service
@@ -35,7 +35,7 @@ def _plant_mc(app, username, day=DAY):
 # --- build_doc: one owner for the pipeline -----------------------------------
 
 def test_build_doc_morning_matches_domain_pipeline(app, make_person):
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
+    make_person(username="off_guy", display_name="Daniel Lim", rank=Rank.CFC)
     _plant_mc(app, "off_guy")
     with app.app_context():
         pairs = presence_service.presence_inputs(DAY)
@@ -47,7 +47,7 @@ def test_build_doc_morning_matches_domain_pipeline(app, make_person):
 
 
 def test_build_doc_roll_call_matches_domain_pipeline(app, make_person):
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
+    make_person(username="off_guy", display_name="Daniel Lim", rank=Rank.CFC)
     _plant_mc(app, "off_guy")
     with app.app_context():
         pairs = presence_service.presence_inputs(DAY)
@@ -57,8 +57,9 @@ def test_build_doc_roll_call_matches_domain_pipeline(app, make_person):
 
 
 def test_build_doc_cos_message_uses_cos_person(app, make_person):
-    make_person(username="cos_guy", appointment=Appointment.OPR, display_name="CPL Marcus Tan")
-    make_person(username="off_guy", display_name="CFC Daniel Lim")
+    make_person(username="cos_guy", appointment=Appointment.OPR, display_name="Marcus Tan",
+                rank=Rank.CPL)
+    make_person(username="off_guy", display_name="Daniel Lim", rank=Rank.CFC)
     _plant_mc(app, "off_guy")
     with app.app_context():
         cos = db.session.query(Person).filter_by(username="cos_guy").one()
