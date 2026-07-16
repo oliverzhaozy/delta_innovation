@@ -7,7 +7,7 @@ import click
 from app.domain.types import Appointment, BalanceKind, CompanyRole, LedgerSource, Rank, Service
 from app.extensions import db
 from app.models import LedgerEntry, Person, PublicHoliday
-from app.services import ledger_service
+from app.services import ledger_service, purge_service
 
 REQUIRED_COLUMNS = {
     "username",
@@ -138,3 +138,52 @@ def register_cli(app):
                 created += 1
         db.session.commit()
         click.echo(f"Opening balances set for {created} people ({skipped} skipped — already had entries).")
+
+    @app.cli.command("purge")
+    @click.option(
+        "--before",
+        required=True,
+        type=click.DateTime(formats=["%Y-%m-%d"]),
+        help="Cutoff date (YYYY-MM-DD); rows that fully ended before this go.",
+    )
+    @click.option("--by", "by_username", required=True, help="Active username to own carry-forward rows.")
+    @click.option(
+        "--execute/--dry-run",
+        "do_execute",
+        default=False,
+        help="Dry-run (default) reports counts and writes nothing; --execute performs the purge.",
+    )
+    def purge(before, by_username, do_execute):
+        """Annual retention purge: drop rows that fully ended before --before.
+
+        Destructive, so shell-only (no route). The ledger is collapsed, not
+        deleted — balances are preserved and verified identical (A10).
+        """
+        cutoff = before.date()
+        # Resolve --by in both modes so an unknown/inactive username fails before
+        # anything is touched (dry-run stays read-only either way).
+        actor = (
+            db.session.query(Person)
+            .filter_by(username=by_username.lower(), is_active=True)
+            .first()
+        )
+        if actor is None:
+            raise click.ClickException(f"No active user: {by_username}")
+        if do_execute:
+            result = purge_service.execute(cutoff, actor=actor)
+            _echo_purge(result)
+            click.echo("Balances verified identical.")
+        else:
+            result = purge_service.plan(cutoff)
+            _echo_purge(result)
+            click.echo("Dry run — nothing was deleted.")
+
+
+def _echo_purge(result):
+    click.echo("Rows to remove:")
+    for table, count in result.counts:
+        click.echo(f"  {table}: {count}")
+    if result.carry_forwards:
+        click.echo("Carry-forward ledger rows:")
+        for person_id, kind, total in result.carry_forwards:
+            click.echo(f"  person {person_id} {kind.value}: {total:+d} half-days")
