@@ -7,7 +7,10 @@
   <p class="muted">{{ people | selectattr("is_active") | list | length }} active · total strength tracks this list.</p>
 </div>
 
-<p><a class="btn" href="{{ url_for('admin.person_new') }}">Add person</a></p>
+<p>
+  <a class="btn" href="{{ url_for('admin.person_new') }}">Add person</a>
+  <a class="btn" href="{{ url_for('admin.audit') }}">Audit trail</a>
+</p>
 
 <section class="card">
   <div class="table-wrap">

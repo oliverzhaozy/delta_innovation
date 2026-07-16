@@ -1,8 +1,10 @@
 import secrets
+from enum import Enum
 
-from flask import abort, flash, redirect, render_template, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from app.authz import require
 from app.blueprints.admin import bp
@@ -20,7 +22,41 @@ from app.domain.types import (
     Service,
 )
 from app.extensions import db
-from app.models import LeaveRequest, Person
+from app.models import LeaveRequest, Person, PersonAudit
+
+# The person fields _apply_form writes — the exact set the edit route audits.
+_AUDIT_FIELDS = (
+    "username",
+    "display_name",
+    "phone",
+    "rank",
+    "appointment",
+    "company_role",
+    "platoon",
+    "service",
+    "stay_out",
+    "is_admin",
+    "is_active",
+)
+
+
+def _audit_value(value):
+    # One normalizer shared by _snapshot and audit-row writing, so an edit's
+    # old and new can never be formatted differently. None -> SQL NULL (unset);
+    # bool before int because bool is an int subclass.
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, int):
+        return str(value)
+    return value
+
+
+def _snapshot(person):
+    return {field: _audit_value(getattr(person, field)) for field in _AUDIT_FIELDS}
 
 
 def _apply_form(person, form):
@@ -60,6 +96,23 @@ def people():
         )
     )
     return render_template("admin/people.html", people=everyone)
+
+
+@bp.route("/audit")
+@require(policy.can_manage_people)
+def audit():
+    # Standalone S3-gated trail (owner decision 2026-07-16). joinedload avoids an
+    # N+1 over person/actor in the template loop. ?person_id filters to one
+    # person; an unknown id simply yields the empty state, not a 404.
+    query = (
+        db.session.query(PersonAudit)
+        .options(joinedload(PersonAudit.person), joinedload(PersonAudit.actor))
+        .order_by(PersonAudit.at.desc(), PersonAudit.id.desc())
+    )
+    person_id = request.args.get("person_id", type=int)
+    if person_id is not None:
+        query = query.filter(PersonAudit.person_id == person_id)
+    return render_template("admin/audit.html", entries=query.all(), person_id=person_id)
 
 
 @bp.route("/people/new", methods=["GET", "POST"])
@@ -102,7 +155,22 @@ def person_edit(person_id):
         if _username_taken(username, exclude_id=person.id):
             flash("That username is already taken.", "error")
         else:
+            before = _snapshot(person)
             _apply_form(person, form)
+            after = _snapshot(person)
+            for field in _AUDIT_FIELDS:
+                if before[field] != after[field]:
+                    # Audit rows join the same transaction as the person edit —
+                    # one user action stays one commit (no divergence window).
+                    db.session.add(
+                        PersonAudit(
+                            person_id=person.id,
+                            field=field,
+                            old=before[field],
+                            new=after[field],
+                            actor_id=current_user.id,
+                        )
+                    )
             db.session.commit()
             flash("Saved.", "success")
             return redirect(url_for("admin.people"))
@@ -145,7 +213,7 @@ def person_delete(person_id):
         db.session.rollback()
         flash(
             f"Can't delete {name} — they're still referenced by leave, ledger, "
-            "or duty history. Deactivate them instead (uncheck Active).",
+            "duty, or audit history. Deactivate them instead (uncheck Active).",
             "error",
         )
         return redirect(url_for("admin.person_edit", person_id=person.id))

@@ -8,6 +8,7 @@ from app.models.manning import ManningPeriod, ManningSlot
 from app.models.meal import MealAdjustment
 from app.models.overseas import OverseasDeclaration
 from app.models.person import Person
+from app.models.person_audit import PersonAudit
 from app.models.ro import (
     RoBoilerplate,
     RoDocument,
@@ -30,6 +31,7 @@ __all__ = [
     "MealAdjustment",
     "OverseasDeclaration",
     "Person",
+    "PersonAudit",
     "PublicHoliday",
     "RoBoilerplate",
     "RoDocument",
