@@ -45,7 +45,7 @@
         <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}">
           {% if cell.in_month %}
           <div class="cell-head">
-            <a class="day-num" href="{{ url_for('parade.morning', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
+            <a class="day-num" href="{{ url_for('parade.history', date=cell.date.isoformat()) }}">{{ cell.date.day }}</a>
             {% if can_add %}
             <a class="day-add" href="{{ url_for('calendar.new', date=cell.date.isoformat()) }}" title="New event on {{ cell.date.isoformat() }}" aria-label="New event on {{ cell.date.isoformat() }}">+</a>
             {% endif %}
@@ -60,7 +60,7 @@
           <span class="chip cal-off">{{ row.person.rank.value }} {{ row.person.display_name }} {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span>
           {% endfor %}
           {% if cell.off_leave | length > off_leave_limit %}
-          <a class="chip cal-off more" href="{{ url_for('parade.morning', date=cell.date.isoformat()) }}">+{{ cell.off_leave | length - off_leave_limit }} more</a>
+          <a class="chip cal-off more" href="{{ url_for('parade.history', date=cell.date.isoformat()) }}">+{{ cell.off_leave | length - off_leave_limit }} more</a>
           {% endif %}
           {% else %}
           <span class="day-num muted">{{ cell.date.day }}</span>

@@ -27,6 +27,7 @@
           <summary>Parade</summary>
           <div class="navmenu">
             <a href="{{ url_for('parade.cos_message') }}">Parade state</a>
+            <a href="{{ url_for('parade.history') }}">Past states</a>
             {% if can_key_parade_today(current_user) %}
               <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
             {% endif %}

@@ -1,0 +1,38 @@
+{# Snapshot archive: what was actually copied to WhatsApp. A row is written
+   each time someone hits Copy on a parade document (the server re-renders and
+   stores that text), so this is the record of what was sent — the live pages
+   always show today, never a past date. #}
+{% extends "base.html" %}
+{% block title %}Past parade states{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Past parade states</h1>
+</div>
+
+<p class="muted">Each entry is the exact text copied to WhatsApp, saved when someone hit Copy. Live parade pages always show today; this is the archive of what was sent.</p>
+
+{% if filter_date %}
+<p>Showing {{ filter_date.strftime("%a %d %b %Y") }} only — <a href="{{ url_for('parade.history') }}">show all dates</a>.</p>
+{% endif %}
+
+{% if not groups %}
+<section class="card">
+  <p class="muted">No snapshots{% if filter_date %} for {{ filter_date.strftime("%d %b %Y") }}{% endif %} yet. One is saved each time a parade document is copied.</p>
+</section>
+{% else %}
+{% for day, snaps in groups %}
+<section class="card">
+  <h2>{{ day.strftime("%a %d %b %Y") }}</h2>
+  <ul class="toollist">
+    {% for snap in snaps %}
+    <li>
+      <span>{{ snap.variant.label }} — copied {{ snap.created_at.strftime("%H:%M") }} by {{ snap.created_by.rank.value }} {{ snap.created_by.display_name }}</span>
+      <a href="{{ url_for('parade.history_detail', snapshot_id=snap.id) }}">View</a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

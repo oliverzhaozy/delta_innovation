@@ -1,0 +1,21 @@
+{# One archived snapshot, same sheet chrome as the live parade page. The Copy
+   button here is a PLAIN copy — it carries no data-snapshot-* attributes, so
+   copying a past state never re-archives it (only the live pages do). #}
+{% extends "base.html" %}
+{% block title %}{{ snap.variant.label }} — {{ snap.date.strftime("%d %b %Y") }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ snap.variant.label }}</h1>
+</div>
+
+<p><a href="{{ url_for('parade.history', date=snap.date.isoformat()) }}">&larr; Back to {{ snap.date.strftime("%d %b %Y") }}</a></p>
+
+<section class="card sheet">
+  <div class="sheet-rule">
+    <span>{{ snap.variant.label }} — {{ snap.date.strftime("%a %d %b %Y") }} (copied {{ snap.created_at.strftime("%H:%M") }} by {{ snap.created_by.rank.value }} {{ snap.created_by.display_name }})</span>
+    <button type="button" class="btn secondary" data-copy="#snaptext">Copy</button>
+  </div>
+  <pre id="snaptext" style="white-space:pre-wrap; margin:0">{{ snap.rendered_text }}</pre>
+</section>
+{% endblock %}
