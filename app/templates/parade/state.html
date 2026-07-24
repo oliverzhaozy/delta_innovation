@@ -77,6 +77,50 @@
 </section>
 {% endif %}
 
+{% if can_adjust and views %}
+{# Keyer-only drag-and-drop recategorization (P8.7). Each drop zone is a doc
+   category (category_views is the ONE line source — same tuples the <pre> above
+   renders); dragging a line into another zone fills the hidden #override-form
+   below and submits it. The client does NO count math — the server re-renders
+   the whole document and the rebalanced numbers come back in the response. #}
+<section class="card" id="adjust-categories">
+  <div class="adjust-head">
+    <h2>Adjust categories</h2>
+    {% if has_overrides %}
+    <span class="overrides-active">Overrides active</span>
+    <form method="post" action="{{ url_for('parade.override_reset') }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="variant" value="{{ doc }}">
+      {% if doc == "cos" %}<input type="hidden" name="cos" value="{{ cos_person.id }}">{% endif %}
+      <button type="submit" class="linklike">Reset</button>
+    </form>
+    {% endif %}
+  </div>
+  <p class="muted">Drag a person's line into another category to recategorise them for this document. The numbers update when you drop.</p>
+  <div class="drag-grid">
+    {% for view in views %}
+    <div class="drop-zone" data-drop-category="{{ view.key }}">
+      <h3>{{ view.title }} ({{ view.entries|length }})</h3>
+      <ul class="drag-list">
+        {% for pid, line in view.entries %}
+        <li draggable="true" data-drag-person="{{ pid }}">{{ line }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  {# One hidden form the drop handler fills (person_id + target) and submits;
+     variant (and cos) pin which document the server re-renders. #}
+  <form method="post" action="{{ url_for('parade.override') }}" id="override-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="variant" value="{{ doc }}">
+    {% if doc == "cos" %}<input type="hidden" name="cos" value="{{ cos_person.id }}">{% endif %}
+    <input type="hidden" name="person_id" value="">
+    <input type="hidden" name="target" value="">
+  </form>
+</section>
+{% endif %}
+
 {% if doc == "morning" and fp_form %}
 <section class="card">
   <h2>Not joining FP</h2>

@@ -240,9 +240,13 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
         assert rows["c4_mc_default"] is False
 
     morning = client.get("/parade/morning").data
+    # Split the parade DOCUMENT (the <pre>), not the whole page: the keyer's
+    # drag grid below echoes the same names in its category drop-zones, so a
+    # present-in-camp person would otherwise leak into the "absent" half.
+    doc_text = morning.split(b'id="paradetext"')[1].split(b">", 1)[1].split(b"</pre>")[0]
     present, absent = (
-        morning.split(b"NOT PRESENT IN CAMP")[0],
-        morning.split(b"NOT PRESENT IN CAMP")[1],
+        doc_text.split(b"NOT PRESENT IN CAMP")[0],
+        doc_text.split(b"NOT PRESENT IN CAMP")[1],
     )
     # OTHER+IN (an in-camp briefing, keyed explicitly since UI-21 removed the
     # BRIEFING type) -> OTHERS IN CAMP, under PRESENT IN CAMP, never absent.

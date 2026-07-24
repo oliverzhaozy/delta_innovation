@@ -458,6 +458,75 @@ h2 {
 .toollist a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .toollist a:hover { text-decoration: underline; }
 
+/* ---------- Drag-and-drop recategorization (parade overrides) ----------
+   Keyer-only grid under the message sheet: each drop zone is a document
+   category, each line a draggable person. Dropping submits the hidden
+   override form; the server re-renders and the counts come back with it. */
+
+.adjust-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.2rem;
+}
+
+.adjust-head h2 { margin: 0; }
+
+.overrides-active {
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-tint);
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+}
+
+.drag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+.drop-zone {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 0.5rem 0.6rem;
+  min-height: 3rem;
+}
+
+.drop-zone h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.drop-zone.drop-hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.drag-list { list-style: none; margin: 0; padding: 0; }
+
+.drag-list li {
+  padding: 0.28rem 0.45rem;
+  margin: 0.25rem 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  cursor: grab;
+}
+
+.drag-list li:active { cursor: grabbing; }
+
 /* ---------- Forms ---------- */
 
 form p { margin: 0 0 0.9rem; }

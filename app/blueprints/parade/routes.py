@@ -8,6 +8,7 @@ from app.blueprints.parade import bp
 from app.blueprints.parade.forms import DirectAbsenceForm, FpBulkAddForm, StatusEntryForm
 from app.domain import participants, policy, presence
 from app.domain.dates import today_sgt
+from app.domain.parade import category_views
 from app.domain.types import (
     ALLOWED_OVERRIDE_TARGETS,
     DayPart,
@@ -157,12 +158,13 @@ def morning():
     # worse than none (plan).
     built = parade_service.build_doc(day, ParadeVariant.MORNING)
     conflicts = _conflict_lines(built.pairs)
+    can_adjust = duty_service.can_key_parade_today(current_user)
 
     fp_form = None
     fp_rows = ()
     picker_groups = ()
     command_ids = frozenset()
-    if duty_service.can_key_parade_today(current_user):
+    if can_adjust:
         fp_form = FpBulkAddForm()
         _set_fp_people_choices(fp_form)
         fp_rows = _fp_rows(day)
@@ -180,6 +182,9 @@ def morning():
         fp_rows=fp_rows,
         picker_groups=picker_groups,
         command_ids=command_ids,
+        can_adjust=can_adjust,
+        has_overrides=built.has_overrides,
+        views=category_views(built.doc) if built.doc is not None else None,
     )
 
 
@@ -280,6 +285,9 @@ def cos_message():
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,
+        can_adjust=duty_service.can_key_parade_today(current_user),
+        has_overrides=built.has_overrides,
+        views=category_views(built.doc) if built.doc is not None else None,
     )
 
 
@@ -310,6 +318,9 @@ def roll_call():
         imbalance=built.imbalance,
         conflicts=conflicts,
         absent_holders=absent_holders,
+        can_adjust=duty_service.can_key_parade_today(current_user),
+        has_overrides=built.has_overrides,
+        views=category_views(built.doc) if built.doc is not None else None,
     )
 
 

@@ -6,6 +6,7 @@ a non-keyer is refused, disallowed/off-roster targets flash and write nothing,
 and the COS override is stored against tomorrow's date. P8.7 extends this file
 with the drag-grid UI assertions.
 """
+import re
 from datetime import timedelta
 
 from app.domain.dates import today_sgt
@@ -147,3 +148,102 @@ def test_cos_override_writes_tomorrows_date(app, client, make_person):
         ).one()
         assert row.date == TOMORROW
         assert row.target_category is OverrideCategory.LEAVE
+
+
+# --- T9: drag grid mirrors the doc; keyer-gating; indicator ------------------
+
+def _grid_by_category(html):
+    """Parse the drag grid into {data-drop-category: [person_id, ...]} using the
+    same data attributes the page renders — the testable seam for a doc↔grid
+    equality check with no JS runner."""
+    grid = {}
+    for zone in re.finditer(
+        r'data-drop-category="([^"]+)"(.*?)(?=data-drop-category="|$)', html, re.S
+    ):
+        key = zone.group(1)
+        ids = [int(m) for m in re.findall(r'data-drag-person="(\d+)"', zone.group(2))]
+        grid[key] = ids
+    return grid
+
+
+def _person(app, pid):
+    with app.app_context():
+        return db.session.get(Person, pid)
+
+
+def _expected_grid(app, day, variant, **kw):
+    with app.app_context():
+        from app.domain import parade as parade_domain
+
+        built = parade_service.build_doc(day, variant, **kw)
+        return {
+            view.key: [pid for pid, _line in view.entries]
+            for view in parade_domain.category_views(built.doc)
+        }
+
+
+def test_grid_matches_doc_tuples_for_all_variants(app, client, make_person):
+    make_person(username="grid_keyer", is_admin=True, display_name="Grid Keyer")
+    make_person(username="grid_p1", display_name="Grid One")
+    make_person(username="grid_reg", display_name="Grid Reg", service=Service.REGULAR)
+    login(client, "grid_keyer")
+
+    for path, day, variant in (
+        ("/parade/morning", TODAY, ParadeVariant.MORNING),
+        ("/parade/roll-call", TODAY, ParadeVariant.ROLL_CALL),
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert _grid_by_category(resp.data.decode()) == _expected_grid(app, day, variant)
+
+    # The COS page fixes the doc to tomorrow; its grid must mirror THAT doc.
+    keyer_id = _pid(app, "grid_keyer")
+    cos = client.get(f"/parade/cos-message?cos={keyer_id}")
+    assert cos.status_code == 200
+    assert _grid_by_category(cos.data.decode()) == _expected_grid(
+        app, TOMORROW, ParadeVariant.COS_MESSAGE, cos_person=_person(app, keyer_id)
+    )
+
+
+def test_grid_and_pre_are_two_projections_of_one_doc(app, client, make_person):
+    make_person(username="proj_keyer", is_admin=True)
+    make_person(username="proj_p1", display_name="Proj One")
+    login(client, "proj_keyer")
+    resp = client.get("/parade/morning")
+    html = resp.data.decode()
+    with app.app_context():
+        built = parade_service.build_doc(TODAY, ParadeVariant.MORNING)
+    # The same response carries the grid AND the <pre>; the <pre> is byte-equal
+    # to build_doc's text (one doc, two projections, one request).
+    import html as htmlmod
+
+    pre = re.search(r'<pre id="paradetext"[^>]*>(.*?)</pre>', html, re.S).group(1)
+    assert htmlmod.unescape(pre) == built.text
+
+
+def test_non_keyer_sees_no_drag_ui(app, client, make_person):
+    make_person(username="noadjust", display_name="No Adjust")
+    login(client, "noadjust")
+    resp = client.get("/parade/morning")
+    assert resp.status_code == 200
+    assert b"data-drop-category" not in resp.data
+    assert b'id="override-form"' not in resp.data
+
+
+def test_indicator_and_reset_only_when_overridden(app, client, make_person):
+    make_person(username="ind_keyer", is_admin=True)
+    make_person(username="ind_target", display_name="Ind Target")
+    login(client, "ind_keyer")
+    tpid = _pid(app, "ind_target")
+
+    before = client.get("/parade/morning").data
+    assert b"overrides-active" not in before
+    assert b"/parade/override/reset" not in before
+
+    client.post(
+        "/parade/override",
+        data={"variant": "morning", "person_id": str(tpid), "target": "mc"},
+    )
+    after = client.get("/parade/morning").data
+    assert b"overrides-active" in after
+    assert b"/parade/override/reset" in after

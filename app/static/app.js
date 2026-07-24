@@ -35,6 +35,45 @@ document.addEventListener("click", (event) => {
   });
 });
 
+// Drag-and-drop parade recategorization (P8.7). Delegated so it works for every
+// drop zone on the page. The client does NO count math: a drop only fills the
+// hidden #override-form (person id + target category) and submits it — the
+// server re-renders the whole document and the rebalanced numbers come back in
+// the response, which is the only source of truth.
+document.addEventListener("dragstart", (event) => {
+  const li = event.target.closest("li[data-drag-person]");
+  if (!li) return;
+  event.dataTransfer.setData("text/plain", li.dataset.dragPerson);
+  event.dataTransfer.effectAllowed = "move";
+});
+
+document.addEventListener("dragover", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  event.preventDefault(); // a droppable target must cancel dragover
+  zone.classList.add("drop-hover");
+});
+
+document.addEventListener("dragleave", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  // Ignore leaves into a child of the same zone; only clear when truly out.
+  if (!zone.contains(event.relatedTarget)) zone.classList.remove("drop-hover");
+});
+
+document.addEventListener("drop", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove("drop-hover");
+  const personId = event.dataTransfer.getData("text/plain");
+  const form = document.getElementById("override-form");
+  if (!personId || !form) return;
+  form.querySelector('input[name="person_id"]').value = personId;
+  form.querySelector('input[name="target"]').value = zone.dataset.dropCategory;
+  form.submit(); // server re-renders; no client-side recount
+});
+
 // Calendar layer toggles: each pill hides/shows its colour layer on the month
 // grid, persisted in localStorage so the choice survives month navigation.
 // Purely cosmetic — the server already omits ARCTIC chips for non-command users.
