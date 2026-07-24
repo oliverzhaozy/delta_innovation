@@ -63,7 +63,15 @@
 <section class="card sheet">
   <div class="sheet-rule">
     <span>{{ doc_label }} — {{ day.strftime("%a %d %b %Y") }}</span>
-    <button type="button" class="btn secondary" data-copy="#{{ pre_id }}">Copy</button>
+    {# Copy also archives a snapshot (P8.3): the data-snapshot-* attributes tell
+       app.js to POST /parade/snapshot after a successful copy. The server
+       re-renders the text from these — variant (and cos, on the COS page) —
+       so the archive is never the client's copy of the <pre>. #}
+    <button type="button" class="btn secondary" data-copy="#{{ pre_id }}"
+            data-snapshot-url="{{ url_for('parade.snapshot') }}"
+            data-snapshot-variant="{{ doc }}"
+            {% if doc == "cos" %}data-snapshot-cos="{{ cos_person.id }}"{% endif %}
+            data-csrf="{{ csrf_token() }}">Copy</button>
   </div>
   <pre id="{{ pre_id }}" style="white-space:pre-wrap; margin:0">{{ text }}</pre>
 </section>

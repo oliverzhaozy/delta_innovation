@@ -215,3 +215,26 @@ def test_nav_shows_past_states_link(app, client, make_person):
     login(client, "hist_nav_viewer")
     home = client.get("/").data
     assert b'href="/parade/history"' in home
+
+
+# --- T5: copy button carries the snapshot data seam on live pages -----------
+
+def test_parade_pages_copy_button_carries_snapshot_attrs(app, client, make_person):
+    # Attribute presence is the testable seam for the fire-and-forget copy JS
+    # (there is no JS runner in the repo): the live pages carry data-snapshot-*,
+    # and the history detail (tested above) deliberately does not.
+    make_person(username="snap_attr_viewer", display_name="Attr Viewer")
+    login(client, "snap_attr_viewer")
+
+    for path in ("/parade/morning", "/parade/roll-call"):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert b'data-snapshot-url="/parade/snapshot"' in resp.data
+        assert b"data-snapshot-variant=" in resp.data
+        assert b"data-snapshot-cos=" not in resp.data  # only the COS page carries this
+
+    cos = client.get("/parade/cos-message")
+    assert cos.status_code == 200
+    assert b'data-snapshot-url="/parade/snapshot"' in cos.data
+    assert b'data-snapshot-variant="cos"' in cos.data
+    assert b"data-snapshot-cos=" in cos.data
