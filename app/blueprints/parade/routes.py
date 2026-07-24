@@ -9,9 +9,11 @@ from app.blueprints.parade.forms import DirectAbsenceForm, FpBulkAddForm, Status
 from app.domain import participants, policy, presence
 from app.domain.dates import today_sgt
 from app.domain.types import (
+    ALLOWED_OVERRIDE_TARGETS,
     DayPart,
     DirectAbsenceType,
     LeaveType,
+    OverrideCategory,
     ParadeVariant,
     ParticipantCategory,
     STATUS_IN_CAMP_DEFAULT,
@@ -39,6 +41,17 @@ def _variant_day(key):
     if key not in mapping:
         abort(400)
     return mapping[key]
+
+
+def _variant_redirect(variant, cos_raw=None):
+    """Send an override POST back to the page it acted on. The COS page carries
+    its selected `cos` through so the redirected render rebuilds the very same
+    document the drag was performed against."""
+    if variant is ParadeVariant.MORNING:
+        return redirect(url_for("parade.morning"))
+    if variant is ParadeVariant.ROLL_CALL:
+        return redirect(url_for("parade.roll_call"))
+    return redirect(url_for("parade.cos_message", **({"cos": cos_raw} if cos_raw else {})))
 
 
 def _set_fp_people_choices(form):
@@ -341,6 +354,52 @@ def history():
 def history_detail(snapshot_id):
     snap = db.session.get(ParadeSnapshot, snapshot_id) or abort(404)
     return render_template("parade/history_detail.html", snap=snap)
+
+
+# --- Drag-and-drop overrides (recategorize one person on one document) --------
+
+@bp.route("/override", methods=["POST"])
+@require(duty_service.can_key_parade_today)
+def override():
+    # Same keying gate as every other parade write. The variant/date come from
+    # the shared _variant_day owner; the target and person are validated HERE
+    # against the variant's allowed categories and today's active roster, so a
+    # tampered or stale POST can never store an off-roster person or a category
+    # that variant forbids (apply_overrides would raise on the latter).
+    variant, day = _variant_day(request.form.get("variant", ""))
+    cos_raw = request.form.get("cos", "")
+    try:
+        person_id = int(request.form.get("person_id", ""))
+    except (TypeError, ValueError):
+        person_id = None
+    try:
+        target = OverrideCategory(request.form.get("target", ""))
+    except ValueError:
+        target = None
+    roster_ids = {p.id for p in event_service.active_roster()}
+    if (
+        person_id is None
+        or person_id not in roster_ids
+        or target is None
+        or target not in ALLOWED_OVERRIDE_TARGETS[variant]
+    ):
+        flash("Could not move — check the selection.", "error")
+        return _variant_redirect(variant, cos_raw)
+    parade_service.set_override(
+        day, variant, person_id, target, created_by_id=current_user.id
+    )
+    db.session.commit()
+    return _variant_redirect(variant, cos_raw)
+
+
+@bp.route("/override/reset", methods=["POST"])
+@require(duty_service.can_key_parade_today)
+def override_reset():
+    variant, day = _variant_day(request.form.get("variant", ""))
+    count = parade_service.clear_overrides(day, variant)
+    db.session.commit()
+    flash(f"Reset {count} override{'s' if count != 1 else ''}.", "success")
+    return _variant_redirect(variant, request.form.get("cos", ""))
 
 
 # --- Statuses (MC/course/other) ----------------------------------------------
