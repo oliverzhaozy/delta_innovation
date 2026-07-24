@@ -1,12 +1,12 @@
 """P4.10 — the Phase 4 end-to-end walk, via the test client only.
 
 One PS runs a real month: generate over a forced blank -> manual assign over a
-warning -> confirm behind the scraped fingerprint -> swap two confirmed duties
--> a requester's leave over a confirmed duty is endorsed and approved (the OC
-saw the duty panel; nothing was blocked, nothing reassigned, the roster flags
-it) -> the stay-out duty holder lands in the night's CURRENT STRENGTH and the
-meal counter counts him -> the COS selector pre-fills the confirmed COS -> and
-a deposed COS loses keying rights with the assignment.
+warning -> confirm behind the scraped fingerprint -> a requester's leave over
+a confirmed duty is endorsed and approved (the OC saw the duty panel; nothing
+was blocked, nothing reassigned, the roster flags it) -> the stay-out duty
+holder lands in the night's CURRENT STRENGTH and the meal counter counts him
+-> the COS selector pre-fills the confirmed COS -> and a deposed COS loses
+keying rights with the assignment.
 """
 import re
 from datetime import timedelta
@@ -17,7 +17,7 @@ from app.domain.types import (
     Rank, RequestStatus, Service,
 )
 from app.extensions import db
-from app.models import DutyAssignment, DutySwapLog, LeaveRequest, Person
+from app.models import DutyAssignment, LeaveRequest, Person
 from app.services import duty_service, ledger_service, meal_service
 from tests.conftest import login
 
@@ -110,37 +110,7 @@ def test_phase4_end_to_end(app, client, make_person):
     assert '<span class="badge approved">CONFIRMED</span>' in html
     assert '<span class="badge pending">PROPOSED</span>' not in html
 
-    # --- 6. Swap two CONFIRMED COS duties: exactly one log row ---------------
-    with app.app_context():
-        a_id, b_id = None, None
-        rows = (
-            db.session.query(DutyAssignment)
-            .filter_by(duty=Duty.COS, state=DutyState.CONFIRMED)
-            .order_by(DutyAssignment.date)
-            .all()
-        )
-        for row in rows:
-            for other in rows:
-                if (
-                    row.person_id != other.person_id
-                    and blank_day not in (row.date, other.date)
-                ):
-                    a_id, b_id = row.id, other.id
-                    break
-            if a_id:
-                break
-        assert a_id and b_id
-    resp = client.post(
-        "/duty/roster/swap",
-        data={"month": month, "assignment_a": str(a_id), "assignment_b": str(b_id),
-              "confirm": "1"},
-        follow_redirects=True,
-    )
-    assert "Swapped" in resp.get_data(as_text=True)
-    with app.app_context():
-        assert db.session.query(DutySwapLog).count() == 1
-
-    # --- 7. Leave over a confirmed duty: endorsed, panel seen, approved, warned
+    # --- 6. Leave over a confirmed duty: endorsed, panel seen, approved, warned
     with app.app_context():
         opr_a_id = _pid(app, "opr_a")
         clash_row = next(
@@ -186,7 +156,7 @@ def test_phase4_end_to_end(app, client, make_person):
         assert row.state is DutyState.CONFIRMED
         assert clash_id in duty_service.month_view(month).absent_flags
 
-    # --- 8. The stay-out CDO/S holder is counted present for his night -------
+    # --- 7. The stay-out CDO/S holder is counted present for his night -------
     with app.app_context():
         excluded = {blank_day, clash_day}
         ps_nights = {
@@ -206,7 +176,7 @@ def test_phase4_end_to_end(app, client, make_person):
         # (DUTY overrides stay-out) — without the duty pipe this would be 2.
         assert counts.overnight == 3
 
-    # --- 9. The COS selector pre-fills the confirmed COS of the page date ----
+    # --- 8. The COS selector pre-fills the confirmed COS of the page date ----
     _switch(client, "ps_boss")
     with app.app_context():
         cos_holder_id = (
@@ -217,7 +187,7 @@ def test_phase4_end_to_end(app, client, make_person):
     html = client.get(f"/parade/cos-message?date={pd.isoformat()}").get_data(as_text=True)
     assert f'value="{cos_holder_id}" selected' in html
 
-    # --- 10. Deposed COS: the rights disappear with the assignment -----------
+    # --- 9. Deposed COS: the rights disappear with the assignment ------------
     with app.app_context():
         holder_today = (
             db.session.query(Person)

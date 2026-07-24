@@ -1,9 +1,7 @@
-"""P4.1 — duty_assignment + duty_swap_log models.
+"""P4.1 — duty_assignment model.
 
-duty_assignment: one holder per (date, duty) — the UNIQUE constraint is the
-data-corruption backstop (two COS on one night is not a judgment call).
-duty_swap_log: append-only, ledger posture — no update/delete path exists
-anywhere; repeat rows are legal because the log IS the history.
+One holder per (date, duty) — the UNIQUE constraint is the data-corruption
+backstop (two COS on one night is not a judgment call).
 """
 from datetime import date
 
@@ -12,10 +10,9 @@ from sqlalchemy.exc import IntegrityError
 
 from app.domain.types import Duty, DutyState
 from app.extensions import db
-from app.models import DutyAssignment, DutySwapLog, Person
+from app.models import DutyAssignment, Person
 
 DAY = date(2026, 8, 3)  # a Monday
-DAY_B = date(2026, 8, 10)
 
 
 def _pid(app, username):
@@ -85,24 +82,6 @@ def test_duty_stored_as_value_not_python_name(app, make_person):
             {"id": row.id},
         ).one()
         assert (stored_duty, stored_state) == ("CDOS", "CONFIRMED")
-
-
-def test_swap_log_appends_and_repeats_freely(app, make_person):
-    # Append-only: a second identical swap (they swapped back) is two rows —
-    # the pair IS the audit trail. No unique constraint, no update/delete path.
-    make_person(username="swap_a")
-    make_person(username="swap_b", platoon=2)
-    with app.app_context():
-        pid_a, pid_b = _pid(app, "swap_a"), _pid(app, "swap_b")
-        for _ in range(2):
-            db.session.add(DutySwapLog(
-                person_a_id=pid_a, person_b_id=pid_b, date_a=DAY, date_b=DAY_B,
-                duty=Duty.COS, actor_id=pid_a,
-            ))
-        db.session.commit()
-        rows = db.session.query(DutySwapLog).all()
-        assert len(rows) == 2
-        assert all(r.at is not None for r in rows)
 
 
 def test_duty_enum_members_and_labels():

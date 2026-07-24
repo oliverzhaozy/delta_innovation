@@ -39,30 +39,3 @@ class DutyAssignment(db.Model):
 
     def __repr__(self):
         return f"<DutyAssignment {self.id} {self.date} {self.duty.value} {self.state.value}>"
-
-
-class DutySwapLog(db.Model):
-    """Append-only record of validated 1-for-1 swaps (ledger posture): no
-    update or delete function or route exists anywhere for this model, and no
-    uniqueness — swapping back is a second row, and the pair IS the audit
-    trail. One `duty` column, not two: the COS and CDO/S pools are disjoint,
-    so a validated swap is always same-duty by construction.
-    """
-
-    __tablename__ = "duty_swap_log"
-
-    id = db.Column(db.Integer, primary_key=True)
-    person_a_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
-    person_b_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
-    date_a = db.Column(db.Date, nullable=False)
-    date_b = db.Column(db.Date, nullable=False)
-    duty = db.Column(db.Enum(Duty, values_callable=_values, name="duty"), nullable=False)
-    actor_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
-    at = db.Column(db.DateTime, nullable=False, default=now_sgt)
-
-    person_a = db.relationship("Person", foreign_keys=[person_a_id])
-    person_b = db.relationship("Person", foreign_keys=[person_b_id])
-    actor = db.relationship("Person", foreign_keys=[actor_id])
-
-    def __repr__(self):
-        return f"<DutySwapLog {self.id} {self.duty.value} {self.date_a}<->{self.date_b}>"

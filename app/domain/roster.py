@@ -11,7 +11,7 @@ at 36 people an unfair Tuesday is a conversation, not an optimization problem.
 No solver, no randomness — identical inputs generate identical rosters.
 
 `violations()` is deliberately standalone: the roster page re-flags on every
-render, after manual edits and swaps, not only after generation.
+render, after manual edits, not only after generation.
 
 `prior_tail` = (day, duty, person_id) rows from the LAST 3 CALENDAR DAYS of
 the previous month (Fri -> Mon adjacency can reach 3 days back); `prior_counts`
@@ -84,7 +84,7 @@ def generate(days, pools, availability, prior_counts=None, prior_tail=()):
 
 def violations(assignments, pools, prior_tail=()):
     """Re-derive every soft breach and blank from ANY assignment map (fresh
-    generation, manual edits, swaps — the function does not care which).
+    generation or manual edits — the function does not care which).
 
     Returns Violations(blanks=[(day, duty)...], adjacency=[(person_id, d1, d2)
     with d1 < d2 ...], spread={duty: (min, max)} for breached duties only).

@@ -1,4 +1,4 @@
-"""P4.5 + P4.6 — /duty/roster page, manual assignment, validated swaps.
+"""P4.5 + P4.6 — /duty/roster page and manual assignment.
 
 Routes are thin wires over duty_service; these tests hit the real app so the
 wiring, rights (view-for-all vs manage-for-PS), and the hard-block-vs-warn
@@ -7,13 +7,11 @@ split are pinned through actual responses, mirroring the parade page suites.
 import re
 from datetime import date
 
-import pytest
-
 from app.domain.types import (
     Appointment, DayPart, Duty, DutyState, LeaveType, Rank, RequestStatus,
 )
 from app.extensions import db
-from app.models import DutyAssignment, DutySwapLog, LeaveRequest, Person
+from app.models import DutyAssignment, LeaveRequest, Person
 from app.services import duty_service
 from tests.conftest import login
 
@@ -102,7 +100,7 @@ def test_roster_mutations_403_for_opr(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")
 
-    for endpoint in ("generate", "confirm", "assign", "clear", "swap"):
+    for endpoint in ("generate", "confirm", "assign", "clear"):
         resp = client.post(f"/duty/roster/{endpoint}", data={"month": AUG})
         assert resp.status_code == 403, endpoint
 
@@ -268,115 +266,6 @@ def test_clear_removes_row(app, client, make_person):
 
     resp = client.post("/duty/roster/clear", data=data, follow_redirects=True)
     assert "Nothing to clear." in resp.get_data(as_text=True)
-
-
-# --- validated swaps (P4.6 part 2, A6) ---------------------------------------------
-
-def make_confirmed_cos_pair(app, make_person):
-    """det1 CONFIRMED on Wed 05 Aug, opr1 CONFIRMED on Thu 20 Aug (non-adjacent)."""
-    make_full_cast(make_person)
-    id_a = plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
-    id_b = plant_assignment(app, "opr1", date(2026, 8, 20), Duty.COS)
-    return id_a, id_b
-
-
-def swap_data(id_a, id_b, **extra):
-    data = {"month": AUG, "assignment_a": str(id_a), "assignment_b": str(id_b)}
-    data.update(extra)
-    return data
-
-
-def test_swap_writes_one_log_row_and_swaps_people(app, client, make_person):
-    id_a, id_b = make_confirmed_cos_pair(app, make_person)
-    login(client, "ps2")
-
-    # No confirm=1: two people each free on the other's date must swap without
-    # a spurious "already on duty/adjacent" warning (the vacated dates are
-    # excluded from the check).
-    resp = client.post("/duty/roster/swap", data=swap_data(id_a, id_b),
-                       follow_redirects=True)
-    assert "Swapped" in resp.get_data(as_text=True)
-    with app.app_context():
-        a = db.session.get(DutyAssignment, id_a)
-        b = db.session.get(DutyAssignment, id_b)
-        assert a.person_id == pid(app, "opr1")
-        assert b.person_id == pid(app, "det1")
-        assert a.state is DutyState.CONFIRMED and b.state is DutyState.CONFIRMED
-        assert a.confirmed_by_id == pid(app, "ps2")
-        log = db.session.query(DutySwapLog).one()
-        # The log records the PRE-swap holders: person_a held date_a.
-        assert log.person_a_id == pid(app, "det1")
-        assert log.person_b_id == pid(app, "opr1")
-        assert log.date_a == date(2026, 8, 5)
-        assert log.date_b == date(2026, 8, 20)
-        assert log.duty is Duty.COS
-        assert log.actor_id == pid(app, "ps2")
-
-
-def test_swap_proposed_row_is_400(app, client, make_person):
-    make_full_cast(make_person)
-    id_a = plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
-    id_b = plant_assignment(app, "opr1", date(2026, 8, 20), Duty.COS,
-                            state=DutyState.PROPOSED)
-    login(client, "ps2")
-
-    resp = client.post("/duty/roster/swap", data=swap_data(id_a, id_b))
-    assert resp.status_code == 400
-    with app.app_context():
-        assert db.session.query(DutySwapLog).count() == 0
-        assert db.session.get(DutyAssignment, id_a).person_id == pid(app, "det1")
-
-
-def test_swap_different_duties_is_400(app, client, make_person):
-    # Cannot occur via the UI (disjoint pools); pinned against hand-crafted POSTs.
-    make_full_cast(make_person)
-    id_a = plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
-    id_b = plant_assignment(app, "ps2", date(2026, 8, 20), Duty.CDOS)
-    login(client, "ps2")
-
-    resp = client.post("/duty/roster/swap", data=swap_data(id_a, id_b))
-    assert resp.status_code == 400
-    with app.app_context():
-        assert db.session.query(DutySwapLog).count() == 0
-
-
-def test_swap_unavailable_target_warns_then_confirms(app, client, make_person):
-    id_a, id_b = make_confirmed_cos_pair(app, make_person)
-    plant_leave(app, "det1", date(2026, 8, 20))  # det1 is away on opr1's date
-    login(client, "ps2")
-
-    resp = client.post("/duty/roster/swap", data=swap_data(id_a, id_b),
-                       follow_redirects=True)
-    assert "Not swapped" in resp.get_data(as_text=True)
-    with app.app_context():
-        assert db.session.query(DutySwapLog).count() == 0
-        assert db.session.get(DutyAssignment, id_a).person_id == pid(app, "det1")
-
-    resp = client.post("/duty/roster/swap", data=swap_data(id_a, id_b, confirm="1"),
-                       follow_redirects=True)
-    assert "Swapped" in resp.get_data(as_text=True)
-    with app.app_context():
-        assert db.session.query(DutySwapLog).count() == 1
-
-
-def test_swap_midway_failure_leaves_both_rows_unswapped(app, make_person, monkeypatch):
-    id_a, id_b = make_confirmed_cos_pair(app, make_person)
-
-    with app.app_context():
-        actor = get_person("ps2")
-
-        def boom():
-            raise RuntimeError("induced commit failure")
-
-        monkeypatch.setattr(db.session, "commit", boom)
-        with pytest.raises(RuntimeError, match="induced"):
-            duty_service.swap(id_a, id_b, actor=actor, override_availability=False)
-        monkeypatch.undo()
-        db.session.rollback()
-
-        assert db.session.get(DutyAssignment, id_a).person_id == pid(app, "det1")
-        assert db.session.get(DutyAssignment, id_b).person_id == pid(app, "opr1")
-        assert db.session.query(DutySwapLog).count() == 0
 
 
 def test_confirm_stale_fingerprint_flashes_rereview(app, client, make_person):

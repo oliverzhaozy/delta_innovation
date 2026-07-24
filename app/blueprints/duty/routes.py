@@ -7,7 +7,6 @@ from datetime import date, timedelta
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy.orm import joinedload
 
 from app.authz import require
 from app.blueprints.duty import bp
@@ -15,7 +14,7 @@ from app.domain import policy
 from app.domain.dates import today_sgt
 from app.domain.types import Duty
 from app.extensions import db
-from app.models import DutySwapLog, Person
+from app.models import Person
 from app.services import duty_service
 
 
@@ -34,16 +33,6 @@ def _parse_month(raw: str) -> str:
 def roster():
     month = _parse_month(request.args.get("month", ""))
     view = duty_service.month_view(month)
-    swap_log = (
-        db.session.query(DutySwapLog)
-        .options(
-            joinedload(DutySwapLog.person_a),
-            joinedload(DutySwapLog.person_b),
-            joinedload(DutySwapLog.actor),
-        )
-        .order_by(DutySwapLog.at.desc(), DutySwapLog.id.desc())
-        .all()
-    )
     people_by_id = {p.id: p for duty in Duty for p in view.pools[duty]}
     adjacency_marks = {
         (person_id, d) for person_id, d1, d2 in view.violations.adjacency for d in (d1, d2)
@@ -53,7 +42,6 @@ def roster():
         month=month,
         view=view,
         Duty=Duty,
-        swap_log=swap_log,
         roster_people=sorted(people_by_id.values(), key=lambda p: p.display_name),
         people_by_id=people_by_id,
         adjacency_marks=adjacency_marks,
@@ -120,27 +108,4 @@ def clear():
     except ValueError:
         abort(400)
     flash("Cleared." if duty_service.clear(day, duty) else "Nothing to clear.", "success")
-    return redirect(url_for("duty.roster", month=month))
-
-
-@bp.route("/roster/swap", methods=["POST"])
-@require(policy.can_manage_roster)
-def swap():
-    month = _parse_month(request.form.get("month", ""))
-    try:
-        a_id = int(request.form.get("assignment_a", ""))
-        b_id = int(request.form.get("assignment_b", ""))
-    except ValueError:
-        abort(400)
-    try:
-        duty_service.swap(
-            a_id, b_id, actor=current_user,
-            override_availability=request.form.get("confirm") == "1",
-        )
-    except (duty_service.SwapError, duty_service.IneligibleAssignment) as exc:
-        abort(400, description=str(exc))
-    except duty_service.NeedsAvailabilityConfirm as exc:
-        flash(f"Not swapped — {exc}. Tick “swap anyway” to override.", "error")
-        return redirect(url_for("duty.roster", month=month))
-    flash("Swapped — logged.", "success")
     return redirect(url_for("duty.roster", month=month))

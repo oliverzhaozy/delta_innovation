@@ -4,8 +4,8 @@ Nothing is stored and nothing is blocked: the leave detail page lists the
 requester's CONFIRMED duties in range, the roster page flags absent holders
 (A8: the predicate is presence.resolve, NOT a leave-table join — an MC or a
 direct absence flags exactly like leave), and roll call names the absent
-holder in chrome. The PS resolves via manual replace or swap; approval is
-never blocked and nobody is auto-reassigned.
+holder in chrome. The PS resolves via manual replace; approval is never
+blocked and nobody is auto-reassigned.
 """
 from datetime import date
 

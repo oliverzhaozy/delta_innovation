@@ -18,7 +18,7 @@ from app.domain import eligibility, policy, presence, roster
 from app.domain.dates import iter_days, now_sgt, today_sgt
 from app.domain.types import Calendar, Duty, DutyState
 from app.extensions import db
-from app.models import DutyAssignment, DutySwapLog, Event
+from app.models import DutyAssignment, Event
 from app.services import event_service, presence_service
 
 
@@ -177,13 +177,9 @@ class NeedsAvailabilityConfirm(Exception):
         self.reasons = reasons
 
 
-def _availability_reasons(person, day, duty, *, ignore_dates=frozenset()):
+def _availability_reasons(person, day, duty):
     """Soft-warning reasons for putting `person` on (day, duty): covering
     absence/overnight event, adjacency (incl. cross-month tail), spread breach.
-
-    `ignore_dates` = assignment dates being vacated by the same transaction
-    (the swap path passes both swapped dates): they must not count as held or
-    toward spread, or every legitimate swap warns about the person's own row.
     """
     month = day.strftime("%Y-%m")
     pools, availability, _confirmed = availability_for_month(month)
@@ -193,21 +189,13 @@ def _availability_reasons(person, day, duty, *, ignore_dates=frozenset()):
     first, last = month_bounds(month)
     rows = _assignments_between(first, last)
     _counts, tail = _prior_month_inputs(first)
-    held = {
-        r.date for r in rows
-        if r.person_id == person.id and r.date != day and r.date not in ignore_dates
-    }
+    held = {r.date for r in rows if r.person_id == person.id and r.date != day}
     held.update(d for d, _duty, person_id in tail if person_id == person.id)
     if any(roster.adjacent_duty_days(day, other) for other in held):
         reasons.append("adjacent duty day (incl. Fri→Mon)")
     counts = {p.id: 0 for p in pools[duty]}
     for r in rows:
-        if (
-            r.duty is duty
-            and r.person_id in counts
-            and r.date != day
-            and r.date not in ignore_dates
-        ):
+        if r.duty is duty and r.person_id in counts and r.date != day:
             counts[r.person_id] += 1
     if person.id in counts:
         counts[person.id] += 1
@@ -320,59 +308,6 @@ def can_key_parade_today(person) -> bool:
     return policy.can_key_parade(person, is_cos_of_day=is_cos)
 
 
-class SwapError(Exception):
-    """Structurally invalid swap — 4xx, user-facing message."""
-
-
-def swap(assignment_a_id, assignment_b_id, *, actor, override_availability):
-    """Validated 1-for-1 swap: both rows CONFIRMED (A6 — a PROPOSED draft is
-    regenerate/manual-assign territory, and a logged swap of a draft would be
-    semantically orphaned by the next regenerate), same duty (the disjoint
-    pools guarantee it; a mismatch means hand-crafted input), both people
-    re-validated for the other's date. Both rows + ONE log row, one commit.
-
-    Every raise happens before any mutation, so atomicity needs no partial
-    rollback; availability is checked pre-flip with both swapped dates excluded
-    (checking post-flip would trip the frozen availability rule on the person's
-    own new row).
-    """
-    a = db.session.get(DutyAssignment, assignment_a_id)
-    b = db.session.get(DutyAssignment, assignment_b_id)
-    if a is None or b is None or a.id == b.id:
-        raise SwapError("Pick two existing, different assignments.")
-    if a.state is not DutyState.CONFIRMED or b.state is not DutyState.CONFIRMED:
-        raise SwapError(
-            "Swaps are for CONFIRMED duties — regenerate or manual-assign covers drafts."
-        )
-    if a.duty is not b.duty:
-        raise SwapError("Swaps are same-duty only.")
-    rule = eligibility.eligible_cos if a.duty is Duty.COS else eligibility.eligible_cdos
-    for row in (a, b):
-        if not (row.person.is_active and rule(row.person)):
-            raise IneligibleAssignment(
-                f"{row.person.display_name} can no longer hold {row.duty.label}."
-            )
-    swapped_dates = frozenset((a.date, b.date))
-    reasons = _availability_reasons(
-        a.person, b.date, a.duty, ignore_dates=swapped_dates
-    ) + _availability_reasons(b.person, a.date, b.duty, ignore_dates=swapped_dates)
-    if reasons and not override_availability:
-        raise NeedsAvailabilityConfirm(reasons)
-    person_a_id, person_b_id = a.person_id, b.person_id
-    a.person_id, b.person_id = person_b_id, person_a_id
-    stamp = now_sgt()
-    for row in (a, b):
-        row.confirmed_by_id = actor.id
-        row.confirmed_at = stamp
-    log = DutySwapLog(
-        person_a_id=person_a_id, person_b_id=person_b_id,
-        date_a=a.date, date_b=b.date, duty=a.duty, actor_id=actor.id,
-    )
-    db.session.add(log)
-    db.session.commit()
-    return log
-
-
 def _absent_assignment_ids(rows, first, last):
     """Assignment ids whose CONFIRMED holder resolves ABSENT on the duty date,
     derived from the shared fetch (A8): an MC, a direct absence, and approved
@@ -409,9 +344,8 @@ MonthView = namedtuple(
 def month_view(month: str) -> MonthView:
     """Everything the roster page renders, assembled once. `violations` and
     `absent_flags` are re-derived from the CURRENT rows on every call (the pure
-    module's contract: re-flag after manual edits and swaps, not only after
-    generation). Blanks are slots with NO row — the DB never stores a None
-    assignment."""
+    module's contract: re-flag after manual edits, not only after generation).
+    Blanks are slots with NO row — the DB never stores a None assignment."""
     first, last = month_bounds(month)
     days = list(iter_days(first, last))
     rows = _assignments_between(first, last)

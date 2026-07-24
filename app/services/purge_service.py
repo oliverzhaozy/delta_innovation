@@ -26,7 +26,6 @@ from app.extensions import db
 from app.models import (
     DirectAbsence,
     DutyAssignment,
-    DutySwapLog,
     Event,
     LeaveRequest,
     LedgerEntry,
@@ -100,12 +99,6 @@ def _duty_assignments(before):
     return db.session.query(DutyAssignment).filter(DutyAssignment.date < before)
 
 
-def _duty_swaps(before):
-    return db.session.query(DutySwapLog).filter(
-        DutySwapLog.date_a < before, DutySwapLog.date_b < before
-    )
-
-
 def _ro_documents(before):
     return db.session.query(RoDocument).filter(RoDocument.date < before)
 
@@ -155,7 +148,6 @@ def _compute(before):
         ("overseas_declaration", _overseas(before).count()),
         ("event", _events(before).count()),
         ("duty_assignment", _duty_assignments(before).count()),
-        ("duty_swap_log", _duty_swaps(before).count()),
         ("ro_document", _ro_documents(before).count()),
         ("weekly_key_events", _weekly(before).count()),
         ("manning_period", _manning(before).count()),
@@ -218,7 +210,6 @@ def execute(before, *, actor):
     _direct(before).delete(synchronize_session=False)
     _overseas(before).delete(synchronize_session=False)
     _duty_assignments(before).delete(synchronize_session=False)
-    _duty_swaps(before).delete(synchronize_session=False)
     _weekly(before).delete(synchronize_session=False)
     _meals(before).delete(synchronize_session=False)
     _person_audit(before).delete(synchronize_session=False)

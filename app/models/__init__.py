@@ -1,5 +1,5 @@
 from app.models.direct_absence import DirectAbsence
-from app.models.duty import DutyAssignment, DutySwapLog
+from app.models.duty import DutyAssignment
 from app.models.event import Event, EventParticipant
 from app.models.holiday import PublicHoliday
 from app.models.ledger import LedgerEntry
@@ -21,7 +21,6 @@ from app.models.status import StatusEntry
 __all__ = [
     "DirectAbsence",
     "DutyAssignment",
-    "DutySwapLog",
     "Event",
     "EventParticipant",
     "LeaveRequest",

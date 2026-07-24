@@ -93,14 +93,14 @@ wrong draft nobody reviewed, not a silent reassignment.
   3SG PS legitimately appears in NEITHER pool. If a pool is near-empty, the
   rule — not the app — is the problem; raise it before trusting a roster.
 - **During the parallel month:** exercise manual assigns (including one over
-  an availability warning) and at least one swap, so the confirm/fingerprint,
-  warning, and swap-log flows have all been driven with real names. Blanks and
-  ⚠ flags on the page are findings, not bugs: a blank means no one eligible
-  was available; a "holder absent" flag means leave/MC landed after
-  confirmation and the PS resolves it by replace or swap.
+  an availability warning), so the confirm/fingerprint and warning flows have
+  all been driven with real names. Blanks and ⚠ flags on the page are
+  findings, not bugs: a blank means no one eligible was available; a "holder
+  absent" flag means leave/MC landed after confirmation and the PS resolves
+  it by manual replace.
 - **Confirm is the record:** a month's roster only counts once a PS presses
   Confirm — drafts move nothing. Regenerate freely before confirming; after
-  confirming, changes go through manual replace or logged swaps.
+  confirming, changes go through manual replace.
 - **Hard cutover:** the following month, the manual roster stops. From day
   one of that month the app's CONFIRMED roster drives roll-call CURRENT
   STRENGTH, the NSF overnight meal counter, the COS-message pre-fill, and the

@@ -9,7 +9,7 @@
   </ul>
   <p class="muted">Approving does not reassign the duty — the PS resolves it on the
      <a href="{{ url_for('duty.roster', month=duty_rows[0].date.strftime('%Y-%m')) }}">duty roster</a>
-     (manual replace or swap).</p>
+     (manual replace).</p>
   {% else %}
   <p class="muted">No confirmed duties on these dates.</p>
   {% endif %}

@@ -14,22 +14,6 @@
   </div>
 </section>
 
-{# Pools panel — ALWAYS rendered, before the grid: an accidentally empty or
-   tiny pool (the 3SG-PS gap is real) must be visible on day one. #}
-{% for duty in Duty %}
-<section class="card">
-  <h2>{{ duty.label }} pool ({{ view.pools[duty]|length }})</h2>
-  {% if view.pools[duty]|length <= 2 %}
-    <p class="flash flash-error">&#9888; {{ duty.label }} pool is empty or tiny — the eligibility rule, not the app, may be the problem.</p>
-  {% endif %}
-  <ul class="toollist">
-    {% for p in view.pools[duty] %}
-      <li><span>{{ p.rank.value }} {{ p.display_name }} ({{ p.appointment.label }})</span></li>
-    {% endfor %}
-  </ul>
-</section>
-{% endfor %}
-
 <section class="card table-wrap">
   <h2>Month grid</h2>
   <table class="list">
@@ -124,50 +108,22 @@
     <button type="submit" class="btn secondary">Clear slot</button>
   </form>
 </section>
-
-<section class="card">
-  <h2>Swap (CONFIRMED duties only)</h2>
-  {% set confirmed_rows = view.rows | selectattr("state.value", "equalto", "CONFIRMED") | list %}
-  {% if confirmed_rows | length >= 2 %}
-  <form method="post" action="{{ url_for('duty.swap') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="month" value="{{ month }}">
-    {% for field in ("assignment_a", "assignment_b") %}
-    <label>{{ "First" if loop.first else "Second" }} duty
-      <select name="{{ field }}">
-        {% for r in confirmed_rows %}
-        <option value="{{ r.id }}">{{ r.date.strftime("%d %b") }} — {{ r.duty.label }} — {{ r.person.display_name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    {% endfor %}
-    <label><input type="checkbox" name="confirm" value="1"> swap anyway (override availability warning)</label>
-    <button type="submit" class="btn">Swap</button>
-  </form>
-  {% else %}
-  <p class="muted">Swaps become available once the month has at least two confirmed duties.</p>
-  {% endif %}
-</section>
 {% endif %}
 
-<section class="card table-wrap">
-  <h2>Swap log</h2>
-  {% if swap_log %}
-  <table class="list">
-    <thead><tr><th>Duty</th><th>Swap</th><th>By</th><th>At</th></tr></thead>
-    <tbody>
-      {% for s in swap_log %}
-      <tr>
-        <td>{{ s.duty.label }}</td>
-        <td>{{ s.person_a.display_name }} ({{ s.date_a.strftime("%d %b %Y") }}) &harr; {{ s.person_b.display_name }} ({{ s.date_b.strftime("%d %b %Y") }})</td>
-        <td>{{ s.actor.display_name }}</td>
-        <td>{{ s.at.strftime("%d %b %Y %H:%M") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">No swaps logged.</p>
+{# Pools panel — ALWAYS rendered (owner 2026-07-24: at the bottom, grid first):
+   an accidentally empty or tiny pool (the 3SG-PS gap is real) must be visible
+   on day one. #}
+{% for duty in Duty %}
+<section class="card">
+  <h2>{{ duty.label }} pool ({{ view.pools[duty]|length }})</h2>
+  {% if view.pools[duty]|length <= 2 %}
+    <p class="flash flash-error">&#9888; {{ duty.label }} pool is empty or tiny — the eligibility rule, not the app, may be the problem.</p>
   {% endif %}
+  <ul class="toollist">
+    {% for p in view.pools[duty] %}
+      <li><span>{{ p.rank.value }} {{ p.display_name }} ({{ p.appointment.label }})</span></li>
+    {% endfor %}
+  </ul>
 </section>
+{% endfor %}
 {% endblock %}
