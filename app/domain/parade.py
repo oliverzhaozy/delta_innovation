@@ -7,12 +7,25 @@ TECH_PLAN "Jinja text templates" line): hand-built strings dodge
 template-whitespace landmines so the golden tests can pin the output to
 docs/PARADE_FORMATS.md byte-for-byte.
 """
+import bisect
+import dataclasses
+from collections import namedtuple
 from dataclasses import dataclass
 from datetime import date
+from typing import Mapping
 
 from app.domain.dates import format_ddmmyy
 from app.domain.presence import PresenceState
-from app.domain.types import Appointment, DirectAbsenceType, LeaveType, Rank, StatusType
+from app.domain.types import (
+    ALLOWED_OVERRIDE_TARGETS,
+    Appointment,
+    DirectAbsenceType,
+    LeaveType,
+    OverrideCategory,
+    ParadeVariant,
+    Rank,
+    StatusType,
+)
 
 # Decision (g): parade display order, NOT the SPEC.md chain of command (which
 # lists SM above 2IC) — the owner's sample governs how the roster is printed.
@@ -77,6 +90,51 @@ def parade_line(person) -> str:
     # (since ee20005). This is the SINGLE place the "RANK NAME" pairing happens —
     # every renderer, the COS greeting, and the OTHERS-IN-CAMP lines go through it.
     return f"{person.rank.value} {person.display_name}".upper()
+
+
+# Category field name -> the printed block title. The renderers read titles from
+# here rather than repeating literals, so a title lives in exactly one place and
+# the drag grid's <h3> can never disagree with the rendered block header. Values
+# are byte-identical to the strings the goldens pin — this dict is a lookup, not
+# a wording change.
+CATEGORY_TITLES = {
+    "current_strength": "CURRENT STRENGTH",
+    "others_in_camp": "OTHERS IN CAMP",
+    "stay_out": "STAY OUT",
+    "leave": "LEAVE",
+    "off_oil": "OFF/OIL",
+    "on_course": "ON COURSE",
+    "mc": "MC",
+    "others": "OTHERS",
+}
+
+# The full set of ParadeDoc category fields (categorize() populates all eight);
+# CosDoc carries the six night/absent categories only.
+_PARADE_CATEGORIES = (
+    "current_strength", "others_in_camp", "leave", "off_oil",
+    "on_course", "mc", "others", "stay_out",
+)
+_COS_CATEGORIES = ("stay_out", "leave", "off_oil", "on_course", "mc", "others")
+
+# Per-variant drag-grid display order. Each tuple is exactly the variant's
+# ALLOWED_OVERRIDE_TARGETS (as a set) laid out in the order the document renders
+# them — so the grid shows every droppable category, including empty ones, and
+# no category that variant forbids as a target.
+_VARIANT_VIEW_ORDER = {
+    ParadeVariant.MORNING: (
+        "current_strength", "others_in_camp", "leave", "off_oil",
+        "on_course", "mc", "others",
+    ),
+    ParadeVariant.ROLL_CALL: (
+        "current_strength", "stay_out", "leave", "off_oil",
+        "on_course", "mc", "others",
+    ),
+    ParadeVariant.COS_MESSAGE: ("stay_out", "leave", "off_oil", "on_course", "mc", "others"),
+}
+
+# One drag-grid category: its field key, printed title, and (person_id, line)
+# entries — the ONE line source the template's drop zones iterate.
+CategoryView = namedtuple("CategoryView", "key title entries")
 
 
 # --- morning parade compute (P3a.6) --------------------------------------
@@ -300,15 +358,15 @@ def render_morning(doc: ParadeDoc) -> str:
         f"ABSENT STRENGTH: {d}",
         "——",
         f"PRESENT IN CAMP ({c}):",
-        _category_block("CURRENT STRENGTH", doc.current_strength),
-        _category_block("OTHERS IN CAMP", doc.others_in_camp),
+        _category_block(CATEGORY_TITLES["current_strength"], doc.current_strength),
+        _category_block(CATEGORY_TITLES["others_in_camp"], doc.others_in_camp),
         "——",
         f"NOT PRESENT IN CAMP ({d}):",
-        _category_block("LEAVE", doc.leave),
-        _category_block("OFF/OIL", doc.off_oil),
-        _category_block("ON COURSE", doc.on_course),
-        _category_block("MC", doc.mc),
-        _category_block("OTHERS", doc.others),
+        _category_block(CATEGORY_TITLES["leave"], doc.leave),
+        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
+        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
+        _category_block(CATEGORY_TITLES["mc"], doc.mc),
+        _category_block(CATEGORY_TITLES["others"], doc.others),
     ]
     return "\n\n".join(sections)
 
@@ -343,18 +401,18 @@ def render_roll_call(doc: ParadeDoc) -> str:
         f"ABSENT STRENGTH: {d}",
         "——",
         f"PRESENT IN CAMP ({c}):",
-        _category_block("CURRENT STRENGTH", doc.current_strength),
+        _category_block(CATEGORY_TITLES["current_strength"], doc.current_strength),
         # Literal 0, header-only, by rule — not a _category_block on the (empty)
         # tuple, to make the "roll call has no others-in-camp" invariant explicit.
-        "OTHERS IN CAMP (0):",
+        f"{CATEGORY_TITLES['others_in_camp']} (0):",
         "——",
         f"NOT PRESENT IN CAMP ({d}):",
-        _category_block("STAY OUT", doc.stay_out),
-        _category_block("LEAVE", doc.leave),
-        _category_block("OFF/OIL", doc.off_oil),
-        _category_block("ON COURSE", doc.on_course),
-        _category_block("MC", doc.mc),
-        _category_block("OTHERS", doc.others),
+        _category_block(CATEGORY_TITLES["stay_out"], doc.stay_out),
+        _category_block(CATEGORY_TITLES["leave"], doc.leave),
+        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
+        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
+        _category_block(CATEGORY_TITLES["mc"], doc.mc),
+        _category_block(CATEGORY_TITLES["others"], doc.others),
     ]
     return "\n\n".join(sections)
 
@@ -387,6 +445,16 @@ class CosDoc:
     on_course: tuple = ()
     mc: tuple = ()
     others: tuple = ()
+    # Parallel person tuples (ParadeDoc precedent) — default empty so a
+    # hand-built line-only CosDoc still constructs and validates. compute and
+    # apply_overrides populate them in lockstep with the line tuples above; the
+    # drag grid and identity dedup read them.
+    stay_out_people: tuple = ()
+    leave_people: tuple = ()
+    off_oil_people: tuple = ()
+    on_course_people: tuple = ()
+    mc_people: tuple = ()
+    others_people: tuple = ()
 
     def validate(self) -> "CosDoc":
         """Raise ParadeImbalance if anyone is listed twice, else return self.
@@ -395,7 +463,17 @@ class CosDoc:
         compute can't produce a duplicate — but the invariant is enforced anyway
         (a hand-built or future-miswired doc must never render two lines for one
         person). No headcount check: Message 1 does not account for everyone.
+
+        Dedup keys on person identity (id) when the person tuples are present —
+        two distinct people who share rank+name render identical lines and must
+        both stand — and falls back to line dedup for hand-built line-only docs.
         """
+        people = [p for bucket in self._people_buckets() for p in bucket]
+        if people:
+            ids = [p.id for p in people]
+            if len(set(ids)) != len(ids):
+                raise ParadeImbalance("a person appears in more than one category")
+            return self
         buckets = (
             self.stay_out, self.leave, self.off_oil,
             self.on_course, self.mc, self.others,
@@ -404,6 +482,12 @@ class CosDoc:
         if len(set(lines)) != len(lines):
             raise ParadeImbalance("a person appears in more than one category")
         return self
+
+    def _people_buckets(self) -> tuple:
+        return (
+            self.stay_out_people, self.leave_people, self.off_oil_people,
+            self.on_course_people, self.mc_people, self.others_people,
+        )
 
 
 def compute_cos_message(day, cos_person, pairs) -> CosDoc:
@@ -420,24 +504,27 @@ def compute_cos_message(day, cos_person, pairs) -> CosDoc:
     in-camp artifacts on D-1 don't cover D anyway. DEACTIVATED must never reach
     a parade document (presence_inputs is active-only) — we raise, not drop.
     """
-    buckets: dict[str, list] = {
-        name: []
-        for name in ("stay_out", "leave", "off_oil", "on_course", "mc", "others")
-    }
+    lines: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
+    people: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
     for person, resolution in pairs:
         state = resolution.state
         if state is PresenceState.DEACTIVATED:
             raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
-            buckets[_absent_category(resolution.row)].append(parade_line(person))
+            bucket = _absent_category(resolution.row)
         elif state is PresenceState.STAY_OUT:
-            buckets["stay_out"].append(parade_line(person))
-        # PRESENT / DUTY: omitted — this text requests statuses, not attendance.
+            bucket = "stay_out"
+        else:
+            # PRESENT / DUTY: omitted — this text requests statuses, not attendance.
+            continue
+        lines[bucket].append(parade_line(person))
+        people[bucket].append(person)
 
     doc = CosDoc(
         day=day,
         cos_person=cos_person,
-        **{name: tuple(lines) for name, lines in buckets.items()},
+        **{name: tuple(lines[name]) for name in _COS_CATEGORIES},
+        **{f"{name}_people": tuple(people[name]) for name in _COS_CATEGORIES},
     )
     return doc.validate()
 
@@ -459,11 +546,93 @@ def render_cos(doc: CosDoc) -> str:
     )
     sections = [
         greeting,
-        _category_block("STAY OUT", doc.stay_out),
-        _category_block("LEAVE", doc.leave),
-        _category_block("OFF/OIL", doc.off_oil),
-        _category_block("ON COURSE", doc.on_course),
-        _category_block("MC", doc.mc),
-        _category_block("OTHERS", doc.others),
+        _category_block(CATEGORY_TITLES["stay_out"], doc.stay_out),
+        _category_block(CATEGORY_TITLES["leave"], doc.leave),
+        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
+        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
+        _category_block(CATEGORY_TITLES["mc"], doc.mc),
+        _category_block(CATEGORY_TITLES["others"], doc.others),
     ]
     return "\n\n".join(sections)
+
+
+# --- drag-and-drop recategorization overrides (P8) -----------------------
+#
+# A stored override moves one person from the category the presence engine put
+# them in to a keyer-chosen one, WITHOUT touching any leave/status data. The
+# move happens on the built doc, inside the one build pipeline, so the meal
+# counters (which read the same doc) inherit every drag (owner decision 6).
+
+
+def _doc_variant(doc) -> ParadeVariant:
+    """The ParadeVariant a built doc belongs to. CosDoc has no `variant`
+    string, so its type is the discriminator; ParadeDoc carries the compute
+    variant string the categorize/render pair use."""
+    if isinstance(doc, CosDoc):
+        return ParadeVariant.COS_MESSAGE
+    return ParadeVariant.MORNING if doc.variant == "morning" else ParadeVariant.ROLL_CALL
+
+
+def _doc_categories(doc) -> tuple:
+    return _COS_CATEGORIES if isinstance(doc, CosDoc) else _PARADE_CATEGORIES
+
+
+def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
+    """Return a copy of `doc` with each `{person_id: target}` override applied,
+    or `doc` itself when `overrides` is empty (identity — no rebuild).
+
+    A disallowed target for the doc's variant is a wiring bug (the route
+    validates the target against ALLOWED_OVERRIDE_TARGETS before it ever stores
+    one) — raise ValueError. A person no longer in the doc is a stale override
+    that self-heals — silently skipped. A person already in the target bucket is
+    a no-op. The moved line is the BARE parade_line (any OTHERS IN CAMP reason
+    suffix is dropped, and never added on the way in), inserted at its
+    parade_sort_key position so the category stays in parade order. The result
+    is validated: a move that unbalanced the doc is refused like any other.
+    """
+    if not overrides:
+        return doc
+    variant = _doc_variant(doc)
+    allowed = ALLOWED_OVERRIDE_TARGETS[variant]
+    categories = _doc_categories(doc)
+    lines = {c: list(getattr(doc, c)) for c in categories}
+    people = {c: list(getattr(doc, c + "_people")) for c in categories}
+    location = {p.id: c for c in categories for p in people[c]}
+    for person_id, target in overrides.items():
+        if target not in allowed:
+            raise ValueError(
+                f"{target.value!r} is not a valid override target for {variant.value}"
+            )
+        current = location.get(person_id)
+        if current is None or current == target.value:
+            continue
+        idx = next(i for i, p in enumerate(people[current]) if p.id == person_id)
+        person = people[current].pop(idx)
+        lines[current].pop(idx)
+        dest = target.value
+        pos = bisect.bisect_right(people[dest], parade_sort_key(person), key=parade_sort_key)
+        people[dest].insert(pos, person)
+        lines[dest].insert(pos, parade_line(person))
+        location[person_id] = dest
+    replacements = {}
+    for c in categories:
+        replacements[c] = tuple(lines[c])
+        replacements[c + "_people"] = tuple(people[c])
+    return dataclasses.replace(doc, **replacements).validate()
+
+
+def category_views(doc) -> tuple:
+    """The doc's categories as drag-grid CategoryViews, in the variant's view
+    order and INCLUDING empty categories (a person must be droppable into an
+    empty one). This is the ONE line source for the template's drop zones, built
+    from the very tuples the renderer prints, so grid and text can never
+    disagree."""
+    variant = _doc_variant(doc)
+    views = []
+    for key in _VARIANT_VIEW_ORDER[variant]:
+        entries = tuple(
+            (person.id, line)
+            for person, line in zip(getattr(doc, key + "_people"), getattr(doc, key))
+        )
+        views.append(CategoryView(key=key, title=CATEGORY_TITLES[key], entries=entries))
+    return tuple(views)
