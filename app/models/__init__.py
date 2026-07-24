@@ -7,6 +7,7 @@ from app.models.leave import LeaveRequest
 from app.models.manning import ManningPeriod, ManningSlot
 from app.models.meal import MealAdjustment
 from app.models.overseas import OverseasDeclaration
+from app.models.parade_override import ParadeOverride
 from app.models.parade_snapshot import ParadeSnapshot
 from app.models.person import Person
 from app.models.person_audit import PersonAudit
@@ -24,6 +25,7 @@ __all__ = [
     "ManningSlot",
     "MealAdjustment",
     "OverseasDeclaration",
+    "ParadeOverride",
     "ParadeSnapshot",
     "Person",
     "PersonAudit",
