@@ -1,12 +1,14 @@
 {# The ONE parade-documents page (UI refresh, owner-approved 2026-07-07):
    Morning / COS message / Roll call are URL-backed tabs over this single
    template — `doc` picks the chrome, the document pipeline stays build_doc's.
+   The pages are fixed to their operational date (morning/roll call = today,
+   COS = tomorrow); there is no day navigation — past states live in the
+   snapshot archive, not a ?date= walk.
    The document is copy-only: the <pre> text is exactly what build_doc renders,
    and the Copy button is the only action on it. #}
 {% extends "base.html" %}
 {% block title %}{{ {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
 
-{% set endpoint = {"morning": "parade.morning", "cos": "parade.cos_message", "roll_call": "parade.roll_call"}[doc] %}
 {% set pre_id = {"morning": "paradetext", "cos": "costext", "roll_call": "rollcalltext"}[doc] %}
 {% set doc_label = {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call state"}[doc] %}
 
@@ -17,33 +19,12 @@
 
 {% with active = doc %}{% include "parade/_pills.html" %}{% endwith %}
 
-{# Day navigation (UI-17): arrows flank the date; cos_arg rides on every link
-   so the selected COS survives day changes on the COS tab. The "Back to today"
-   chip shows only when the page is off today. #}
-{% set cos_arg = cos_person.id if doc == "cos" else None %}
-<nav class="day-nav card" aria-label="Change day">
-  <a class="day-nav-arrow" rel="prev"
-     href="{{ url_for(endpoint, date=prev_day.isoformat(), cos=cos_arg) }}"
-     aria-label="Previous day, {{ prev_day.strftime('%d %b') }}">&lsaquo;</a>
-  <div class="day-nav-center">
-    <span class="day-nav-date">{{ day.strftime("%A, %d %b %Y") }}</span>
-    {% if day != today %}
-    <a class="day-nav-today"
-       href="{{ url_for(endpoint, date=today.isoformat(), cos=cos_arg) }}">Back to today</a>
-    {% endif %}
-  </div>
-  <a class="day-nav-arrow" rel="next"
-     href="{{ url_for(endpoint, date=next_day.isoformat(), cos=cos_arg) }}"
-     aria-label="Next day, {{ next_day.strftime('%d %b') }}">&rsaquo;</a>
-</nav>
-
 {% if doc == "cos" %}
 <section class="card">
   <h2>COS</h2>
   {# Plain GET form, no JS/no persistence — pre-filled from the confirmed
      duty roster (P4.8); a keying mistake here costs one reload. #}
   <form method="get" action="{{ url_for('parade.cos_message') }}" style="display:flex; gap:0.5rem; align-items:center">
-    <input type="hidden" name="date" value="{{ day.isoformat() }}">
     <label for="cos-select">Set COS</label>
     <select id="cos-select" name="cos">
       {% for p in roster %}
@@ -96,7 +77,6 @@
      categories to person rows at submit time and skips already-tagged people. #}
   <form method="post" action="{{ url_for('parade.morning_fp_new') }}" data-people-picker>
     {{ fp_form.hidden_tag() }}
-    <input type="hidden" name="date" value="{{ day.isoformat() }}">
     <p>{{ fp_form.reason.label }}{{ fp_form.reason() }}</p>
     {% with form = fp_form %}{% include "_people_picker.html" %}{% endwith %}
     {% for field in fp_form if field.errors %}
@@ -112,7 +92,6 @@
       <span>{{ row.person.rank.value }} {{ row.person.display_name }} ({{ row.remarks }})</span>
       <form method="post" action="{{ url_for('parade.morning_fp_remove', entry_id=row.id) }}" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="date" value="{{ day.isoformat() }}">
         <button type="submit" class="linklike">Remove</button>
       </form>
     </li>

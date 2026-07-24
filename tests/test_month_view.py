@@ -171,6 +171,11 @@ def test_prev_next_today_links_present(client, make_person):
 
 
 def test_day_number_links_to_morning_parade(client, make_person):
+    # NOTE (T1): the parade pages dropped ?date=, but the calendar day-number
+    # link is intentionally left pointing at parade.morning?date=... until T4
+    # re-points it at the snapshot-history archive (owner decision 5). Until
+    # then the URL still renders (it is just a link; the morning page ignores
+    # the param), so this assertion holds unchanged and is rewritten in T4.
     login(client, make_person(username="mv_dayno_viewer"))
     resp = client.get("/calendar/month?ym=2026-07")
     assert b"/parade/morning?date=2026-07-08" in resp.data

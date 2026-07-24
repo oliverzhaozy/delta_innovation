@@ -1,12 +1,9 @@
 """UI refresh (owner-approved 2026-07-07) — the unified parade page's pill
 row, the grouped nav's rights-gating, and dashboard link integrity."""
 import re
-from datetime import date
 
 from app.domain.types import Appointment, Rank
 from tests.conftest import login
-
-DAY = date(2026, 7, 8)
 
 
 def make_viewer(make_person, **kw):
@@ -29,20 +26,21 @@ def test_parade_pills_and_active_states(app, client, make_person):
     login(client, "opr1")
 
     for path, label in (
-        (f"/parade/morning?date={DAY.isoformat()}", "Morning parade state"),
-        (f"/parade/cos-message?date={DAY.isoformat()}", "COS message"),
-        (f"/parade/roll-call?date={DAY.isoformat()}", "Roll call"),
+        ("/parade/morning", "Morning parade state"),
+        ("/parade/cos-message", "COS message"),
+        ("/parade/roll-call", "Roll call"),
     ):
         html = client.get(path).get_data(as_text=True)
         assert active_pill(html) == label, path
 
 
-def test_pills_carry_the_page_date(app, client, make_person):
+def test_pills_have_no_date_param(app, client, make_person):
     make_viewer(make_person)
     login(client, "opr1")
-    html = client.get(f"/parade/morning?date={DAY.isoformat()}").get_data(as_text=True)
-    # Switching document tabs stays on the same day.
-    assert f"/parade/roll-call?date={DAY.isoformat()}" in html.replace("&amp;", "&")
+    html = client.get("/parade/morning").get_data(as_text=True)
+    # Each page is fixed to its operational date, so the tab links are plain —
+    # no ?date= carries a day across tabs.
+    assert "?date=" not in pill_row(html)
 
 
 def test_nav_groups_are_rights_gated(app, client, make_person):

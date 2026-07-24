@@ -1,9 +1,8 @@
 {# The parade section's one-tap workflow strip. `active` names the current
-   surface; document pills carry the page's date (when one is in context) so
-   switching tabs stays on the same day. #}
+   surface. Each page is fixed to its operational date, so the pills are plain
+   links — no ?date= to carry. #}
 <nav class="pills" aria-label="Parade pages">
-  {% set date_arg = day.isoformat() if day is defined and day else None %}
-  <a href="{{ url_for('parade.cos_message', date=date_arg) }}" {% if active == "cos" %}class="active" aria-current="page"{% endif %}>COS message</a>
-  <a href="{{ url_for('parade.roll_call', date=date_arg) }}" {% if active == "roll_call" %}class="active" aria-current="page"{% endif %}>Roll call</a>
-  <a href="{{ url_for('parade.morning', date=date_arg) }}" {% if active == "morning" %}class="active" aria-current="page"{% endif %}>Morning parade state</a>
+  <a href="{{ url_for('parade.cos_message') }}" {% if active == "cos" %}class="active" aria-current="page"{% endif %}>COS message</a>
+  <a href="{{ url_for('parade.roll_call') }}" {% if active == "roll_call" %}class="active" aria-current="page"{% endif %}>Roll call</a>
+  <a href="{{ url_for('parade.morning') }}" {% if active == "morning" %}class="active" aria-current="page"{% endif %}>Morning parade state</a>
 </nav>

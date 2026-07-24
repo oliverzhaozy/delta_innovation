@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -38,18 +38,6 @@ def _set_status_person_choices(form):
     form.person_id.choices = [
         (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
     ]
-
-
-def _parse_day(raw: str, default: date = None) -> date:
-    # The parade pages' ?date= convention: a bad or missing ?date= falls back to
-    # a page-specific default rather than 400ing — the page must always render
-    # something. `default` lets the COS message page fall back to tomorrow
-    # (compiled D-1, assumption 4) while every other page keeps falling back
-    # to today.
-    try:
-        return date.fromisoformat(raw)
-    except ValueError:
-        return default if default is not None else today_sgt()
 
 
 def _validate_cos_person(raw, day, roster=None):
@@ -132,7 +120,7 @@ def _fp_rows(day):
 @bp.route("/morning")
 @login_required
 def morning():
-    day = _parse_day(request.args.get("date", ""))
+    day = today_sgt()
     # One pipeline for the page and meals (addendum A2). On imbalance the
     # template renders the error card and no <pre> — a wrong document is
     # worse than none (plan).
@@ -154,9 +142,6 @@ def morning():
         "parade/state.html",
         doc="morning",
         day=day,
-        today=today_sgt(),
-        prev_day=day - timedelta(days=1),
-        next_day=day + timedelta(days=1),
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,
@@ -170,12 +155,12 @@ def morning():
 @bp.route("/morning/fp", methods=["POST"])
 @require(duty_service.can_key_parade_today)
 def morning_fp_new():
-    day = _parse_day(request.form.get("date", ""))
+    day = today_sgt()
     form = FpBulkAddForm()
     _set_fp_people_choices(form)
     if not form.validate_on_submit():
         flash("Could not add — check the selection and reason.", "error")
-        return redirect(url_for("parade.morning", date=day.isoformat()))
+        return redirect(url_for("parade.morning"))
 
     # Categories expand to concrete people NOW (unlike calendar events, an FP
     # row is per-person state for one morning, so nothing category-shaped is
@@ -193,7 +178,7 @@ def morning_fp_new():
     )
     if not selected:
         flash("Select at least one person or group.", "error")
-        return redirect(url_for("parade.morning", date=day.isoformat()))
+        return redirect(url_for("parade.morning"))
 
     # Already-tagged people are skipped, never overwritten (owner decision
     # 2026-07-11) — Remove + re-add is how a keyed reason gets changed.
@@ -219,13 +204,13 @@ def morning_fp_new():
     if skipped:
         message += f" Skipped {skipped} already tagged."
     flash(message, "success")
-    return redirect(url_for("parade.morning", date=day.isoformat()))
+    return redirect(url_for("parade.morning"))
 
 
 @bp.route("/morning/fp/<int:entry_id>/remove", methods=["POST"])
 @require(duty_service.can_key_parade_today)
 def morning_fp_remove(entry_id):
-    day = _parse_day(request.form.get("date", ""))
+    day = today_sgt()
     row = db.session.get(StatusEntry, entry_id)
     # Guard: only a same-shaped quick-add row for the page the keyer is
     # actually viewing may be hard-deleted here — this is a same-morning
@@ -241,15 +226,15 @@ def morning_fp_remove(entry_id):
     db.session.delete(row)
     db.session.commit()
     flash("Removed.", "success")
-    return redirect(url_for("parade.morning", date=day.isoformat()))
+    return redirect(url_for("parade.morning"))
 
 
 @bp.route("/cos-message")
 @login_required
 def cos_message():
     # Compiled the evening before, forecasting the next duty day (assumption
-    # 4) — the one page whose date default is tomorrow, not today.
-    day = _parse_day(request.args.get("date", ""), default=today_sgt() + timedelta(days=1))
+    # 4) — the one page fixed to tomorrow, not today.
+    day = today_sgt() + timedelta(days=1)
     roster = event_service.active_roster()
     cos_person = _validate_cos_person(request.args.get("cos", ""), day, roster)
     built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
@@ -259,9 +244,6 @@ def cos_message():
         "parade/state.html",
         doc="cos",
         day=day,
-        today=today_sgt(),
-        prev_day=day - timedelta(days=1),
-        next_day=day + timedelta(days=1),
         cos_person=cos_person,
         roster=roster,
         text=built.text,
@@ -273,7 +255,7 @@ def cos_message():
 @bp.route("/roll-call")
 @login_required
 def roll_call():
-    day = _parse_day(request.args.get("date", ""))
+    day = today_sgt()
     built = parade_service.build_doc(day, ParadeVariant.ROLL_CALL)
     conflicts = _conflict_lines(built.pairs)
     # The night this document covers is day−1 → day (A7 notice reads the same
@@ -293,9 +275,6 @@ def roll_call():
         "parade/state.html",
         doc="roll_call",
         day=day,
-        today=today_sgt(),
-        prev_day=day - timedelta(days=1),
-        next_day=day + timedelta(days=1),
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,

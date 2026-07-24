@@ -7,7 +7,7 @@ panel markup is duplicated from morning.html rather than extracted into a
 shared partial (task decision: only extract if it doesn't touch the morning
 page's rendered output; duplicating ~10 lines is the lower-risk option).
 """
-from datetime import date, timedelta
+from datetime import timedelta
 
 from app.domain.dates import today_sgt
 from app.domain.types import (
@@ -22,7 +22,7 @@ from app.extensions import db
 from app.models import LeaveRequest, Person
 from tests.conftest import login
 
-DAY = date(2026, 7, 8)  # Wednesday, matches test_morning_parade_page's convention
+DAY = today_sgt()  # the pages are fixed to today (roll call) / tomorrow (COS)
 
 
 def pid(app, username):
@@ -60,18 +60,12 @@ def test_roll_call_defaults_to_today(client, make_person):
     assert today_sgt().strftime("%d%m%y").encode() in resp.data
 
 
-def test_bad_date_falls_back_to_convention_on_both_pages(client, make_person):
-    login(client, make_person(username="viewer_bad_date"))
-    assert client.get("/parade/cos-message?date=garbage").status_code == 200
-    assert client.get("/parade/roll-call?date=garbage").status_code == 200
-
-
 # --- done-criterion 2: COS selector ------------------------------------------
 
 def test_cos_selector_defaults_to_current_user(client, make_person):
     login(client, make_person(username="viewer3", display_name="Percy Sim",
                                rank=Rank.THREE_SG))
-    resp = client.get(f"/parade/cos-message?date={DAY.isoformat()}")
+    resp = client.get("/parade/cos-message")
     assert resp.status_code == 200
     assert b"3SG PERCY SIM is the COS" in resp.data
 
@@ -81,7 +75,7 @@ def test_cos_selector_query_param_selects_other_person(app, client, make_person)
     make_person(username="other_cos", display_name="Oscar Ong", rank=Rank.CPT)
     login(client, "viewer4")
     other_id = pid(app, "other_cos")
-    resp = client.get(f"/parade/cos-message?date={DAY.isoformat()}&cos={other_id}")
+    resp = client.get(f"/parade/cos-message?cos={other_id}")
     assert resp.status_code == 200
     assert b"CPT OSCAR ONG is the COS" in resp.data
 
@@ -89,11 +83,11 @@ def test_cos_selector_query_param_selects_other_person(app, client, make_person)
 def test_cos_selector_invalid_id_falls_back_to_current_user(client, make_person):
     login(client, make_person(username="viewer5", display_name="Percy Sim",
                                rank=Rank.THREE_SG))
-    resp = client.get(f"/parade/cos-message?date={DAY.isoformat()}&cos=999999")
+    resp = client.get("/parade/cos-message?cos=999999")
     assert resp.status_code == 200
     assert b"3SG PERCY SIM is the COS" in resp.data
 
-    resp2 = client.get(f"/parade/cos-message?date={DAY.isoformat()}&cos=garbage")
+    resp2 = client.get("/parade/cos-message?cos=garbage")
     assert resp2.status_code == 200
     assert b"3SG PERCY SIM is the COS" in resp2.data
 
@@ -105,7 +99,7 @@ def test_cos_selector_inactive_person_id_falls_back_to_current_user(app, client,
                 is_active=False)
     inactive_id = pid(app, "inactive_guy")
 
-    resp = client.get(f"/parade/cos-message?date={DAY.isoformat()}&cos={inactive_id}")
+    resp = client.get(f"/parade/cos-message?cos={inactive_id}")
     assert resp.status_code == 200
     assert b"3SG PERCY SIM is the COS" in resp.data
     assert b"GHOST GUY" not in resp.data
@@ -118,7 +112,7 @@ def test_cos_message_shows_regular_under_stay_out(client, make_person):
                                rank=Rank.THREE_SG))
     make_person(username="reg_guy", display_name="Oscar Ong", rank=Rank.CPT,
                 service=Service.REGULAR)
-    resp = client.get(f"/parade/cos-message?date={DAY.isoformat()}")
+    resp = client.get("/parade/cos-message")
     assert resp.status_code == 200
     assert b"STAY OUT (1):\n1. CPT OSCAR ONG" in resp.data
 
@@ -131,7 +125,7 @@ def test_roll_call_shows_stay_out_nsf_and_pm_off_in_current_strength(app, client
     plant_leave(app, "pm_off_guy", type_=LeaveType.OFF, day_part=DayPart.PM)
     login(client, "viewer7")
 
-    resp = client.get(f"/parade/roll-call?date={DAY.isoformat()}")
+    resp = client.get("/parade/roll-call")
     assert resp.status_code == 200
     assert b"STAY OUT (1):\n1. 3SG RYAN TAN" in resp.data
     current_block = resp.data.split(b"PRESENT IN CAMP")[1].split(b"OTHERS IN CAMP")[0]
@@ -148,10 +142,10 @@ def test_opr_views_both_document_pages(app, make_person):
     opr_client = app.test_client()
     login(opr_client, "opr_viewer")
 
-    cos_page = opr_client.get(f"/parade/cos-message?date={DAY.isoformat()}")
+    cos_page = opr_client.get("/parade/cos-message")
     assert cos_page.status_code == 200
 
-    roll_page = opr_client.get(f"/parade/roll-call?date={DAY.isoformat()}")
+    roll_page = opr_client.get("/parade/roll-call")
     assert roll_page.status_code == 200
 
 

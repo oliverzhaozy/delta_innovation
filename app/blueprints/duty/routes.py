@@ -19,7 +19,7 @@ from app.services import duty_service
 
 
 def _parse_month(raw: str) -> str:
-    # Same posture as parade's _parse_day: a bad ?month= falls back to the
+    # Same posture the RO/meals date pages use: a bad ?month= falls back to the
     # current month rather than 400ing — the page must always render something.
     try:
         duty_service.month_bounds(raw)

@@ -7,8 +7,9 @@ quick-add/remove round trip are pinned through the actual `<pre>` text the
 document renders — the same derivation every parade document reads (never a
 second check).
 """
-from datetime import date, timedelta
+from datetime import timedelta
 
+from app.domain.dates import today_sgt
 from app.domain.types import (
     Appointment,
     DayPart,
@@ -22,7 +23,7 @@ from app.extensions import db
 from app.models import LeaveRequest, Person, StatusEntry
 from tests.conftest import login
 
-DAY = date(2026, 7, 8)  # Wednesday — the parade day under test
+DAY = today_sgt()  # the morning page is fixed to today; planted data lands here
 
 
 def pid(app, username):
@@ -79,7 +80,7 @@ def test_renders_document_with_mc_off_and_stay_out(app, client, make_person):
     plant_leave(app, "off_guy", type_=LeaveType.OFF)
 
     login(client, "viewer")
-    resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    resp = client.get("/parade/morning")
     assert resp.status_code == 200
 
     assert b"TOTAL STRENGTH: 4" in resp.data
@@ -106,7 +107,7 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
 
     resp = client.post(
         "/parade/morning/fp",
-        data={"people": [str(target_id)], "reason": "BDO", "date": DAY.isoformat()},
+        data={"people": [str(target_id)], "reason": "BDO"},
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -121,7 +122,7 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
 
     # A second GET (refresh) renders identically — the quick-add is a status
     # row, not form state, so re-viewing the page is a pure re-read.
-    second = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    second = client.get("/parade/morning")
     assert second.status_code == 200
     assert b"PTE WONG KAI (BDO)" in second.data
     assert b"OTHERS IN CAMP (1):" in second.data
@@ -145,7 +146,6 @@ def test_bulk_add_expands_category_dedupes_and_skips_tagged(app, client, make_pe
             "categories": ["PLATOON_1"],
             "people": [str(pid(app, "p1_a")), str(pid(app, "p2_c"))],
             "reason": "BDO",
-            "date": DAY.isoformat(),
         },
         follow_redirects=True,
     )
@@ -165,7 +165,6 @@ def test_bulk_add_expands_category_dedupes_and_skips_tagged(app, client, make_pe
             "categories": ["PLATOON_1"],
             "people": [str(pid(app, "p1_a")), str(pid(app, "p2_c"))],
             "reason": "NEW REASON",
-            "date": DAY.isoformat(),
         },
         follow_redirects=True,
     )
@@ -182,7 +181,7 @@ def test_bulk_add_empty_selection_creates_nothing(app, client, make_person):
 
     resp = client.post(
         "/parade/morning/fp",
-        data={"reason": "BDO", "date": DAY.isoformat()},
+        data={"reason": "BDO"},
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -199,12 +198,11 @@ def test_remove_quick_add_row_restores_current_strength(app, client, make_person
     entry_id = plant_status(app, "target2", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     login(client, "ps_keyer2")
 
-    resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    resp = client.get("/parade/morning")
     assert b"PTE WONG KAI (BDO)" in resp.data
 
     remove_resp = client.post(
         f"/parade/morning/fp/{entry_id}/remove",
-        data={"date": DAY.isoformat()},
         follow_redirects=True,
     )
     assert remove_resp.status_code == 200
@@ -222,7 +220,6 @@ def test_remove_on_non_quick_add_row_404s_and_leaves_row_untouched(app, client, 
 
     resp = client.post(
         f"/parade/morning/fp/{entry_id}/remove",
-        data={"date": DAY.isoformat()},
     )
     assert resp.status_code == 404
     with app.app_context():
@@ -238,7 +235,7 @@ def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, 
     make_person(username="target3", display_name="Some Guy")
     login(client, "opr_viewer")
 
-    resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    resp = client.get("/parade/morning")
     assert resp.status_code == 200
     assert b"DELTA MORNING PARADE STATE" in resp.data
     assert b'action="/parade/morning/fp"' not in resp.data
@@ -247,14 +244,13 @@ def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, 
     target_id = pid(app, "target3")
     post_resp = client.post(
         "/parade/morning/fp",
-        data={"people": [str(target_id)], "reason": "BDO", "date": DAY.isoformat()},
+        data={"people": [str(target_id)], "reason": "BDO"},
     )
     assert post_resp.status_code == 403
 
     entry_id = plant_status(app, "target3", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     remove_resp = client.post(
         f"/parade/morning/fp/{entry_id}/remove",
-        data={"date": DAY.isoformat()},
     )
     assert remove_resp.status_code == 403
 
@@ -268,14 +264,15 @@ def test_conflict_panel_shows_both_rows_when_mc_overlaps_approved_leave(app, cli
     plant_status(app, "conflicted", type_=StatusType.MC)
     login(client, "viewer5")
 
-    resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    resp = client.get("/parade/morning")
     assert resp.status_code == 200
     assert b"<h2>Conflicts</h2>" in resp.data
     # Leave beats status in the precedence order, so OFF is the winner and MC
     # is the shadowed row — both named, in one sentence, naming the person.
+    stamp = DAY.strftime("%d %b")
     expected = (
-        "3SG Conflicted Guy: OFF (08 Jul) is showing on the parade; "
-        "MC (08 Jul) is also keyed for this day and is not shown."
+        f"3SG Conflicted Guy: OFF ({stamp}) is showing on the parade; "
+        f"MC ({stamp}) is also keyed for this day and is not shown."
     )
     assert expected.encode() in resp.data
 
@@ -283,39 +280,32 @@ def test_conflict_panel_shows_both_rows_when_mc_overlaps_approved_leave(app, cli
 def test_no_conflict_panel_when_nothing_conflicts(app, client, make_person):
     make_person(username="viewer6", display_name="Viewer Six")
     login(client, "viewer6")
-    resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
+    resp = client.get("/parade/morning")
     assert resp.status_code == 200
     assert b"Conflicts" not in resp.data
 
 
-# --- done-criterion 6: ?date= navigation + prev/next/Today links ------------
+# --- done-criterion 6: the page is today-only, with no day navigation -------
 
-def test_date_param_navigation_and_nav_links(app, client, make_person):
+def test_page_always_shows_today_and_has_no_day_nav(app, client, make_person):
+    # The morning page is fixed to today: today's MC lands in the MC block,
+    # tomorrow's is a different derivation (that person is present today), and
+    # there is no ?date= walk or "Back to today" chip to leave the day.
     make_person(username="viewer7", display_name="Viewer Seven")
-    make_person(username="dated_guy", display_name="Dated Guy")
-    plant_status(app, "dated_guy", type_=StatusType.MC, day=DAY)
+    make_person(username="today_mc", display_name="Today Mc", rank=Rank.THREE_SG)
+    make_person(username="tomorrow_mc", display_name="Tomorrow Mc", rank=Rank.THREE_SG)
+    plant_status(app, "today_mc", type_=StatusType.MC, day=DAY)
+    plant_status(app, "tomorrow_mc", type_=StatusType.MC, day=DAY + timedelta(days=1))
     login(client, "viewer7")
 
-    day_resp = client.get(f"/parade/morning?date={DAY.isoformat()}")
-    assert b"MC (1):\n1. PTE DATED GUY" in day_resp.data
-
-    # The MC only covers DAY — D+1 is a different derivation, not a leftover
-    # of the same data: dated_guy is back under CURRENT STRENGTH, MC is empty.
-    next_day = DAY + timedelta(days=1)
-    next_resp = client.get(f"/parade/morning?date={next_day.isoformat()}")
-    assert b"MC (0):" in next_resp.data
-    assert b"MC (1):\n1. PTE DATED GUY" not in next_resp.data
-
-    prev_day = DAY - timedelta(days=1)
-    assert f"/parade/morning?date={prev_day.isoformat()}".encode() in day_resp.data
-    assert f"/parade/morning?date={next_day.isoformat()}".encode() in day_resp.data
-    # DAY is off today, so the day-nav shows the "Back to today" chip (UI-17).
-    assert b"Back to today" in day_resp.data
-
-
-def test_bad_date_falls_back_to_today(client, make_person):
-    login(client, make_person(username="viewer8"))
-    assert client.get("/parade/morning?date=garbage").status_code == 200
+    resp = client.get("/parade/morning")
+    assert resp.status_code == 200
+    assert b"MC (1):\n1. 3SG TODAY MC" in resp.data
+    # Tomorrow's MC does not bleed into today — the count stays at one.
+    assert b"MC (2):" not in resp.data
+    # No day navigation survives: no ?date= links, no "Back to today" chip.
+    assert b"?date=" not in resp.data
+    assert b"Back to today" not in resp.data
 
 
 # --- nav gating --------------------------------------------------------------
