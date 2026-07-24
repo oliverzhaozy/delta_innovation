@@ -180,7 +180,7 @@ def test_roll_call_page_has_no_missing_duty_notice(app, client, make_person):
     make_stay_out_opr(make_person)
     login(client, "ps2")
 
-    page = client.get(f"/parade/roll-call?date={D.isoformat()}").get_data(as_text=True)
+    page = client.get("/parade/roll-call").get_data(as_text=True)
     assert NOTICE not in page
     # The document itself still renders on a duty-less night.
     assert re.search(r'<pre id="[^"]*"[^>]*>(.*?)</pre>', page, re.S)

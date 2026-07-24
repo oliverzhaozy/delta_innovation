@@ -17,12 +17,13 @@ from app.domain.types import (
     DayPart,
     LeaveType,
     LedgerSource,
+    ParadeVariant,
     Rank,
     RequestStatus,
 )
 from app.extensions import db
 from app.models import LeaveRequest, LedgerEntry, Person
-from app.services import ledger_service
+from app.services import ledger_service, parade_service
 from app.services.approval_service import TransitionError, cancel_approved, early_return
 from tests.conftest import login
 
@@ -365,12 +366,16 @@ def test_route_authz_and_success(app, client, make_person):
         assert ledger_service.balance(_pid("er_opr"), BalanceKind.OFF) == -4
 
 
-def _morning_absent(client, day):
+def _morning_absent(app, day):
     # The morning parade renders names uppercased; a person is "away" when they
     # appear in the NOT PRESENT IN CAMP half of the document, not CURRENT STRENGTH.
-    return client.get(f"/parade/morning?date={day.isoformat()}").data.split(
-        b"NOT PRESENT IN CAMP"
-    )[1]
+    # The live page is today-only, so an arbitrary covered day is asserted
+    # through the same build_doc pipeline the page renders (page↔pipeline
+    # equality is pinned by test_doc_builder).
+    with app.app_context():
+        return parade_service.build_doc(day, ParadeVariant.MORNING).text.split(
+            "NOT PRESENT IN CAMP"
+        )[1]
 
 
 def test_route_early_return_shortens_morning_absence(app, client, make_person):
@@ -385,15 +390,15 @@ def test_route_early_return_shortens_morning_absence(app, client, make_person):
 
     login(client, "ab_s3")
     # Before: Fri inside the range shows the person absent.
-    assert b"PTE AWAY BOARD" in _morning_absent(client, FRI)
+    assert "PTE AWAY BOARD" in _morning_absent(app, FRI)
     resp = client.post(
         f"/leave/{rid}/early-return", data={"new_end_date": THU.isoformat()},
         follow_redirects=True,
     )
     assert resp.status_code == 200
     # After: Thu still absent, Fri no longer (absence derived from the shortened range).
-    assert b"PTE AWAY BOARD" in _morning_absent(client, THU)
-    assert b"PTE AWAY BOARD" not in _morning_absent(client, FRI)
+    assert "PTE AWAY BOARD" in _morning_absent(app, THU)
+    assert "PTE AWAY BOARD" not in _morning_absent(app, FRI)
     with app.app_context():
         assert ledger_service.balance(_pid("ab_opr"), BalanceKind.OFF) == -2
 

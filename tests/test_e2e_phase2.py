@@ -6,15 +6,26 @@ S3 records an early return -> ledger, balances, and the morning parade all agree
 """
 from datetime import date
 
-from app.domain.types import Appointment, Rank
+from app.domain.types import Appointment, ParadeVariant, Rank
 from app.extensions import db
 from app.models import Event, LeaveRequest, Person
+from app.services import parade_service
 from tests.conftest import login
 
 # Tue-Wed-Thu, 1-3 Sep 2026: three consecutive working days, no weekend inside.
 TUE = date(2026, 9, 1)
 WED = date(2026, 9, 2)
 THU = date(2026, 9, 3)
+
+
+def _morning_absent(app, day):
+    # The live morning page is today-only; an arbitrary covered day is asserted
+    # through the same build_doc pipeline the page renders (page↔pipeline
+    # equality is pinned by test_doc_builder).
+    with app.app_context():
+        return parade_service.build_doc(day, ParadeVariant.MORNING).text.split(
+            "NOT PRESENT IN CAMP"
+        )[1]
 
 
 def test_phase2_end_to_end(app, client, make_person):
@@ -118,10 +129,7 @@ def test_phase2_end_to_end(app, client, make_person):
     # The morning parade renders names uppercased and lists the fully-absent
     # requester under NOT PRESENT IN CAMP for every covered day.
     for d in (TUE, WED, THU):
-        absent = client.get(f"/parade/morning?date={d.isoformat()}").data.split(
-            b"NOT PRESENT IN CAMP"
-        )[1]
-        assert b"NIGHTHAWK REQUESTER" in absent
+        assert "NIGHTHAWK REQUESTER" in _morning_absent(app, d)
     # 3 working days x 2 half-days = 6 half-days deducted from the 8 opened.
     assert b"OFF: 1" in client.get(f"/ledger/person/{requester_id}").data
 
@@ -135,15 +143,9 @@ def test_phase2_end_to_end(app, client, make_person):
     )
     assert b"Early return recorded" in resp.data
 
-    tue_absent = client.get(f"/parade/morning?date={TUE.isoformat()}").data.split(
-        b"NOT PRESENT IN CAMP"
-    )[1]
-    assert b"NIGHTHAWK REQUESTER" in tue_absent
+    assert "NIGHTHAWK REQUESTER" in _morning_absent(app, TUE)
     for d in (WED, THU):
-        absent = client.get(f"/parade/morning?date={d.isoformat()}").data.split(
-            b"NOT PRESENT IN CAMP"
-        )[1]
-        assert b"NIGHTHAWK REQUESTER" not in absent
+        assert "NIGHTHAWK REQUESTER" not in _morning_absent(app, d)
 
     person_page = client.get(f"/ledger/person/{requester_id}").data
     # Balance = opening (4 days) - cost of the single remaining day (1 day) = 3.

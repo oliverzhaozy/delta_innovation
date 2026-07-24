@@ -148,11 +148,11 @@ def test_cos_selector_prefills_confirmed_cos(app, client, make_person):
     login(client, "ps2")
 
     opr_id, ps_id = pid(app, "opr1"), pid(app, "ps2")
-    html = client.get(f"/parade/cos-message?date={tomorrow.isoformat()}").get_data(as_text=True)
+    # The COS page is fixed to tomorrow, which is exactly the day the duty was
+    # planted on — so the plain page prefills the confirmed COS.
+    html = client.get("/parade/cos-message").get_data(as_text=True)
     assert f'value="{opr_id}" selected' in html
 
     # Explicit hand-selection still wins — the app proposes, a human decides.
-    html = client.get(
-        f"/parade/cos-message?date={tomorrow.isoformat()}&cos={ps_id}"
-    ).get_data(as_text=True)
+    html = client.get(f"/parade/cos-message?cos={ps_id}").get_data(as_text=True)
     assert f'value="{ps_id}" selected' in html

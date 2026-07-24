@@ -20,12 +20,14 @@ from app.domain.types import (
     Appointment,
     CompanyRole,
     DirectAbsenceType,
+    ParadeVariant,
     Rank,
     Service,
     StatusType,
 )
 from app.extensions import db
 from app.models import DirectAbsence, Person, StatusEntry
+from app.services import parade_service
 from tests.conftest import login
 
 TODAY = today_sgt()
@@ -133,7 +135,7 @@ def test_ps_keys_mc_appears_in_list_and_morning_parade(app, client, make_person)
     assert b"PTE Mc Target" in list_resp.data
     assert b"MC" in list_resp.data
 
-    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    morning = client.get("/parade/morning").data
     absent = morning.split(b"NOT PRESENT IN CAMP")[1]
     assert b"PTE MC TARGET" in absent  # in the MC category, uppercased
     assert b"MC (1):" in morning
@@ -195,7 +197,7 @@ def test_s3_keys_direct_absence_for_oc_shows_leave_on_morning(app, client, make_
 
     key_direct(client, pid(app, "c3_oc"), type_="LEAVE", remarks="on leave")
 
-    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    morning = client.get("/parade/morning").data
     absent = morning.split(b"NOT PRESENT IN CAMP")[1]
     assert b"CPT THE BOSS" in absent  # a direct LEAVE lands in the LEAVE category
     assert b"LEAVE (1):" in morning
@@ -237,7 +239,7 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
         assert rows["c4_brief_out"] is False
         assert rows["c4_mc_default"] is False
 
-    morning = client.get(f"/parade/morning?date={TODAY.isoformat()}").data
+    morning = client.get("/parade/morning").data
     present, absent = (
         morning.split(b"NOT PRESENT IN CAMP")[0],
         morning.split(b"NOT PRESENT IN CAMP")[1],
@@ -269,16 +271,17 @@ def test_end_today_ends_ongoing_mc_stays_today_gone_tomorrow(app, client, make_p
         row = db.session.get(StatusEntry, entry_id)
         assert row.end_date == TODAY
 
-    today_absent = client.get(
-        f"/parade/morning?date={TODAY.isoformat()}"
-    ).data.split(b"NOT PRESENT IN CAMP")[1]
+    today_absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]
     assert b"PTE ONGOING MC" in today_absent  # still absent (MC) today
 
-    tomorrow_absent = client.get(
-        f"/parade/morning?date={TOMORROW.isoformat()}"
-    ).data.split(b"NOT PRESENT IN CAMP")[1]
-    # Gone from tomorrow's derivation — back present, no longer in the absent half.
-    assert b"PTE ONGOING MC" not in tomorrow_absent
+    # The live page is today-only now, so tomorrow's derivation is asserted
+    # through the same build_doc pipeline the page renders (page↔pipeline
+    # equality is pinned by test_doc_builder). Gone tomorrow — back present.
+    with app.app_context():
+        tomorrow_absent = parade_service.build_doc(
+            TOMORROW, ParadeVariant.MORNING
+        ).text.split("NOT PRESENT IN CAMP")[1]
+    assert "PTE ONGOING MC" not in tomorrow_absent
 
 
 def test_end_today_on_future_entry_errors_and_leaves_unchanged(app, client, make_person):

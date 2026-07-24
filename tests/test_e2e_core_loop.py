@@ -5,13 +5,24 @@ reversed.
 """
 from datetime import date
 
-from app.domain.types import Appointment, Rank
+from app.domain.types import Appointment, ParadeVariant, Rank
 from app.extensions import db
 from app.models import LeaveRequest, Person
+from app.services import parade_service
 from tests.conftest import login
 
 FRI = date(2026, 7, 10)
 MON = date(2026, 7, 13)
+
+
+def _morning_absent(app, day):
+    # The live morning page is today-only; an arbitrary covered day is asserted
+    # through the same build_doc pipeline the page renders (page↔pipeline
+    # equality is pinned by test_doc_builder).
+    with app.app_context():
+        return parade_service.build_doc(day, ParadeVariant.MORNING).text.split(
+            "NOT PRESENT IN CAMP"
+        )[1]
 
 
 def test_core_loop_end_to_end(app, client, make_person):
@@ -75,14 +86,8 @@ def test_core_loop_end_to_end(app, client, make_person):
     # The document renders names uppercased (parade_line), and the absent
     # person lands under NOT PRESENT IN CAMP, never CURRENT STRENGTH.
     login(client, opr)
-    fri_absent = client.get(f"/parade/morning?date={FRI.isoformat()}").data.split(
-        b"NOT PRESENT IN CAMP"
-    )[1]
-    assert b"PTE E2E OPR" in fri_absent
-    sat_absent = client.get("/parade/morning?date=2026-07-11").data.split(
-        b"NOT PRESENT IN CAMP"
-    )[1]
-    assert b"PTE E2E OPR" in sat_absent
+    assert "PTE E2E OPR" in _morning_absent(app, FRI)
+    assert "PTE E2E OPR" in _morning_absent(app, date(2026, 7, 11))
     balances = client.get("/leave/").data
     assert b"OFF: 1" in balances
     client.post("/logout")
@@ -93,7 +98,4 @@ def test_core_loop_end_to_end(app, client, make_person):
     assert b"reversed" in resp.data
     assert b"OFF: 3" in client.get(f"/ledger/person/{opr_id}").data
     # No longer absent: the person is back present, off the NOT-PRESENT list.
-    fri_after_absent = client.get(f"/parade/morning?date={FRI.isoformat()}").data.split(
-        b"NOT PRESENT IN CAMP"
-    )[1]
-    assert b"PTE E2E OPR" not in fri_after_absent
+    assert "PTE E2E OPR" not in _morning_absent(app, FRI)

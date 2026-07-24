@@ -7,15 +7,19 @@ FP quick-add moves a man to OTHERS IN CAMP -> morning parade shows both
 absences -> the NSF meal counters read the same derivation (decision j) -> and
 the ledger is untouched, because keying parade data never moves a balance.
 """
-from datetime import date, timedelta
+from datetime import timedelta
 
+from app.domain.dates import today_sgt
 from app.domain.types import Appointment, Rank, Service
 from app.extensions import db
 from app.models import LedgerEntry, Person
 from app.services import meal_service
 from tests.conftest import login
 
-D = date(2026, 7, 8)       # Wednesday — the parade day under test
+# The live pages are date-fixed now: morning/roll call = today (D), COS message
+# = tomorrow (NEXT). D is today so the morning/roll-call/meals surfaces line up,
+# and the pieces that must show on the COS page are keyed to cover NEXT too.
+D = today_sgt()
 NEXT = D + timedelta(days=1)
 
 
@@ -43,30 +47,33 @@ def test_phase3_end_to_end(app, client, make_person):
         "day_part": "FULL", "in_camp": "DEFAULT", "remarks": "",
     })
     assert resp.status_code == 302
+    # The COS page is compiled for tomorrow (NEXT), so the regular's direct
+    # absence is keyed to cover D..NEXT — it must show on both today's morning
+    # and tomorrow's COS message.
     resp = client.post("/parade/direct-absences/new", data={
         "person_id": str(_pid(app, "oc_boss")), "type": "LEAVE",
-        "start_date": D.isoformat(), "end_date": D.isoformat(),
+        "start_date": D.isoformat(), "end_date": NEXT.isoformat(),
         "day_part": "FULL", "remarks": "Overseas leave",
     })
     assert resp.status_code == 302
 
-    # --- COS message for D (compiled the evening of D-1) ---------------------
-    page = client.get(f"/parade/cos-message?date={D.isoformat()}")
+    # --- COS message (fixed to tomorrow, NEXT) -------------------------------
+    page = client.get("/parade/cos-message")
     assert page.status_code == 200
-    assert b"CALEB ZHUO" in page.data          # MC category
-    assert b"MARCUS LEONG" in page.data        # regular's keyed absence
+    assert b"CALEB ZHUO" in page.data          # MC category (covers NEXT)
+    assert b"MARCUS LEONG" in page.data        # regular's keyed absence (covers NEXT)
 
-    # --- Roll call for D balances --------------------------------------------
-    page = client.get(f"/parade/roll-call?date={D.isoformat()}")
+    # --- Roll call (fixed to today, D) balances ------------------------------
+    page = client.get("/parade/roll-call")
     assert b"CURRENT STRENGTH" in page.data
     assert b"out of balance" not in page.data
 
     # --- FP quick-add moves the stay-in man to OTHERS IN CAMP ----------------
     resp = client.post("/parade/morning/fp", data={
-        "date": D.isoformat(), "people": [str(_pid(app, "opr_in"))], "reason": "BDO",
+        "people": [str(_pid(app, "opr_in"))], "reason": "BDO",
     })
     assert resp.status_code == 302
-    page = client.get(f"/parade/morning?date={D.isoformat()}")
+    page = client.get("/parade/morning")
     assert b"ETHAN SIOW (BDO)" in page.data
 
     # --- NSF counters read the SAME derivation (decision j) ------------------
@@ -83,9 +90,7 @@ def test_phase3_end_to_end(app, client, make_person):
     assert b'id="nsf-overnight">2<' in page.data
 
     # --- Morning parade agrees ------------------------------------------------
-    absent = client.get(
-        f"/parade/morning?date={D.isoformat()}"
-    ).data.split(b"NOT PRESENT IN CAMP")[1]
+    absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]
     assert b"CALEB ZHUO" in absent    # MC
     assert b"MARCUS LEONG" in absent  # regular's keyed direct absence
 

@@ -184,8 +184,12 @@ def test_phase4_end_to_end(app, client, make_person):
             .filter_by(date=pd, duty=Duty.COS, state=DutyState.CONFIRMED)
             .scalar()
         )
-    html = client.get(f"/parade/cos-message?date={pd.isoformat()}").get_data(as_text=True)
-    assert f'value="{cos_holder_id}" selected' in html
+        # The COS selector prefills _validate_cos_person -> duty_service.cos_of_day
+        # of the page date. The live page is fixed to tomorrow now, so the
+        # arbitrary-page-date prefill is pinned at the service level here; the
+        # page wiring itself is covered by
+        # test_duty_rights.test_cos_selector_prefills_confirmed_cos.
+        assert duty_service.cos_of_day(pd).id == cos_holder_id
 
     # --- 9. Deposed COS: the rights disappear with the assignment ------------
     with app.app_context():

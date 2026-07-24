@@ -7,8 +7,9 @@ direct absence flags exactly like leave), and roll call names the absent
 holder in chrome. The PS resolves via manual replace; approval is never
 blocked and nobody is auto-reassigned.
 """
-from datetime import date
+from datetime import date, timedelta
 
+from app.domain.dates import today_sgt
 from app.domain.types import (
     Appointment, BalanceKind, DayPart, DirectAbsenceType, Duty, DutyState,
     LeaveType, LedgerSource, Rank, RequestStatus, Service, StatusType,
@@ -180,12 +181,15 @@ def test_cancelling_leave_clears_flag(app, make_person):
 
 
 def test_roll_call_chrome_names_absent_holder(app, client, make_person):
+    # The roll-call page is fixed to today, whose night is (today−1)→today, so
+    # the duty is planted on today−1 and the MC on today.
     make_cast(make_person)
-    plant_duty(app, "opr1", WED)  # covers the night WED→THU
-    plant_mc(app, "opr1", THU, THU)
+    today = today_sgt()
+    plant_duty(app, "opr1", today - timedelta(days=1))  # covers the night (today−1)→today
+    plant_mc(app, "opr1", today, today)
     login(client, "opr1")
 
-    html = client.get(f"/parade/roll-call?date={THU.isoformat()}").get_data(as_text=True)
+    html = client.get("/parade/roll-call").get_data(as_text=True)
     normalized = " ".join(html.split())
     assert "3SG Opr1 is absent (MC) tonight — resolve on the duty roster." in normalized
 
