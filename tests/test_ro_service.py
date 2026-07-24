@@ -7,13 +7,11 @@ CONFIRMED rows dated D only.
 from datetime import date, datetime, time, timedelta
 
 from app.domain.types import (
-    Appointment, Calendar, Duty, DutyState, Rank, RoRecurrence, RoSection,
-    Service,
+    Appointment, Calendar, Duty, DutyState, Rank, RoSection, Service,
 )
 from app.extensions import db
 from app.models import (
-    DutyAssignment, Event, Person, RoBoilerplate, RoDocument, RoStandingItem,
-    WeeklyKeyEvents,
+    DutyAssignment, Event, Person, PublicHoliday, RoBoilerplate, RoDocument,
 )
 from app.services import ro_service
 
@@ -68,7 +66,7 @@ def test_can_edit_ro_wide_fallback(app, make_person):
             assert ro_service.can_edit_ro_for(opr, day) is False
 
 
-def test_build_assembles_duties_tp_and_standing(app, make_person):
+def test_build_assembles_duties_tp_and_derived_key_events(app, make_person):
     make_person(username="cdos_guy", rank=Rank.TWO_SG, appointment=Appointment.PS,
                 platoon=2, display_name="Quek Jing Yu")
     make_person(username="cos_guy", rank=Rank.CPL, appointment=Appointment.OPR,
@@ -80,10 +78,6 @@ def test_build_assembles_duties_tp_and_standing(app, make_person):
                state=DutyState.PROPOSED)
 
     with app.app_context():
-        db.session.add(RoStandingItem(
-            time=time(6, 0), text="Roll call & Breakfast",
-            recurrence=RoRecurrence.DAILY, position=10,
-        ))
         db.session.add(RoBoilerplate(section=RoSection.SAFETY, content="- Stay safe."))
         db.session.add(Event(
             calendar=Calendar.TP, title="Site Testing",
@@ -95,35 +89,27 @@ def test_build_assembles_duties_tp_and_standing(app, make_person):
             start_dt=datetime(2026, 6, 19, 10, 0), end_dt=datetime(2026, 6, 19, 12, 0),
             created_by_id=pid(app, "cdos_guy"),
         ))
-        db.session.add(WeeklyKeyEvents(week_start=date(2026, 6, 15), fri="Site Testing"))
+        db.session.add(PublicHoliday(date=date(2026, 6, 17), name="Hari Raya Haji"))
         db.session.commit()
 
         doc = ro_service.build(FRI)
         assert doc.missing_duties == []
         assert "CDO/CDS: 2SG QUEK JING YU" in doc.text
         assert "COS: CPL ANG CHENG ZE" in doc.text
-        assert "0600H\n- Roll call & Breakfast" in doc.text
         assert "0900H\n- Site Testing" in doc.text
         assert "Contingency X" not in doc.text  # ARCTIC never enters the RO
         assert "- Stay safe." in doc.text
+        # Key events derive from TP: the conduct on its day, the holiday's
+        # name on its empty day, Garage Maintenance on the rest.
         assert "Fri - Site Testing" in doc.text
+        assert "Wed - Hari Raya Haji" in doc.text
+        assert "Mon - Garage Maintenance" in doc.text
 
         # The next day has no CONFIRMED duty: placeholder + report, and the
         # PROPOSED draft stayed invisible.
         doc = ro_service.build(FRI + timedelta(days=1))
         assert "COS: [NO CONFIRMED DUTY]" in doc.text
         assert set(doc.missing_duties) == {"CDO/CDS", "COS"}
-
-
-def test_set_week_normalizes_to_monday(app):
-    with app.app_context():
-        row = ro_service.set_week(date(2026, 6, 17), fri="IPPT")  # a Wednesday
-        assert row.week_start == date(2026, 6, 15)
-        # Same week again updates in place — the unique week_start holds.
-        row2 = ro_service.set_week(date(2026, 6, 19), mon="Wolf PT")
-        assert row2.id == row.id
-        assert row2.fri == "IPPT" and row2.mon == "Wolf PT"
-        assert db.session.query(WeeklyKeyEvents).count() == 1
 
 
 def test_extra_item_add_and_remove(app):

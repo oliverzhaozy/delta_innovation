@@ -206,15 +206,6 @@ class RoSection(str, enum.Enum):
         }[self.value]
 
 
-class RoRecurrence(str, enum.Enum):
-    """When a standing timeline item appears (decision (n)): every day, or
-    only the last WORKING day of the week (Friday, or earlier when Friday is
-    a public holiday)."""
-
-    DAILY = "DAILY"
-    LAST_WORKING_DAY = "LAST_WORKING_DAY"
-
-
 class Meal(str, enum.Enum):
     """The three daily meals a manpower food order accounts for (P3b.5)."""
 

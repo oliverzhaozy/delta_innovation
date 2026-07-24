@@ -16,3 +16,8 @@ class PublicHoliday(db.Model):
     def dates_between(cls, start, end) -> frozenset:
         rows = db.session.query(cls.date).filter(cls.date >= start, cls.date <= end).all()
         return frozenset(r.date for r in rows)
+
+    @classmethod
+    def names_between(cls, start, end) -> dict:
+        rows = db.session.query(cls.date, cls.name).filter(cls.date >= start, cls.date <= end).all()
+        return {r.date: r.name for r in rows}

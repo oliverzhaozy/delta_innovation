@@ -56,7 +56,7 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="muted">No extra items — standing items and TP conducts appear automatically.</p>
+  <p class="muted">No extra items — TP conducts appear automatically.</p>
   {% endif %}
   <form method="post" action="{{ url_for('ro.extra_add') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -73,8 +73,6 @@
   <h2>Standing content</h2>
   <ul class="toollist">
     <li><a href="{{ url_for('ro.boilerplate') }}">Boilerplate sections</a></li>
-    <li><a href="{{ url_for('ro.standing') }}">Standing timeline items</a></li>
-    <li><a href="{{ url_for('ro.key_events') }}">Weekly key events</a></li>
   </ul>
 </section>
 {% endif %}

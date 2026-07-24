@@ -1,7 +1,9 @@
 """RO pages (P5.5). The view is thin: ro_service.build assembles the whole
 document; these routes translate forms into service calls and rights checks.
 Daily edits are gated by can_edit_ro_for (decision (p): wide — any command
-team member); the standing surfaces are S3/admin staff work.
+team member); the boilerplate surface is S3/admin staff work. Timeline
+standing items and hand-keyed weekly key events were removed 2026-07-24 —
+key events derive from the TP calendar.
 """
 from datetime import date, time, timedelta
 
@@ -12,9 +14,9 @@ from app.authz import require
 from app.blueprints.ro import bp
 from app.domain import policy
 from app.domain.dates import today_sgt
-from app.domain.types import RoRecurrence, RoSection
+from app.domain.types import RoSection
 from app.extensions import db
-from app.models import RoBoilerplate, RoStandingItem, WeeklyKeyEvents
+from app.models import RoBoilerplate
 from app.services import ro_service
 
 
@@ -118,77 +120,3 @@ def boilerplate():
         return redirect(url_for("ro.boilerplate"))
     rows = {row.section: row for row in db.session.query(RoBoilerplate).all()}
     return render_template("ro/boilerplate.html", sections=list(RoSection), rows=rows)
-
-
-@bp.route("/standing", methods=["GET", "POST"])
-@require(policy.can_manage_ro_standing)
-def standing():
-    if request.method == "POST":
-        text = request.form.get("text", "").strip()
-        try:
-            recurrence = RoRecurrence(request.form.get("recurrence", ""))
-            position = int(request.form.get("position", "0"))
-        except ValueError:
-            abort(400)
-        if not text:
-            flash("Standing item needs text.", "error")
-            return redirect(url_for("ro.standing"))
-        db.session.add(
-            RoStandingItem(
-                time=_parse_time(request.form.get("time", "")),
-                text=text, recurrence=recurrence, position=position,
-            )
-        )
-        db.session.commit()
-        flash("Standing item added.", "success")
-        return redirect(url_for("ro.standing"))
-    items = db.session.query(RoStandingItem).order_by(RoStandingItem.position).all()
-    return render_template("ro/standing.html", items=items, RoRecurrence=RoRecurrence)
-
-
-@bp.route("/standing/remove", methods=["POST"])
-@require(policy.can_manage_ro_standing)
-def standing_remove():
-    try:
-        item_id = int(request.form.get("item_id", ""))
-    except ValueError:
-        abort(400)
-    item = db.session.get(RoStandingItem, item_id)
-    if item is not None:
-        db.session.delete(item)
-        db.session.commit()
-    flash("Standing item removed." if item else "Nothing to remove.", "success")
-    return redirect(url_for("ro.standing"))
-
-
-@bp.route("/key-events", methods=["GET", "POST"])
-@require(policy.can_manage_ro_standing)
-def key_events():
-    if request.method == "POST":
-        try:
-            week_day = date.fromisoformat(request.form.get("week", ""))
-        except ValueError:
-            abort(400)
-        ro_service.set_week(
-            week_day,
-            **{f: request.form.get(f, "") for f in ("mon", "tue", "wed", "thu", "fri")},
-        )
-        flash("Key events saved.", "success")
-        return redirect(url_for("ro.key_events", week=week_day.isoformat()))
-    raw = request.args.get("week", "")
-    try:
-        week_day = date.fromisoformat(raw)
-    except ValueError:
-        # On/after Friday the S3 is keying NEXT week (the plan's default);
-        # earlier in the week they're correcting the current one.
-        today = today_sgt()
-        week_day = today + timedelta(days=7) if today.weekday() >= 4 else today
-    monday = ro_service.week_start(week_day)
-    row = db.session.query(WeeklyKeyEvents).filter_by(week_start=monday).first()
-    return render_template(
-        "ro/key_events.html",
-        monday=monday,
-        prev_week=monday - timedelta(days=7),
-        next_week=monday + timedelta(days=7),
-        row=row,
-    )

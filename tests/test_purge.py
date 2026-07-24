@@ -39,7 +39,6 @@ from app.models import (
     RoDocument,
     RoExtraItem,
     StatusEntry,
-    WeeklyKeyEvents,
 )
 from app.services import ledger_service, purge_service
 
@@ -172,21 +171,15 @@ def test_date_boundaries(app, make_person):
         purged = status(date(2026, 5, 31), date(2026, 5, 31))  # ended day before -> gone
         on_cutoff = status(date(2026, 6, 1), date(2026, 6, 1))  # ends on cutoff -> kept
         spanning = status(date(2026, 5, 30), date(2026, 6, 5))  # spans cutoff -> kept
-
-        wk_purged = WeeklyKeyEvents(week_start=date(2026, 5, 25))  # +6 = 05-31 < cutoff -> gone
-        wk_kept = WeeklyKeyEvents(week_start=date(2026, 5, 26))  # +6 = 06-01 -> kept
-        db.session.add_all([wk_purged, wk_kept])
         db.session.commit()
-        ids = (purged.id, on_cutoff.id, spanning.id, wk_purged.id, wk_kept.id)
+        ids = (purged.id, on_cutoff.id, spanning.id)
 
         purge_service.execute(BEFORE, actor=db.session.get(Person, actor))
 
-        p_id, oc_id, sp_id, wp_id, wk_id = ids
+        p_id, oc_id, sp_id = ids
         assert db.session.get(StatusEntry, p_id) is None
         assert db.session.get(StatusEntry, oc_id) is not None
         assert db.session.get(StatusEntry, sp_id) is not None
-        assert db.session.get(WeeklyKeyEvents, wp_id) is None
-        assert db.session.get(WeeklyKeyEvents, wk_id) is not None
 
 
 # --- cascades: delete-orphan children go with their purged parents -------------
@@ -254,7 +247,6 @@ def _seed_spread(actor, person_id):
                             end_date=date(2026, 1, 2), destination="KL"),
         DutyAssignment(date=date(2026, 1, 1), duty=Duty.COS, person_id=person_id,
                        state=DutyState.CONFIRMED, created_by_id=actor),
-        WeeklyKeyEvents(week_start=date(2026, 1, 5)),
         MealAdjustment(date=date(2026, 1, 1), meal=Meal.LUNCH, delta=1, reason="x", created_by_id=actor),
         PersonAudit(person_id=person_id, field="rank", old="PTE", new="CPL", actor_id=actor, at=OLD),
     ])
@@ -275,7 +267,6 @@ def _all_counts():
         "event": db.session.query(Event).count(),
         "duty_assignment": db.session.query(DutyAssignment).count(),
         "ro_document": db.session.query(RoDocument).count(),
-        "weekly_key_events": db.session.query(WeeklyKeyEvents).count(),
         "manning_period": db.session.query(ManningPeriod).count(),
         "meal_adjustment": db.session.query(MealAdjustment).count(),
         "person_audit": db.session.query(PersonAudit).count(),

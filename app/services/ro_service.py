@@ -3,10 +3,10 @@ render, own the fetch-or-create of the daily keyed slice, and resolve A9's
 edit rights.
 
 Everything derivable is derived at render — duty names (CONFIRMED rows dated
-the RO's date only), TP lines, standing items, the covering week's key events.
-Only the daily keyed slice (messages blob + extra items) and the standing
-data are stored; there is no RO snapshot by design (the pasted WhatsApp
-message is the archival record).
+the RO's date only), TP lines, and the covering week's key events (from the
+TP calendar, 2026-07-24 revision). Only the daily keyed slice (messages blob
++ extra items) and the Matters boilerplate are stored; there is no RO
+snapshot by design (the pasted WhatsApp message is the archival record).
 """
 from datetime import datetime, time, timedelta
 
@@ -22,8 +22,6 @@ from app.models import (
     RoBoilerplate,
     RoDocument,
     RoExtraItem,
-    RoStandingItem,
-    WeeklyKeyEvents,
 )
 from app.services import duty_service
 
@@ -86,17 +84,17 @@ def build(day) -> ro.RoDoc:
     `.missing_duties` as chrome, never re-deriving either."""
     doc = fetch_or_create(day)
     monday = week_start(day)
-    holidays = PublicHoliday.dates_between(monday, monday + timedelta(days=4))
-    standing = (
-        db.session.query(RoStandingItem).order_by(RoStandingItem.position).all()
-    )
-    day_start = datetime.combine(day, time.min)
+    holiday_names = PublicHoliday.names_between(monday, monday + timedelta(days=4))
+    # One fetch covers both consumers: the timeline keeps only events STARTING
+    # on `day`, the key-events block any event overlapping a Mon–Fri weekday.
+    # The Mon–Sun span contains `day` by construction (monday = week_start(day)).
+    monday_dt = datetime.combine(monday, time.min)
     tp_events = (
         db.session.query(Event)
         .filter(
             Event.calendar == Calendar.TP,
-            Event.start_dt >= day_start,
-            Event.start_dt < day_start + timedelta(days=1),
+            Event.start_dt < monday_dt + timedelta(days=7),
+            Event.end_dt >= monday_dt,
         )
         .order_by(Event.start_dt)
         .all()
@@ -104,15 +102,10 @@ def build(day) -> ro.RoDoc:
     boilerplate = {
         row.section: row.content for row in db.session.query(RoBoilerplate).all()
     }
-    week = db.session.query(WeeklyKeyEvents).filter_by(week_start=monday).first()
-    key_events = (week.mon, week.tue, week.wed, week.thu, week.fri) if week else None
-    items = ro.timeline_items(
-        day,
-        standing_items=standing,
-        tp_events=tp_events,
-        extra_items=doc.extra_items,
-        holidays=holidays,
+    key_events = ro.weekly_key_events(
+        monday, tp_events=tp_events, holiday_names=holiday_names
     )
+    items = ro.timeline_items(day, tp_events=tp_events, extra_items=doc.extra_items)
     return ro.render(
         day,
         cos=_duty_name(duty_service.cos_of_day(day)),
@@ -152,20 +145,5 @@ def set_boilerplate(section, content) -> RoBoilerplate:
         db.session.add(row)
     else:
         row.content = content
-    db.session.commit()
-    return row
-
-
-def set_week(day, **days) -> WeeklyKeyEvents:
-    """Upsert the key events for `day`'s week; the row key is always the
-    Monday (normalized here, the one owner of that rule). `days` accepts any
-    of mon/tue/wed/thu/fri; unnamed days keep their current text."""
-    monday = week_start(day)
-    row = db.session.query(WeeklyKeyEvents).filter_by(week_start=monday).first()
-    if row is None:
-        row = WeeklyKeyEvents(week_start=monday)
-        db.session.add(row)
-    for field, value in days.items():
-        setattr(row, field, value)
     db.session.commit()
     return row

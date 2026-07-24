@@ -114,13 +114,14 @@ parade states, this is judged on exact output — but the RO has more keyed
 content, so the pre-run setup matters most.
 
 - **Before the parallel run (S3, one-time):** key the six Matters sections
-  into RO boilerplate exactly as the current RO carries them; key the
-  standing timeline items (the usual set: 0600 Roll call & Breakfast daily,
-  TBC LP daily, TBC SBA on the last working day of the week); key this
-  week's key events. TP conducts already in the calendar auto-insert — key
-  any that are missing.
-- **Weekly habit:** the S3 keys next week's key events on Friday (the page
-  defaults to the upcoming week from Friday on).
+  into RO boilerplate exactly as the current RO carries them. TP conducts
+  already in the calendar auto-insert into the timeline — key any that are
+  missing.
+- **Weekly habit (2026-07-24 revision):** none for key events — the Mon–Fri
+  block derives from the TP calendar (a weekday with no conduct shows the
+  public holiday's name or "Garage Maintenance"). Keeping the TP calendar
+  current IS the keying. Recurring daily lines (0600 Roll call, TBC LP/SBA)
+  are keyed per-day as timeline items by the CDO/CDS.
 - **Parallel-run evenings (1–2 weeks):** each evening the CDO/CDS opens
   `/ro` (it defaults to tomorrow), pastes the day's messages/QOTD blob, keys
   the day's timeline items, and compares the app's text against the real RO

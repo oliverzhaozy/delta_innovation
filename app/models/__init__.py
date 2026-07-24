@@ -9,13 +9,7 @@ from app.models.meal import MealAdjustment
 from app.models.overseas import OverseasDeclaration
 from app.models.person import Person
 from app.models.person_audit import PersonAudit
-from app.models.ro import (
-    RoBoilerplate,
-    RoDocument,
-    RoExtraItem,
-    RoStandingItem,
-    WeeklyKeyEvents,
-)
+from app.models.ro import RoBoilerplate, RoDocument, RoExtraItem
 from app.models.status import StatusEntry
 
 __all__ = [
@@ -35,7 +29,5 @@ __all__ = [
     "RoBoilerplate",
     "RoDocument",
     "RoExtraItem",
-    "RoStandingItem",
     "StatusEntry",
-    "WeeklyKeyEvents",
 ]

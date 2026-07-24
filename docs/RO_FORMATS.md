@@ -164,3 +164,20 @@ Fri - IPPT, Ranging Ops Order, Site Testing
   the key-events block. Duty Personnel is derived (CONFIRMED rows dated the
   RO's date — A9; a missing duty renders an explicit placeholder, never a
   silent blank).
+
+## Revision 2026-07-24 — standing items removed, key events derived (A11)
+
+Owner decision, superseding parts of (n) and (o); spec in
+`docs/superpowers/specs/2026-07-24-ro-derived-key-events-design.md`.
+
+- **Standing timeline items are gone.** The timeline is TP events starting
+  on the day + hand-keyed extras only; the former standing lines (0600H
+  Roll call & Breakfast, TBC LP, TBC SBA) are keyed as extras when wanted.
+  (n′)'s block rules are unchanged.
+- **Key events are derived from the TP calendar, never hand-keyed.** Each
+  weekday's line lists the titles of TP events overlapping it (start date ≤
+  day ≤ end date): events starting ON the day first, time-ascending, then
+  continuing multi-day events by start — the sample lists the week-long
+  backdrop last on every line. A weekday with no overlapping TP event shows
+  the public holiday's name if it is one, else **"Garage Maintenance"**. A
+  holiday that has TP events shows just the events.

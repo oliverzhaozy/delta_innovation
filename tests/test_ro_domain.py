@@ -8,14 +8,10 @@ from datetime import date, datetime, time
 from types import SimpleNamespace
 
 from app.domain import ro
-from app.domain.types import RoRecurrence, RoSection
+from app.domain.types import RoSection
 
+MON = date(2026, 6, 15)
 FRI = date(2026, 6, 19)  # the sample's date
-
-
-def standing(hhmm, text, recurrence, position):
-    t = time(int(hhmm[:2]), int(hhmm[2:])) if hhmm else None
-    return SimpleNamespace(time=t, text=text, recurrence=recurrence, position=position)
 
 
 def extra(hhmm, text):
@@ -27,18 +23,17 @@ def event(start_dt, end_dt, title):
     return SimpleNamespace(start_dt=start_dt, end_dt=end_dt, title=title)
 
 
-STANDING = [
-    standing("0600", "Roll call & Breakfast", RoRecurrence.DAILY, 10),
-    standing(None, "SBA", RoRecurrence.LAST_WORKING_DAY, 10),
-    standing(None, "LP", RoRecurrence.DAILY, 20),
-]
-
+# The sample's whole timeline is keyed (2026-07-24 revision: no standing
+# items) — the former 0600 roll call and TBC SBA/LP lines are extras now.
 SAMPLE_EXTRAS = [
+    extra("0600", "Roll call & Breakfast"),
     extra("0620", "IPPT Stores Prep (Stores Party)"),
     extra("0645", "Registration of IPPT Participants at 10 C4I Bn Parade Square"),
     extra("1000", "FP"),
     extra("1100", "Ranging Ops Order Brief"),
     extra("1800", "Report to site"),
+    extra(None, "SBA"),
+    extra(None, "LP"),
 ]
 
 BOILERPLATE = {
@@ -171,9 +166,7 @@ def render_sample_day(**overrides):
     kwargs = dict(
         cos="CPL ANG CHENG ZE",
         cdos="LTA QUEK JING YU",
-        items=ro.timeline_items(
-            FRI, standing_items=STANDING, tp_events=(), extra_items=SAMPLE_EXTRAS,
-        ),
+        items=ro.timeline_items(FRI, tp_events=(), extra_items=SAMPLE_EXTRAS),
         boilerplate=BOILERPLATE,
         messages=MESSAGES,
         key_events=KEY_EVENTS,
@@ -190,38 +183,7 @@ def test_golden_byte_exact():
     assert doc.text == GOLDEN
 
 
-# --- last_working_day_of_week ---------------------------------------------------
-
-def test_last_working_day_is_friday_normally():
-    assert ro.last_working_day_of_week(date(2026, 6, 15)) == FRI  # Monday -> Fri
-    assert ro.last_working_day_of_week(FRI) == FRI                # Friday itself
-    assert ro.last_working_day_of_week(date(2026, 6, 21)) == FRI  # Sunday -> that week's Fri
-
-
-def test_last_working_day_steps_back_over_holidays():
-    holidays = frozenset({FRI})
-    assert ro.last_working_day_of_week(FRI, holidays) == date(2026, 6, 18)
-    holidays = frozenset({FRI, date(2026, 6, 18)})
-    assert ro.last_working_day_of_week(FRI, holidays) == date(2026, 6, 17)
-
-
 # --- timeline assembly ----------------------------------------------------------
-
-def test_standing_recurrence_daily_vs_last_working_day():
-    wed = date(2026, 6, 17)
-    items = ro.timeline_items(wed, standing_items=STANDING)
-    # Mid-week: no SBA, LP still present, roll call timed.
-    assert (None, "SBA") not in items
-    assert (None, "LP") in items
-
-    # Friday a public holiday -> Thursday is the last working day: SBA moves.
-    holidays = frozenset({FRI})
-    thu = date(2026, 6, 18)
-    items = ro.timeline_items(thu, standing_items=STANDING, holidays=holidays)
-    assert (None, "SBA") in items
-    items = ro.timeline_items(FRI, standing_items=STANDING, holidays=holidays)
-    assert (None, "SBA") not in items
-
 
 def test_tp_event_starting_today_inserts_continuing_does_not():
     day = date(2026, 6, 17)
@@ -233,13 +195,49 @@ def test_tp_event_starting_today_inserts_continuing_does_not():
 
 
 def test_timed_ascending_then_tbc_last():
-    items = ro.timeline_items(
-        FRI, standing_items=STANDING, extra_items=[extra(None, "Zulu"), extra("0500", "Early")],
-    )
+    items = ro.timeline_items(FRI, extra_items=SAMPLE_EXTRAS + [extra("0500", "Early")])
     assert items[0] == (time(5, 0), "Early")
     assert items[1] == (time(6, 0), "Roll call & Breakfast")
-    # TBC block: standing by position (SBA then LP), then keyed extras.
-    assert items[-3:] == [(None, "SBA"), (None, "LP"), (None, "Zulu")]
+    # TBC block last, extras in keyed order.
+    assert items[-2:] == [(None, "SBA"), (None, "LP")]
+
+
+# --- weekly key events (derived from TP, 2026-07-24) ----------------------------
+
+def test_key_events_overlap_day_starts_first_then_continuing():
+    events = [
+        event(datetime(2026, 6, 15, 8, 0), datetime(2026, 6, 15, 9, 0), "Wolf PT"),
+        event(datetime(2026, 6, 15, 10, 0), datetime(2026, 6, 15, 12, 0), "PMCS/EAS/MPT"),
+        event(datetime(2026, 6, 15, 13, 0), datetime(2026, 6, 19, 17, 0), "Site Testing"),
+        event(datetime(2026, 6, 17, 8, 0), datetime(2026, 6, 17, 9, 0), "Coy PT"),
+        event(datetime(2026, 6, 17, 10, 0), datetime(2026, 6, 17, 11, 0), "CS"),
+        event(datetime(2026, 6, 19, 6, 45), datetime(2026, 6, 19, 12, 0), "IPPT"),
+    ]
+    # A multi-day event appears every day it spans, listed after the day's
+    # own starts (the owner's sample puts the week-long backdrop last).
+    assert ro.weekly_key_events(MON, tp_events=events) == (
+        "Wolf PT, PMCS/EAS/MPT, Site Testing",
+        "Site Testing",
+        "Coy PT, CS, Site Testing",
+        "Site Testing",
+        "IPPT, Site Testing",
+    )
+
+
+def test_key_events_default_and_holiday_name():
+    assert ro.weekly_key_events(MON) == ("Garage Maintenance",) * 5
+    names = {date(2026, 6, 17): "Hari Raya Haji"}
+    week = ro.weekly_key_events(MON, holiday_names=names)
+    assert week[2] == "Hari Raya Haji"
+    assert week[0] == "Garage Maintenance"
+
+
+def test_key_events_holiday_with_events_shows_events_only():
+    ev = event(datetime(2026, 6, 17, 8, 0), datetime(2026, 6, 17, 9, 0), "Range")
+    week = ro.weekly_key_events(
+        MON, tp_events=[ev], holiday_names={date(2026, 6, 17): "Hari Raya Haji"}
+    )
+    assert week[2] == "Range"
 
 
 # --- explicit emptiness ---------------------------------------------------------
@@ -259,12 +257,6 @@ def test_empty_messages_and_timeline_render_dash():
     # (never a silent hole) — same posture as the empty Matters sections.
     assert lines[lines.index("Messages and QOTD") + 1] == "-"
     assert lines[lines.index("") + 1] == "-"  # first blank is after the header block
-
-
-def test_key_events_none_renders_bare_day_labels():
-    doc = render_sample_day(key_events=None)
-    tail = doc.text.splitlines()[-5:]
-    assert tail == ["Mon -", "Tues -", "Wed -", "Thurs -", "Fri -"]
 
 
 def test_no_trailing_whitespace_anywhere():

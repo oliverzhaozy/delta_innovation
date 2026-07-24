@@ -16,7 +16,7 @@ private query builders, so the dry-run counts and the executed deletes can
 never drift apart.
 """
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 
 import click
 from sqlalchemy import func
@@ -35,7 +35,6 @@ from app.models import (
     PersonAudit,
     RoDocument,
     StatusEntry,
-    WeeklyKeyEvents,
 )
 from app.services import ledger_service
 
@@ -103,14 +102,6 @@ def _ro_documents(before):
     return db.session.query(RoDocument).filter(RoDocument.date < before)
 
 
-def _weekly(before):
-    # A Mon–Sun week fully ends when week_start + 6 days < before, i.e.
-    # week_start <= before − 7 days.
-    return db.session.query(WeeklyKeyEvents).filter(
-        WeeklyKeyEvents.week_start <= before - timedelta(days=7)
-    )
-
-
 def _manning(before):
     return db.session.query(ManningPeriod).filter(ManningPeriod.end_date < before)
 
@@ -149,7 +140,6 @@ def _compute(before):
         ("event", _events(before).count()),
         ("duty_assignment", _duty_assignments(before).count()),
         ("ro_document", _ro_documents(before).count()),
-        ("weekly_key_events", _weekly(before).count()),
         ("manning_period", _manning(before).count()),
         ("meal_adjustment", _meals(before).count()),
         ("person_audit", _person_audit(before).count()),
@@ -210,7 +200,6 @@ def execute(before, *, actor):
     _direct(before).delete(synchronize_session=False)
     _overseas(before).delete(synchronize_session=False)
     _duty_assignments(before).delete(synchronize_session=False)
-    _weekly(before).delete(synchronize_session=False)
     _meals(before).delete(synchronize_session=False)
     _person_audit(before).delete(synchronize_session=False)
 

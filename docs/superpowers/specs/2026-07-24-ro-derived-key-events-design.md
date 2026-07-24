@@ -23,8 +23,11 @@ RO_FORMATS.md decisions (n) and (o).
 For each weekday D (Mon–Fri) of the RO date's week:
 
 - Titles of TP-calendar events **overlapping** D (`start_dt.date() <= D <=
-  end_dt.date()`), comma-joined (`", "`) in `(start_dt, id)` order — a
-  multi-day exercise appears on every day it spans.
+  end_dt.date()`), comma-joined (`", "`) — a multi-day exercise appears on
+  every day it spans. Order within a line: events starting ON the day
+  first, time-ascending, then continuing multi-day events by their start —
+  the owner's sample lists the week-long backdrop ("Site Testing") last on
+  every line.
 - If no TP event overlaps D and D is a public holiday: the holiday's
   **name** (e.g. `Wed - National Day`).
 - Otherwise: `Garage Maintenance`.

@@ -1,12 +1,13 @@
-"""P5.5 — /ro pages: view-for-all + command-team daily edits, S3-only standing
-surfaces (boilerplate, standing timeline items, weekly key events).
+"""P5.5 — /ro pages: view-for-all + command-team daily edits, S3-only
+boilerplate surface. Standing timeline items and the weekly key-events page
+were removed 2026-07-24 (key events derive from the TP calendar).
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app.domain.dates import today_sgt
-from app.domain.types import Appointment, Rank, RoSection, Service
+from app.domain.types import Appointment, Calendar, Rank, RoSection, Service
 from app.extensions import db
-from app.models import Person, RoDocument, RoExtraItem
+from app.models import Event, Person, RoDocument, RoExtraItem
 from tests.conftest import login
 
 FRI = date(2026, 6, 19)
@@ -39,8 +40,7 @@ def test_opr_views_without_forms_and_mutations_403(app, client, make_person):
 
     for path in ("/ro/messages", "/ro/extra/add", "/ro/extra/remove"):
         assert client.post(path, data={"date": FRI.isoformat()}).status_code == 403, path
-    for path in ("/ro/boilerplate", "/ro/key-events", "/ro/standing"):
-        assert client.get(path).status_code == 403, path
+    assert client.get("/ro/boilerplate").status_code == 403
 
 
 def test_command_team_edits_messages_and_extra_items(app, client, make_person):
@@ -92,42 +92,29 @@ def test_boilerplate_page_is_s3_only_and_feeds_the_document(app, client, make_pe
     assert "Safety Matters\n- Stay safe." in html
 
 
-def test_standing_items_page_add_remove(app, client, make_person):
+def test_removed_standing_surfaces_are_gone(app, client, make_person):
+    # 2026-07-24 revision: the standing-items and key-events pages no longer
+    # exist for anyone — not even the S3 — and the view page drops their links.
     make_cast(make_person)
     login(client, "s3")
-
-    resp = client.post(
-        "/ro/standing",
-        data={"time": "06:00", "text": "Roll call & Breakfast",
-              "recurrence": "DAILY", "position": "10"},
-        follow_redirects=True,
-    )
-    assert "Roll call &amp; Breakfast" in resp.get_data(as_text=True)
+    for path in ("/ro/standing", "/ro/standing/remove", "/ro/key-events"):
+        assert client.get(path).status_code == 404, path
     html = client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True)
-    assert "0600H\n- Roll call &amp; Breakfast" in html or "0600H\n- Roll call & Breakfast" in html
+    assert "Standing timeline items" not in html
+    assert "Weekly key events" not in html
 
+
+def test_key_events_derive_from_tp_on_the_page(app, client, make_person):
+    make_cast(make_person)
+    login(client, "opr1")
     with app.app_context():
-        from app.models import RoStandingItem
-        item_id = db.session.query(RoStandingItem.id).scalar()
-    client.post("/ro/standing/remove", data={"item_id": str(item_id)},
-                follow_redirects=True)
+        s3_id = db.session.query(Person.id).filter_by(username="s3").scalar()
+        db.session.add(Event(
+            calendar=Calendar.TP, title="IPPT",
+            start_dt=datetime(2026, 6, 19, 6, 45), end_dt=datetime(2026, 6, 19, 12, 0),
+            created_by_id=s3_id,
+        ))
+        db.session.commit()
     html = client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True)
-    # The 0600H block is gone from the document (nav chrome still says
-    # "Roll call" for the parade page, so probe the timeline slot instead).
-    assert "0600H" not in html
-
-
-def test_key_events_page_feeds_the_week(app, client, make_person):
-    make_cast(make_person)
-    login(client, "s3")
-
-    resp = client.post(
-        "/ro/key-events",
-        data={"week": FRI.isoformat(), "mon": "Wolf PT", "tue": "", "wed": "",
-              "thu": "", "fri": "IPPT"},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    html = client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True)
-    assert "Mon - Wolf PT" in html
     assert "Fri - IPPT" in html
+    assert "Mon - Garage Maintenance" in html
