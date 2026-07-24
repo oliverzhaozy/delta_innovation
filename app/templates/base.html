@@ -94,18 +94,16 @@
     {% endif %}
     {% if config["DEV_LOGIN_SWITCHER"] %}
       {# Outside the is_authenticated block on purpose: one-click login from
-         the login page too. dev_switch_people comes from the dev blueprint's
+         the login page too. dev_switch_entries comes from the dev blueprint's
          context processor, registered only when the flag is on. #}
       <nav class="topnav">
         <details class="navgroup">
           <summary>Dev: switch user</summary>
           <div class="navmenu navmenu-scroll">
-            {% for person in dev_switch_people %}
-              <form action="{{ url_for('dev.switch', person_id=person.id) }}" method="post" class="inline-form">
+            {% for entry in dev_switch_entries %}
+              <form action="{{ url_for('dev.switch', person_id=entry.id) }}" method="post" class="inline-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="linklike">
-                  {{ person.rank.value }} {{ person.display_name }} ({{ person.appointment.label }}){% if current_user.is_authenticated and person.id == current_user.id %} &bull;{% endif %}
-                </button>
+                <button type="submit" class="linklike">{{ entry.label }}{% if entry.is_current %} &bull;{% endif %}</button>
               </form>
             {% endfor %}
           </div>

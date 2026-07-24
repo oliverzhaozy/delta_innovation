@@ -2,6 +2,7 @@
 import pytest
 
 from app import create_app
+from app.domain.types import Appointment
 from app.extensions import db
 from app.models import Person
 from config import ProdConfig, TestConfig
@@ -94,10 +95,21 @@ def test_switch_to_inactive_or_unknown_is_404(app, client, make_person):
     assert client.post("/dev/switch/99999").status_code == 404
 
 
-def test_dropdown_renders_on_login_page(client, make_person):
+def test_dropdown_lists_profiles_not_names(client, make_person):
     make_person(username="alpha", display_name="Alpha One")
-    make_person(username="gone", display_name="Gone Guy", is_active=False)
-    resp = client.get("/login")
-    assert b"Dev: switch user" in resp.data
-    assert b"Alpha One" in resp.data
-    assert b"Gone Guy" not in resp.data
+    make_person(username="bravo", display_name="Bravo Two", platoon=2)  # same profile
+    make_person(username="charlie", display_name="Charlie Three", company_role="S3")
+    make_person(username="delta", display_name="Delta Four", is_admin=True)
+    make_person(
+        username="gone", display_name="Gone Guy", appointment=Appointment.PC, is_active=False
+    )
+    html = client.get("/login").data.decode()
+    assert "Dev: switch user" in html
+    # Profiles, not people: no names, duplicates collapsed, variants kept apart.
+    for name in ("Alpha One", "Bravo Two", "Charlie Three", "Delta Four", "Gone Guy"):
+        assert name not in html
+    assert html.count(">Opr</button>") == 1
+    assert ">Opr (S3)</button>" in html
+    assert ">Opr (admin)</button>" in html
+    # The only PC is inactive, so that profile has no valid representative.
+    assert ">PC</button>" not in html
