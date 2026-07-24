@@ -92,6 +92,26 @@
         </details>
       </nav>
     {% endif %}
+    {% if config["DEV_LOGIN_SWITCHER"] %}
+      {# Outside the is_authenticated block on purpose: one-click login from
+         the login page too. dev_switch_people comes from the dev blueprint's
+         context processor, registered only when the flag is on. #}
+      <nav class="topnav">
+        <details class="navgroup">
+          <summary>Dev: switch user</summary>
+          <div class="navmenu navmenu-scroll">
+            {% for person in dev_switch_people %}
+              <form action="{{ url_for('dev.switch', person_id=person.id) }}" method="post" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="linklike">
+                  {{ person.rank.value }} {{ person.display_name }} ({{ person.appointment.label }}){% if current_user.is_authenticated and person.id == current_user.id %} &bull;{% endif %}
+                </button>
+              </form>
+            {% endfor %}
+          </div>
+        </details>
+      </nav>
+    {% endif %}
   </header>
   <main class="content {% block main_class %}{% endblock %}">
     {% for category, message in get_flashed_messages(with_categories=true) %}

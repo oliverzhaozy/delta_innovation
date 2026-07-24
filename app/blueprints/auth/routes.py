@@ -1,6 +1,6 @@
 from urllib.parse import urlsplit
 
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.blueprints.auth import bp
@@ -71,10 +71,15 @@ def logout():
 @bp.before_app_request
 def _force_password_change():
     # Seeded accounts start on a shared default password; nothing else in the
-    # app is usable until the person sets their own.
+    # app is usable until the person sets their own. Dev-switcher sessions are
+    # exempt (both conditions needed: the marker is only ever set by the dev
+    # blueprint, and the flag is structurally off outside DevConfig).
     if (
         current_user.is_authenticated
         and current_user.must_change_pw
+        and not (
+            current_app.config["DEV_LOGIN_SWITCHER"] and session.get("dev_login_switch")
+        )
         and request.endpoint
         and request.endpoint not in {"auth.change_password", "auth.logout", "static"}
     ):

@@ -16,6 +16,9 @@ class Config:
     REMEMBER_COOKIE_SAMESITE = "Lax"
     # Why 30 days: most access is from phones; frequent re-login kills adoption.
     REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    # Dev-only quick user switcher (password bypass) — off everywhere except
+    # DevConfig; ProdConfig.validate refuses to boot with it on.
+    DEV_LOGIN_SWITCHER = False
 
     @classmethod
     def validate(cls, app):
@@ -24,6 +27,7 @@ class Config:
 
 class DevConfig(Config):
     DEBUG = True
+    DEV_LOGIN_SWITCHER = True
 
 
 class TestConfig(Config):
@@ -46,6 +50,9 @@ class ProdConfig(Config):
             raise RuntimeError("SECRET_KEY must be set to a real secret in production")
         if app.debug:
             raise RuntimeError("Debug mode must be off in production")
+        # The switcher logs in as anyone without a password.
+        if app.config["DEV_LOGIN_SWITCHER"]:
+            raise RuntimeError("DEV_LOGIN_SWITCHER must be off in production")
 
 
 CONFIGS = {"dev": DevConfig, "test": TestConfig, "prod": ProdConfig}

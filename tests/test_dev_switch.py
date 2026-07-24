@@ -1,0 +1,103 @@
+"""Dev-only user switcher: works with the flag on, doesn't exist with it off."""
+import pytest
+
+from app import create_app
+from app.extensions import db
+from app.models import Person
+from config import ProdConfig, TestConfig
+from tests.conftest import login
+
+
+class SwitcherTestConfig(TestConfig):
+    DEV_LOGIN_SWITCHER = True
+
+
+@pytest.fixture()
+def app():
+    # Overrides conftest's app fixture for this module only, so conftest's
+    # client/make_person fixtures bind to the flag-on app.
+    app = create_app(SwitcherTestConfig)
+    with app.app_context():
+        db.create_all()
+    yield app
+    with app.app_context():
+        db.session.remove()
+        db.drop_all()
+
+
+def _pid(app, username):
+    with app.app_context():
+        return db.session.query(Person.id).filter_by(username=username).scalar()
+
+
+def test_flag_off_route_and_dropdown_absent():
+    plain = create_app(TestConfig)
+    client = plain.test_client()
+    assert client.post("/dev/switch/1").status_code == 404
+    assert b"Dev: switch user" not in client.get("/login").data
+
+
+def test_prod_refuses_to_boot_with_flag_on():
+    class BadProdConfig(ProdConfig):
+        SECRET_KEY = "a-real-enough-secret"
+        DEV_LOGIN_SWITCHER = True
+
+    with pytest.raises(RuntimeError, match="DEV_LOGIN_SWITCHER"):
+        create_app(BadProdConfig)
+
+
+def test_switch_logs_in_without_password(app, client, make_person):
+    username = make_person(username="alpha")
+    resp = client.post(f"/dev/switch/{_pid(app, username)}")
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess["_user_id"] == str(_pid(app, username))
+    assert client.get("/", follow_redirects=False).status_code == 200
+
+
+def test_switch_swaps_profiles(app, client, make_person):
+    alpha = make_person(username="alpha")
+    bravo = make_person(username="bravo", platoon=2)
+    login(client, alpha)
+    client.post(f"/dev/switch/{_pid(app, bravo)}")
+    with client.session_transaction() as sess:
+        assert sess["_user_id"] == str(_pid(app, bravo))
+
+
+def test_switch_rotates_session(app, client, make_person):
+    username = make_person(username="alpha")
+    with client.session_transaction() as sess:
+        sess["marker"] = "pre-switch"
+    client.post(f"/dev/switch/{_pid(app, username)}")
+    with client.session_transaction() as sess:
+        assert "marker" not in sess
+
+
+def test_switch_into_must_change_pw_account_not_bounced(app, client, make_person):
+    username = make_person(username="fresh", must_change_pw=True)
+    client.post(f"/dev/switch/{_pid(app, username)}")
+    assert client.get("/", follow_redirects=False).status_code == 200
+
+
+def test_real_login_with_must_change_pw_still_bounced(client, make_person):
+    # The hook exemption keys on the switch marker, not on the flag alone.
+    username = make_person(username="fresh", must_change_pw=True)
+    login(client, username)
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/password" in resp.headers["Location"]
+
+
+def test_switch_to_inactive_or_unknown_is_404(app, client, make_person):
+    username = make_person(username="gone", is_active=False)
+    assert client.post(f"/dev/switch/{_pid(app, username)}").status_code == 404
+    assert client.post("/dev/switch/99999").status_code == 404
+
+
+def test_dropdown_renders_on_login_page(client, make_person):
+    make_person(username="alpha", display_name="Alpha One")
+    make_person(username="gone", display_name="Gone Guy", is_active=False)
+    resp = client.get("/login")
+    assert b"Dev: switch user" in resp.data
+    assert b"Alpha One" in resp.data
+    assert b"Gone Guy" not in resp.data

@@ -48,6 +48,13 @@ def create_app(config_class=None):
     app.register_blueprint(parade_bp)
     app.register_blueprint(ro_bp)
 
+    if app.config["DEV_LOGIN_SWITCHER"]:
+        # Password-bypass user switcher for local testing: registered only when
+        # the flag is on, so its endpoints don't exist at all in prod/test.
+        from app.blueprints.dev import bp as dev_bp
+
+        app.register_blueprint(dev_bp)
+
     from app.domain import policy, routing
     from app.domain.types import BalanceKind
 
