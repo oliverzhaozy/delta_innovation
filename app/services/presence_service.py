@@ -1,9 +1,9 @@
 """Who is away / who is present — the single derivation that the month view,
 leave panel, and (from P3a.6) every parade document read.
 
-There is exactly ONE fetch of the three presence sources (APPROVED leave +
-regulars' direct absences + COS-keyed statuses). `absences_between` normalises
-it to away-only `AbsenceRow`s (in-camp statuses dropped — in camp is not away);
+There is exactly ONE fetch of the presence sources (APPROVED leave + COS-keyed
+statuses). `absences_between` normalises it to away-only `AbsenceRow`s (in-camp
+statuses dropped — in camp is not away);
 `presence_inputs` resolves every active person through the pure precedence
 engine (in-camp statuses kept, as annotations). Two views of one fetch, never
 two fetches with different filters — a second derivation is exactly the drift
@@ -18,21 +18,20 @@ from app.domain import parade, presence
 from app.domain.dates import iter_days
 from app.domain.types import DayPart, DutyState, RequestStatus, Service
 from app.extensions import db
-from app.models import DirectAbsence, DutyAssignment, LeaveRequest, Person, StatusEntry
+from app.models import DutyAssignment, LeaveRequest, Person, StatusEntry
 
 
 @dataclass(frozen=True)
 class AbsenceRow:
-    """One person's away-shaped row for a day, normalised across the three
-    sources so the away surfaces read one type instead of three.
+    """One person's away-shaped row for a day, normalised across the sources so
+    the away surfaces read one type instead of several.
 
-    `label` is the human tag (leave → LeaveType.value "OFF"; direct →
-    DirectAbsenceType.label "Leave"; status → StatusType.label "MC"/"On
-    course"). `in_camp` is False for leave/direct and the status row's own flag
-    for statuses. `id` and `person_id` are convenience keys: the away surfaces
-    dedupe on `person_id`, and `id` identifies the source row (the delegation
-    check compares on it). `person` is the live Person model, so display fields
-    ride along.
+    `label` is the human tag (leave → LeaveType.value "OFF"; status →
+    StatusType.label "MC"). `in_camp` is False for leave and the status row's own
+    flag for statuses. `id` and `person_id` are convenience keys: the away
+    surfaces dedupe on `person_id`, and `id` identifies the source row (the
+    delegation check compares on it). `person` is the live Person model, so
+    display fields ride along.
     """
 
     id: int
@@ -40,7 +39,7 @@ class AbsenceRow:
     person_id: int
     label: str
     day_part: DayPart
-    source: str  # "leave" | "direct" | "status"
+    source: str  # "leave" | "status"
     in_camp: bool
     remarks: object = None
 
@@ -48,13 +47,13 @@ class AbsenceRow:
 def fetch_absence_rows(start_date, end_date):
     """The ONE query layer, now the shared public fetch that `absences_between`,
     `presence_inputs`, and duty availability (P4.4) all read: APPROVED leave +
-    direct absences + statuses that overlap [start_date, end_date] for ACTIVE
-    people, each ordered platoon NULLS FIRST → display_name. Returns the
-    ORIGINAL model rows as three lists.
+    statuses that overlap [start_date, end_date] for ACTIVE people, each ordered
+    platoon NULLS FIRST → display_name. Returns the ORIGINAL model rows as two
+    lists.
 
-    Extracting the leave/direct/status filter here (written once) is the whole
-    point of the task: `absences_between` and `presence_inputs` are two views of
-    THIS fetch, so they can never drift on which rows count.
+    Extracting the leave/status filter here (written once) is the whole point of
+    the task: `absences_between` and `presence_inputs` are two views of THIS
+    fetch, so they can never drift on which rows count.
     """
 
     def _overlapping(model, *extra):
@@ -72,9 +71,8 @@ def fetch_absence_rows(start_date, end_date):
         )
 
     leaves = _overlapping(LeaveRequest, LeaveRequest.status == RequestStatus.APPROVED)
-    directs = _overlapping(DirectAbsence)
     statuses = _overlapping(StatusEntry)
-    return leaves, directs, statuses
+    return leaves, statuses
 
 
 def _absence_row(row, source):
@@ -83,8 +81,6 @@ def _absence_row(row, source):
     here (that lives in app.domain.presence)."""
     if source == "leave":
         label, in_camp = row.type.value, False
-    elif source == "direct":
-        label, in_camp = row.type.label, False
     else:  # status
         label, in_camp = row.type.label, row.in_camp
     return AbsenceRow(
@@ -100,19 +96,19 @@ def _absence_row(row, source):
 
 
 def absences_between(start_date, end_date):
-    """Away rows (leave + direct absence + out-of-camp status) overlapping
-    [start_date, end_date] for active people, bucketed per day.
+    """Away rows (leave + out-of-camp status) overlapping [start_date, end_date]
+    for active people, bucketed per day.
 
     In-camp statuses are EXCLUDED — in camp is not away; they surface only in
     parade documents (via `presence_inputs`). All day-parts appear (the board
     shows a PM as a partial); the away-counting surfaces (the leave panel)
-    dedupe on person_id and so naturally include MC'd / direct-absent people.
-    The home month grid does NOT read this — it reads the leave-only
-    `nsf_leave_between` layer, so MC/direct never appear there.
+    dedupe on person_id and so naturally include MC'd people. The home month grid
+    does NOT read this — it reads the leave-only `nsf_leave_between` layer, so MC
+    never appears there.
     """
-    leaves, directs, statuses = fetch_absence_rows(start_date, end_date)
+    leaves, statuses = fetch_absence_rows(start_date, end_date)
     by_day = {d: [] for d in iter_days(start_date, end_date)}
-    for source, rows in (("leave", leaves), ("direct", directs), ("status", statuses)):
+    for source, rows in (("leave", leaves), ("status", statuses)):
         for row in rows:
             if source == "status" and row.in_camp:
                 continue  # in camp ≠ away
@@ -122,9 +118,9 @@ def absences_between(start_date, end_date):
             last = min(row.end_date, end_date)
             for d in iter_days(first, last):
                 by_day[d].append(away)
-    # Re-order each day platoon NULLS FIRST → display_name across the three
-    # merged sources (each was ordered alone). Stable sort, so a person's
-    # overlapping rows keep fetch order (leave, then direct, then status).
+    # Re-order each day platoon NULLS FIRST → display_name across the merged
+    # sources (each was ordered alone). Stable sort, so a person's overlapping
+    # rows keep fetch order (leave, then status).
     for rows in by_day.values():
         rows.sort(key=lambda a: (a.person.platoon or 0, a.person.display_name))
     return by_day
@@ -136,9 +132,8 @@ def nsf_leave_between(start_date, end_date):
 
     A filtered VIEW of `absences_between`, never a second query — same single
     derivation. Keeps only leave-sourced rows (source == "leave" is exactly the
-    APPROVED LeaveRequest rows; regulars' direct absences and MC/course statuses
-    are other layers) whose person is NSF. Each day's list stays in the parent's
-    platoon → name order.
+    APPROVED LeaveRequest rows; MC/other statuses are another layer) whose person
+    is NSF. Each day's list stays in the parent's platoon → name order.
     """
     return {
         day: [r for r in rows if r.source == "leave" and r.person.service is Service.NSF]
@@ -186,7 +181,7 @@ def presence_inputs(day, *, duty_day=None):
     D−1→D, so its build passes duty_day=D−1 but the duty must count ON day D.
     Default None means the duty of `day` itself (morning parade, COS message).
     """
-    leaves, directs, statuses = fetch_absence_rows(day, day)
+    leaves, statuses = fetch_absence_rows(day, day)
     duty_rows = (
         db.session.query(DutyAssignment)
         .filter(
@@ -198,11 +193,9 @@ def presence_inputs(day, *, duty_day=None):
     by_duty = defaultdict(list)
     for row in duty_rows:
         by_duty[row.person_id].append(_DutyCover(start_date=day, end_date=day))
-    by_leave, by_direct, by_status = defaultdict(list), defaultdict(list), defaultdict(list)
+    by_leave, by_status = defaultdict(list), defaultdict(list)
     for row in leaves:
         by_leave[row.person_id].append(row)
-    for row in directs:
-        by_direct[row.person_id].append(row)
     for row in statuses:
         by_status[row.person_id].append(row)
 
@@ -215,7 +208,6 @@ def presence_inputs(day, *, duty_day=None):
                 person,
                 day,
                 leaves=by_leave.get(person.id, ()),
-                direct_absences=by_direct.get(person.id, ()),
                 statuses=by_status.get(person.id, ()),
                 duties=by_duty.get(person.id, ()),
             ),

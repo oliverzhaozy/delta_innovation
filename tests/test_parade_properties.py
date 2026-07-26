@@ -2,7 +2,7 @@
 EVERY day the COS will ever compile, not just the three pinned goldens
 (test_morning_parade / test_roll_call / test_cos_message). A seeded generator
 (`random.Random(seed)`) builds a random roster of fake people with random
-leave/status/direct-absence rows and drives it through the REAL pipeline
+leave/status rows and drives it through the REAL pipeline
 (presence.resolve -> categorize/compute_cos_message -> render_*).
 
 Every check here is re-derived independently — from the RENDERED text, not
@@ -21,7 +21,7 @@ import pytest
 from app.domain import parade
 from app.domain.presence import PresenceState, resolve
 from app.domain.types import (
-    Appointment, DayPart, DirectAbsenceType, LeaveType, Rank, Service, StatusType,
+    Appointment, DayPart, LeaveType, Rank, Service, StatusType,
 )
 
 D = date(2026, 7, 6)  # D, the day the parade docs are compiled for.
@@ -32,7 +32,6 @@ _PLATOONS = (None, 1, 2, 3)
 _SERVICES = list(Service)
 _LEAVE_TYPES = list(LeaveType)
 _STATUS_TYPES = list(StatusType)
-_DIRECT_TYPES = list(DirectAbsenceType)
 _DAY_PARTS = list(DayPart)
 
 # Every rendered "TITLE (N):" header — the same shape _category_block emits —
@@ -93,20 +92,6 @@ def _status_rows(rng):
     return rows
 
 
-def _direct_rows(rng, person):
-    # Direct absences are S3-keyed REGULAR-only (CLAUDE.md leave-routing trap).
-    if person.service is not Service.REGULAR:
-        return []
-    rows = []
-    for _ in range(rng.randint(0, 1)):
-        day_part = rng.choice(_DAY_PARTS)
-        start, end = _random_range(rng, day_part)
-        rows.append(SimpleNamespace(
-            type=rng.choice(_DIRECT_TYPES), start_date=start, end_date=end, day_part=day_part,
-        ))
-    return rows
-
-
 def _build_roster(rng):
     people = [_make_person(rng, i) for i in range(rng.randint(3, 40))]
     people.sort(key=parade.parade_sort_key)  # feed categorize already parade-sorted
@@ -115,7 +100,6 @@ def _build_roster(rng):
         res = resolve(
             p, D,
             leaves=_leave_rows(rng),
-            direct_absences=_direct_rows(rng, p),
             statuses=_status_rows(rng),
         )
         pairs.append((p, res))
@@ -267,13 +251,13 @@ def test_parade_invariants_hold_for_a_random_roster(seed):
 # --- 5. totality: an unmapped absence-row kind must raise, never land in OTHERS
 
 class _BogusKind:
-    """A `row.type` value that is none of LeaveType/DirectAbsenceType/StatusType
+    """A `row.type` value that is none of LeaveType/StatusType
     — `_absent_category` has no branch for it, so it must raise rather than
     silently bucket the row into OTHERS (the "unmapped source raises"
     done-criterion this task adds test coverage for)."""
 
 
-@pytest.mark.parametrize("via", ["leaves", "direct_absences", "statuses"])
+@pytest.mark.parametrize("via", ["leaves", "statuses"])
 def test_unmapped_absence_kind_raises_instead_of_falling_into_others(via):
     person = _make_person(random.Random(0), 0)
     bogus_row = SimpleNamespace(

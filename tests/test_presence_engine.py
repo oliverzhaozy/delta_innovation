@@ -15,7 +15,7 @@ def person(is_active=True, stay_out=False, service=Service.NSF):
 
 
 def absence(start=D, end=D, day_part=DayPart.FULL, kind="leave"):
-    """Leave / direct-absence shaped row: dates + day_part, always out of camp."""
+    """Leave-shaped row: dates + day_part, always out of camp."""
     return SimpleNamespace(start_date=start, end_date=end, day_part=day_part, kind=kind)
 
 
@@ -85,22 +85,15 @@ def test_leave_beats_out_of_camp_status():
     assert res.conflicts == (st,)
 
 
-def test_direct_absence_beats_out_of_camp_status():
-    da = absence(kind="direct")
-    st = status(in_camp=False, kind="course")
-    res = presence.resolve(person(), D, direct_absences=[da], statuses=[st])
+def test_first_of_two_covering_leaves_wins_and_the_other_is_a_conflict():
+    # Within one tier the input order decides: absent_making[0] is the winner,
+    # the rest are conflicts. Nothing a covering row says is ever dropped.
+    first = absence(kind="leave")
+    second = absence(kind="off")
+    res = presence.resolve(person(), D, leaves=[first, second])
     assert res.state is PresenceState.ABSENT
-    assert res.row is da
-    assert res.conflicts == (st,)
-
-
-def test_leave_beats_direct_absence():
-    lv = absence(kind="leave")
-    da = absence(kind="direct")
-    res = presence.resolve(person(), D, leaves=[lv], direct_absences=[da])
-    assert res.state is PresenceState.ABSENT
-    assert res.row is lv
-    assert res.conflicts == (da,)
+    assert res.row is first
+    assert res.conflicts == (second,)
 
 
 def test_out_of_camp_status_beats_duty():
@@ -233,11 +226,13 @@ def test_mc_while_on_leave_surfaces_conflict():
 
 def test_conflicts_preserve_precedence_order():
     lv = absence(kind="leave")
-    da = absence(kind="direct")
+    off = absence(kind="off")
     mc = status(in_camp=False, kind="mc")
-    res = presence.resolve(person(), D, leaves=[lv], direct_absences=[da], statuses=[mc])
+    res = presence.resolve(person(), D, leaves=[lv, off], statuses=[mc])
     assert res.row is lv
-    assert res.conflicts == (da, mc)  # leave wins; then direct, then out-of-camp status
+    # Leave wins; the other leave-tier row keeps its input position, and the
+    # out-of-camp status ranks after the whole leave tier.
+    assert res.conflicts == (off, mc)
 
 
 def test_deactivated_still_classifies_all_rows():

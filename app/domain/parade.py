@@ -14,7 +14,6 @@ from app.domain.dates import format_ddmmyy
 from app.domain.presence import PresenceState
 from app.domain.types import (
     Appointment,
-    DirectAbsenceType,
     LeaveType,
     Rank,
     StatusType,
@@ -217,16 +216,14 @@ class ParadeDoc:
 def _absent_category(row) -> str:
     """The category a winning ABSENT row belongs to, by the PARADE_FORMATS
     mapping. Discriminated on the enum class of `row.type` — the one attribute
-    all three source rows share — so no source-specific attribute sniffing:
-    LeaveType → OFF/OIL or LEAVE, DirectAbsenceType → LEAVE or OTHERS,
-    StatusType → MC / ON COURSE / OTHERS (an out-of-camp status; in-camp ones
-    are never absent-making, so they never reach here).
+    every source row shares — so no source-specific attribute sniffing:
+    LeaveType → OFF/OIL or LEAVE, StatusType → MC / ON COURSE / OTHERS (an
+    out-of-camp status; in-camp ones are never absent-making, so they never
+    reach here).
     """
     kind = row.type
     if isinstance(kind, LeaveType):
         return "off_oil" if kind in (LeaveType.OFF, LeaveType.OIL) else "leave"
-    if isinstance(kind, DirectAbsenceType):
-        return "leave" if kind is DirectAbsenceType.LEAVE else "others"
     if isinstance(kind, StatusType):
         if kind is StatusType.MC:
             return "mc"

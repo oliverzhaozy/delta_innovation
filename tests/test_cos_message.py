@@ -17,7 +17,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import resolve
-from app.domain.types import DayPart, DirectAbsenceType, LeaveType, Rank, Service, StatusType
+from app.domain.types import DayPart, LeaveType, Rank, Service, StatusType
 
 DAY = date(2026, 7, 6)  # D, the next duty day → DDMMYY "060726"
 YESTERDAY = DAY - timedelta(days=1)
@@ -37,10 +37,6 @@ def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
 
 
 def leave_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
-    return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
-
-
-def direct_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
 
 
@@ -119,14 +115,16 @@ def test_golden_cos_counts_and_empty_headers():
     assert "OTHERS (0):" in rendered
 
 
-# --- criterion 2: a covering direct absence overrides the regular default -
+# --- criterion 2: a covering absence overrides the regular stay-out default
 
-def test_regular_direct_leave_overrides_stay_out():
-    # A regular defaults to STAY OUT, but a direct LEAVE covering D wins.
+def test_regular_out_of_camp_status_overrides_stay_out():
+    # A regular defaults to STAY OUT, but an out-of-camp status covering D
+    # wins. (Regulars have no in-app leave since P9.3 — their off/leave lives
+    # in ARCTIC FOE — so a keyed status is the only thing that moves them.)
     p = person("CPT Oscar Ong", service=Service.REGULAR, id=1)
-    pairs = [pair(p, direct_absences=[direct_row(DirectAbsenceType.LEAVE)])]
+    pairs = [pair(p, statuses=[status_row(StatusType.OTHER, in_camp=False)])]
     doc = parade.compute_cos_message(DAY, COS, pairs)
-    assert doc.leave == ("CPT OSCAR ONG",)
+    assert doc.others == ("CPT OSCAR ONG",)
     assert doc.stay_out == ()
 
 
@@ -180,8 +178,6 @@ def test_present_and_duty_nsfs_are_omitted():
         (leave_row(LeaveType.OIL), "off_oil"),
         (leave_row(LeaveType.LL), "leave"),
         (leave_row(LeaveType.OL), "leave"),
-        (direct_row(DirectAbsenceType.LEAVE), "leave"),
-        (direct_row(DirectAbsenceType.OTHER), "others"),
         (status_row(StatusType.MC, in_camp=False), "mc"),
         (status_row(StatusType.COURSE, in_camp=False), "on_course"),
         (status_row(StatusType.OTHER, in_camp=False), "others"),
@@ -190,8 +186,7 @@ def test_present_and_duty_nsfs_are_omitted():
 def test_absent_kind_maps_to_cos_category(row, category):
     p = person("3SG Test Person", id=1)
     # Route the row to the right resolve() argument by its enum family.
-    kwargs = {LeaveType: "leaves", DirectAbsenceType: "direct_absences",
-              StatusType: "statuses"}[type(row.type)]
+    kwargs = {LeaveType: "leaves", StatusType: "statuses"}[type(row.type)]
     doc = parade.compute_cos_message(DAY, COS, [pair(p, **{kwargs: [row]})])
     assert getattr(doc, category) == ("3SG TEST PERSON",)
 

@@ -24,7 +24,8 @@ from app.services.approval_service import NegativeBalanceUnconfirmed, Transition
 
 def _require_requester():
     if not routing.can_request(current_user):
-        # Regulars are outside the request flow; S3 records their absences.
+        # Regulars are outside the request flow: their off/leave lives in the
+        # external ARCTIC FOE system (owner directive 2026-07-26), not here.
         abort(403)
 
 

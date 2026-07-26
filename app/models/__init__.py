@@ -1,4 +1,3 @@
-from app.models.direct_absence import DirectAbsence
 from app.models.duty import DutyAssignment
 from app.models.event import Event, EventParticipant
 from app.models.holiday import PublicHoliday
@@ -13,7 +12,6 @@ from app.models.ro import RoBoilerplate, RoDocument, RoExtraItem
 from app.models.status import StatusEntry
 
 __all__ = [
-    "DirectAbsence",
     "DutyAssignment",
     "Event",
     "EventParticipant",

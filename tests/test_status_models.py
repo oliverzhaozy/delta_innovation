@@ -3,9 +3,9 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.domain.types import DayPart, DirectAbsenceType, STATUS_IN_CAMP_DEFAULT, StatusType
+from app.domain.types import DayPart, STATUS_IN_CAMP_DEFAULT, StatusType
 from app.extensions import db
-from app.models import DirectAbsence, Person, StatusEntry
+from app.models import Person, StatusEntry
 
 TODAY = date(2026, 8, 3)
 TOMORROW = TODAY + timedelta(days=1)
@@ -27,12 +27,6 @@ def test_status_type_enum_members_and_labels():
     assert StatusType.OTHER.label == "Other"
 
 
-def test_direct_absence_type_enum_members_and_labels():
-    assert [t.value for t in DirectAbsenceType] == ["LEAVE", "OTHER"]
-    assert DirectAbsenceType.LEAVE.label == "Leave"
-    assert DirectAbsenceType.OTHER.label == "Other"
-
-
 def test_status_in_camp_default_pinned_and_total():
     assert STATUS_IN_CAMP_DEFAULT == {
         StatusType.MC: False,
@@ -45,6 +39,13 @@ def test_status_in_camp_default_pinned_and_total():
 
 
 # --- StatusEntry ---------------------------------------------------------
+
+def test_status_entry_carries_the_in_camp_flag():
+    """status_entry is the ONE source with an in_camp distinction — leave is out
+    of camp by definition, so the whole in-camp/out-of-camp split in the presence
+    engine hangs on this column existing."""
+    assert "in_camp" in StatusEntry.__table__.columns
+
 
 def test_status_entry_date_order_check_constraint_enforced_in_db(app, make_person):
     make_person(username="status_dbcheck")
@@ -116,80 +117,3 @@ def test_status_entry_full_multi_day_accepted(app, make_person):
         db.session.add(row)
         db.session.commit()  # should not raise
         assert row.day_part is DayPart.FULL  # column default
-
-
-# --- DirectAbsence -------------------------------------------------------
-
-def test_direct_absence_date_order_check_constraint_enforced_in_db(app, make_person):
-    make_person(username="direct_dbcheck")
-    with app.app_context():
-        pid = person_id_of(app, "direct_dbcheck")
-        row = DirectAbsence(
-            person_id=pid,
-            type=DirectAbsenceType.LEAVE,
-            start_date=TODAY + timedelta(days=2),
-            end_date=TODAY + timedelta(days=1),
-            created_by_id=pid,
-        )
-        db.session.add(row)
-        with pytest.raises(IntegrityError):
-            db.session.commit()
-        db.session.rollback()
-
-
-def test_direct_absence_half_day_spanning_multiple_days_rejected(app, make_person):
-    make_person(username="direct_halfday")
-    with app.app_context():
-        pid = person_id_of(app, "direct_halfday")
-        row = DirectAbsence(
-            person_id=pid,
-            type=DirectAbsenceType.OTHER,
-            start_date=TODAY,
-            end_date=TOMORROW,
-            day_part=DayPart.AM,
-            created_by_id=pid,
-        )
-        db.session.add(row)
-        with pytest.raises(IntegrityError):
-            db.session.commit()
-        db.session.rollback()
-
-
-def test_direct_absence_half_day_single_day_accepted(app, make_person):
-    make_person(username="direct_halfday_ok")
-    with app.app_context():
-        pid = person_id_of(app, "direct_halfday_ok")
-        row = DirectAbsence(
-            person_id=pid,
-            type=DirectAbsenceType.LEAVE,
-            start_date=TODAY,
-            end_date=TODAY,
-            day_part=DayPart.AM,
-            created_by_id=pid,
-        )
-        db.session.add(row)
-        db.session.commit()  # should not raise
-        assert row.id is not None
-
-
-def test_direct_absence_full_multi_day_accepted(app, make_person):
-    make_person(username="direct_multiday_ok")
-    with app.app_context():
-        pid = person_id_of(app, "direct_multiday_ok")
-        row = DirectAbsence(
-            person_id=pid,
-            type=DirectAbsenceType.LEAVE,
-            start_date=TODAY,
-            end_date=TODAY + timedelta(days=5),
-            created_by_id=pid,
-        )
-        db.session.add(row)
-        db.session.commit()  # should not raise
-        assert row.day_part is DayPart.FULL
-
-
-def test_direct_absence_has_no_in_camp_column():
-    """Pins the TECH_PLAN shape: a direct absence is out of camp by definition;
-    in-camp exceptions are what status_entry's in_camp flag is for."""
-    assert "in_camp" not in DirectAbsence.__table__.columns
-    assert "in_camp" in StatusEntry.__table__.columns

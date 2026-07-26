@@ -1,11 +1,11 @@
 """P3a.4: presence_service v2 — the single derivation.
 
-Statuses (MC/course/briefing/…) and regulars' direct absences join APPROVED
-leave in ONE fetch layer. `absences_between` normalises it to away-only
-`AbsenceRow`s (in-camp statuses dropped — in camp is not away); `presence_inputs`
-resolves every active person through the pure engine (in-camp statuses kept as
-annotations). These tests pin: the merge, the label mapping, the in-camp
-exclusion, the three away consumers, and the parade-sorted resolution list.
+Statuses (MC/other) join APPROVED leave in ONE fetch layer. `absences_between`
+normalises it to away-only `AbsenceRow`s (in-camp statuses dropped — in camp is
+not away); `presence_inputs` resolves every active person through the pure engine
+(in-camp statuses kept as annotations). These tests pin: the merge, the label
+mapping, the in-camp exclusion, the away consumers, and the parade-sorted
+resolution list.
 """
 import dataclasses
 from datetime import date
@@ -14,7 +14,6 @@ from app.domain.presence import PresenceState
 from app.domain.types import (
     Appointment,
     DayPart,
-    DirectAbsenceType,
     LeaveType,
     Rank,
     RequestStatus,
@@ -22,7 +21,7 @@ from app.domain.types import (
     StatusType,
 )
 from app.extensions import db
-from app.models import DirectAbsence, LeaveRequest, Person, StatusEntry
+from app.models import LeaveRequest, Person, StatusEntry
 from app.services import presence_service
 from tests.conftest import login
 
@@ -59,17 +58,6 @@ def plant_status(app, username, type_=StatusType.MC, start=DAY, end=DAY,
         return row.id
 
 
-def plant_direct(app, username, type_=DirectAbsenceType.LEAVE, start=DAY, end=DAY,
-                 day_part=DayPart.FULL, remarks="posting"):
-    with app.app_context():
-        pid = db.session.query(Person.id).filter_by(username=username).scalar()
-        row = DirectAbsence(person_id=pid, type=type_, start_date=start, end_date=end,
-                            day_part=day_part, remarks=remarks, created_by_id=pid)
-        db.session.add(row)
-        db.session.commit()
-        return row.id
-
-
 def rows_on(app, day=DAY):
     with app.app_context():
         return presence_service.absences_on(day)
@@ -98,22 +86,18 @@ def test_absence_row_is_frozen_with_the_agreed_fields(app, make_person):
         raise AssertionError("AbsenceRow should be immutable")
 
 
-# --- the merge: all three sources, out-of-camp only ----------------------
+# --- the merge: both sources, out-of-camp only ---------------------------
 
-def test_absences_between_merges_leave_direct_and_out_of_camp_status(app, make_person):
+def test_absences_between_merges_leave_and_out_of_camp_status(app, make_person):
     make_person(username="m_leave", platoon=1)
-    make_person(username="m_direct", appointment=Appointment.TWO_IC, platoon=None,
-                service=Service.REGULAR)
     make_person(username="m_mc", platoon=2)
     plant_leave(app, "m_leave")
-    plant_direct(app, "m_direct")
     plant_status(app, "m_mc", type_=StatusType.MC, in_camp=False)
 
     rows = rows_on(app)
     by_source = {r.source: r for r in rows}
-    assert set(by_source) == {"leave", "direct", "status"}
+    assert set(by_source) == {"leave", "status"}
     assert by_source["leave"].label == "OFF"
-    assert by_source["direct"].label == "Leave"   # DirectAbsenceType.LEAVE.label
     assert by_source["status"].label == "MC"
     assert all(r.in_camp is False for r in rows)
 
@@ -132,16 +116,12 @@ def test_absences_between_excludes_in_camp_status(app, make_person):
 def test_absences_between_label_mapping_per_source(app, make_person):
     make_person(username="lab_oil", platoon=1)
     make_person(username="lab_course", platoon=1)
-    make_person(username="lab_other_direct", appointment=Appointment.OC, platoon=None,
-                service=Service.REGULAR)
     plant_leave(app, "lab_oil", type_=LeaveType.OIL)
     plant_status(app, "lab_course", type_=StatusType.COURSE, in_camp=False)
-    plant_direct(app, "lab_other_direct", type_=DirectAbsenceType.OTHER)
 
     labels = {r.person.username: r.label for r in rows_on(app)}
     assert labels["lab_oil"] == "OIL"        # leave → type.value
     assert labels["lab_course"] == "On course"  # status → type.label
-    assert labels["lab_other_direct"] == "Other"  # direct → type.label
 
 
 def test_absences_between_clips_range_and_buckets_each_day(app, make_person):

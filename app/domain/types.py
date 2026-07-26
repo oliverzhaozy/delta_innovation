@@ -154,15 +154,6 @@ STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
 }
 
 
-class DirectAbsenceType(str, enum.Enum):
-    LEAVE = "LEAVE"
-    OTHER = "OTHER"
-
-    @property
-    def label(self) -> str:
-        return {"LEAVE": "Leave", "OTHER": "Other"}[self.value]
-
-
 class ParadeVariant(str, enum.Enum):
     """Which of the 3 WhatsApp parade documents the build pipeline renders.
     Distinct from the lowercase "morning"/"roll_call" strings domain.parade's

@@ -35,17 +35,13 @@ _SlotRow = namedtuple("SlotRow", "slot det_number name phone")
 
 def _absence_rows_by_person(start_date, end_date):
     """The period's absence rows per person, shaped for the pure conflict
-    check from the ONE shared fetch (A8): leave and direct absences always;
-    statuses only when out of camp (in camp is not away)."""
-    leaves, directs, statuses = presence_service.fetch_absence_rows(start_date, end_date)
+    check from the ONE shared fetch (A8): leave always; statuses only when out of
+    camp (in camp is not away)."""
+    leaves, statuses = presence_service.fetch_absence_rows(start_date, end_date)
     rows = defaultdict(list)
     for row in leaves:
         rows[row.person_id].append(
             _AbsenceLike(row.type.value, row.start_date, row.end_date)
-        )
-    for row in directs:
-        rows[row.person_id].append(
-            _AbsenceLike(row.type.label, row.start_date, row.end_date)
         )
     for row in statuses:
         if not row.in_camp:

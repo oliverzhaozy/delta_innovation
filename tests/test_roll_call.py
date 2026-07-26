@@ -18,7 +18,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import PresenceState, Resolution, resolve
-from app.domain.types import DayPart, DirectAbsenceType, LeaveType, Rank, Service, StatusType
+from app.domain.types import DayPart, LeaveType, Rank, Service, StatusType
 
 DAY = date(2026, 7, 6)  # D, the next duty day → DDMMYY "060726"
 YESTERDAY = DAY - timedelta(days=1)
@@ -38,10 +38,6 @@ def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
 
 
 def leave_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
-    return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
-
-
-def direct_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
 
 
@@ -259,8 +255,6 @@ def test_am_off_is_absent_pm_off_is_present():
         (leave_row(LeaveType.OIL), "off_oil"),
         (leave_row(LeaveType.LL), "leave"),
         (leave_row(LeaveType.OL), "leave"),
-        (direct_row(DirectAbsenceType.LEAVE), "leave"),
-        (direct_row(DirectAbsenceType.OTHER), "others"),
         (status_row(StatusType.MC, in_camp=False), "mc"),
         (status_row(StatusType.COURSE, in_camp=False), "on_course"),
         (status_row(StatusType.OTHER, in_camp=False), "others"),
@@ -268,8 +262,7 @@ def test_am_off_is_absent_pm_off_is_present():
 )
 def test_absent_kind_maps_to_roll_call_category(row, category):
     p = person("3SG Test Person", id=1)
-    kwargs = {LeaveType: "leaves", DirectAbsenceType: "direct_absences",
-              StatusType: "statuses"}[type(row.type)]
+    kwargs = {LeaveType: "leaves", StatusType: "statuses"}[type(row.type)]
     doc = parade.categorize(DAY, [pair(p, **{kwargs: [row]})], "roll_call")
     assert getattr(doc, category) == ("3SG TEST PERSON",)
 

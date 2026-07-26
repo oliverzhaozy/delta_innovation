@@ -2,22 +2,19 @@
 
 Nothing is stored and nothing is blocked: the leave detail page lists the
 requester's CONFIRMED duties in range, the roster page flags absent holders
-(A8: the predicate is presence.resolve, NOT a leave-table join — an MC or a
-direct absence flags exactly like leave), and roll call names the absent
-holder in chrome. The PS resolves via manual replace; approval is never
+(A8: the predicate is presence.resolve, NOT a leave-table join — an MC flags
+exactly like leave), and roll call names the absent holder in chrome. The PS resolves via manual replace; approval is never
 blocked and nobody is auto-reassigned.
 """
 from datetime import date, timedelta
 
 from app.domain.dates import today_sgt
 from app.domain.types import (
-    Appointment, BalanceKind, DayPart, DirectAbsenceType, Duty, DutyState,
+    Appointment, BalanceKind, DayPart, Duty, DutyState,
     LeaveType, LedgerSource, Rank, RequestStatus, Service, StatusType,
 )
 from app.extensions import db
-from app.models import (
-    DirectAbsence, DutyAssignment, LeaveRequest, LedgerEntry, Person, StatusEntry,
-)
+from app.models import DutyAssignment, LeaveRequest, LedgerEntry, Person, StatusEntry
 from app.services import approval_service, duty_service, ledger_service
 from tests.conftest import login
 
@@ -136,20 +133,16 @@ def test_roster_flags_absent_confirmed_holder_mc(app, client, make_person):
     assert "holder absent" in html
 
 
-def test_roster_flags_direct_absence_and_leave_too(app, client, make_person):
+def test_roster_flags_every_absent_holder_in_one_pass(app, client, make_person):
+    # Two holders, two duties, two dates, two absence SOURCES — one month_view
+    # call must flag both, because the predicate is presence, not a per-source
+    # query. (The regular's absence is an MC status: regulars carry no in-app
+    # leave since P9.3 — theirs lives in ARCTIC FOE.)
     make_cast(make_person)
     make_person(username="p2ic3", rank=Rank.SSG, appointment=Appointment.P2IC,
                 platoon=3, service=Service.REGULAR)
     cdos_id = plant_duty(app, "p2ic3", WED, duty=Duty.CDOS)
-    with app.app_context():
-        person_id = db.session.query(Person.id).filter_by(username="p2ic3").scalar()
-        db.session.add(
-            DirectAbsence(
-                person_id=person_id, type=DirectAbsenceType.LEAVE, start_date=WED,
-                end_date=WED, day_part=DayPart.FULL, created_by_id=person_id,
-            )
-        )
-        db.session.commit()
+    plant_mc(app, "p2ic3", WED, WED)
     cos_id = plant_duty(app, "opr1", THU)
     plant_approved_leave(app, "opr1", THU, THU)
 

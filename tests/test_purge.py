@@ -10,7 +10,6 @@ from app.domain.types import (
     Appointment,
     BalanceKind,
     Calendar,
-    DirectAbsenceType,
     Duty,
     DutyState,
     LeaveType,
@@ -24,7 +23,6 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import (
-    DirectAbsence,
     DutyAssignment,
     Event,
     EventParticipant,
@@ -241,8 +239,6 @@ def _seed_spread(actor, person_id):
                      end_date=date(2026, 1, 2), status=RequestStatus.APPROVED),
         StatusEntry(person_id=person_id, type=StatusType.MC, start_date=date(2026, 1, 1),
                     end_date=date(2026, 1, 2), in_camp=False, created_by_id=actor),
-        DirectAbsence(person_id=person_id, type=DirectAbsenceType.LEAVE, start_date=date(2026, 1, 1),
-                      end_date=date(2026, 1, 2), created_by_id=actor),
         OverseasDeclaration(person_id=person_id, start_date=date(2026, 1, 1),
                             end_date=date(2026, 1, 2), destination="KL"),
         DutyAssignment(date=date(2026, 1, 1), duty=Duty.COS, person_id=person_id,
@@ -262,7 +258,6 @@ def _all_counts():
         "ledger_entry": db.session.query(LedgerEntry).count(),
         "leave_request": db.session.query(LeaveRequest).count(),
         "status_entry": db.session.query(StatusEntry).count(),
-        "direct_absence": db.session.query(DirectAbsence).count(),
         "overseas_declaration": db.session.query(OverseasDeclaration).count(),
         "event": db.session.query(Event).count(),
         "duty_assignment": db.session.query(DutyAssignment).count(),

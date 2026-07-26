@@ -14,7 +14,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import PresenceState, Resolution
-from app.domain.types import DirectAbsenceType, LeaveType, Rank, StatusType
+from app.domain.types import LeaveType, Rank, StatusType
 
 DAY = date(2026, 7, 6)  # → DDMMYY "060726"
 
@@ -30,10 +30,6 @@ def person(display_name, id=0):
 
 
 def leave_row(type):
-    return SimpleNamespace(type=type)
-
-
-def direct_row(type):
     return SimpleNamespace(type=type)
 
 
@@ -185,8 +181,6 @@ def test_golden_empty_categories_header_only():
         (leave_row(LeaveType.OIL), "off_oil", "OFF/OIL"),
         (leave_row(LeaveType.LL), "leave", "LEAVE"),
         (leave_row(LeaveType.OL), "leave", "LEAVE"),
-        (direct_row(DirectAbsenceType.LEAVE), "leave", "LEAVE"),
-        (direct_row(DirectAbsenceType.OTHER), "others", "OTHERS"),
         (status_row(StatusType.MC), "mc", "MC"),
         (status_row(StatusType.COURSE), "on_course", "ON COURSE"),
         (status_row(StatusType.OTHER), "others", "OTHERS"),

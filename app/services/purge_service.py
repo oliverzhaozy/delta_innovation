@@ -24,7 +24,6 @@ from sqlalchemy import func
 from app.domain.types import BalanceKind, LedgerSource
 from app.extensions import db
 from app.models import (
-    DirectAbsence,
     DutyAssignment,
     Event,
     LeaveRequest,
@@ -82,10 +81,6 @@ def _status(before):
     return db.session.query(StatusEntry).filter(StatusEntry.end_date < before)
 
 
-def _direct(before):
-    return db.session.query(DirectAbsence).filter(DirectAbsence.end_date < before)
-
-
 def _overseas(before):
     return db.session.query(OverseasDeclaration).filter(OverseasDeclaration.end_date < before)
 
@@ -135,7 +130,6 @@ def _compute(before):
         ("ledger_entry", _ledger_old(before).count()),
         ("leave_request", _leave(before).count()),
         ("status_entry", _status(before).count()),
-        ("direct_absence", _direct(before).count()),
         ("overseas_declaration", _overseas(before).count()),
         ("event", _events(before).count()),
         ("duty_assignment", _duty_assignments(before).count()),
@@ -197,7 +191,6 @@ def execute(before, *, actor):
 
     # 3. Remaining leaf tables (nothing FKs into these).
     _status(before).delete(synchronize_session=False)
-    _direct(before).delete(synchronize_session=False)
     _overseas(before).delete(synchronize_session=False)
     _duty_assignments(before).delete(synchronize_session=False)
     _meals(before).delete(synchronize_session=False)

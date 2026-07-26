@@ -5,19 +5,22 @@ day-part semantics are the semantic core of the phase.
 
 The caller pre-filters and passes rows for a SINGLE person: `leaves` are
 APPROVED leave rows only (this module never sees a status field — the approval
-decision is upstream in the leave flow), `direct_absences` are S3-keyed regular
-absences, `statuses` are COS-keyed exceptions (MC/course/other), and
-`duties` is reserved for P4 (empty until duty_assignment exists). Rows are
-duck-typed: every row exposes `.start_date`, `.end_date`, `.day_part`; status
-rows additionally expose `.in_camp`. The engine never copies a row — it returns
-the caller's own objects so downstream rendering keeps every field.
+decision is upstream in the leave flow), `statuses` are COS-keyed exceptions
+(MC/other), and `duties` are CONFIRMED duty covers. Rows are duck-typed: every
+row exposes `.start_date`, `.end_date`, `.day_part`; status rows additionally
+expose `.in_camp`. The engine never copies a row — it returns the caller's own
+objects so downstream rendering keeps every field.
+
+Regulars are NOT tracked here (owner directive 2026-07-26): their off/leave
+lives in the external ARCTIC FOE system, so a regular appears in current
+strength unless a keyed status says otherwise.
 
 Precedence (highest wins), matching TECH_PLAN's parade precedence rule:
 
     deactivated
-      > approved leave / direct absence   (leave first, then direct absence)
-      > out-of-camp status                (MC / course / other…)
-      > duty                              (P4 hook)
+      > approved leave
+      > out-of-camp status                (MC / other…)
+      > duty
       > stay-out                          (stay_out flag OR REGULAR service)
       > present
 
@@ -83,27 +86,20 @@ def absent_for_day(day_part) -> bool:
     return day_part in (DayPart.FULL, DayPart.AM)
 
 
-def resolve(person, day, *, leaves=(), direct_absences=(), statuses=(), duties=()) -> Resolution:
+def resolve(person, day, *, leaves=(), statuses=(), duties=()) -> Resolution:
     """Resolve `person`'s presence for `day` from the pre-filtered rows.
 
     See the module docstring for the input contract and the precedence rule.
     """
-    # Absent-making rows in precedence order — leave, then direct absence, then
-    # out-of-camp status — so the first is the winner and the rest are conflicts.
+    # Absent-making rows in precedence order — leave, then out-of-camp status —
+    # so the first is the winner and the rest are conflicts.
     absent_making = []
     partial_rows = []
     in_camp_rows = []
 
-    # Leaves and direct absences are always out of camp (they carry no in_camp
-    # field): FULL/AM make absent, PM is a partial (present, tagged "(PM)").
+    # Leaves are always out of camp (they carry no in_camp field): FULL/AM make
+    # absent, PM is a partial (present, tagged "(PM)").
     for row in leaves:
-        if not covers(row, day):
-            continue
-        if absent_for_day(row.day_part):
-            absent_making.append(row)
-        else:
-            partial_rows.append(row)
-    for row in direct_absences:
         if not covers(row, day):
             continue
         if absent_for_day(row.day_part):
@@ -113,7 +109,7 @@ def resolve(person, day, *, leaves=(), direct_absences=(), statuses=(), duties=(
 
     # Statuses split on in_camp: in-camp ones are annotations only (never an
     # absence, whatever their day_part); out-of-camp ones make absent under the
-    # same FULL/AM rule and rank below leave/direct absence.
+    # same FULL/AM rule and rank below leave.
     out_of_camp_absent = []
     for row in statuses:
         if not covers(row, day):

@@ -22,7 +22,7 @@ from app.domain import parade
 from app.domain.meals import NsfPresence, nsf_presence
 from app.domain.presence import PresenceState, Resolution, resolve
 from app.domain.types import (
-    DayPart, DirectAbsenceType, LeaveType, Meal, Rank, Service, StatusType,
+    DayPart, LeaveType, Meal, Rank, Service, StatusType,
 )
 
 D = date(2026, 7, 6)      # the day meals are computed for
@@ -46,10 +46,6 @@ def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
 
 
 def leave_row(type, start=D, end=D, day_part=DayPart.FULL):
-    return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
-
-
-def direct_row(type, start=D, end=D, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
 
 
@@ -98,7 +94,7 @@ def test_person_lists_populated_parallel_for_every_morning_category():
         (p5, absent(status_row(StatusType.MC))),           # → MC
         (p6, present(in_camp_rows=[status_row(StatusType.OTHER, remarks="BDO")])),  # → OTHERS IN CAMP
         (p7, absent(status_row(StatusType.COURSE))),       # → ON COURSE
-        (p8, absent(direct_row(DirectAbsenceType.OTHER))), # → OTHERS
+        (p8, absent(status_row(StatusType.OTHER))),         # → OTHERS (out of camp)
     ]
     doc = parade.categorize(DAY, pairs, "morning")
 
