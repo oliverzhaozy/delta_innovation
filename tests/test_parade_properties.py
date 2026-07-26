@@ -34,7 +34,7 @@ _LEAVE_TYPES = list(LeaveType)
 _STATUS_TYPES = list(StatusType)
 _DAY_PARTS = list(DayPart)
 
-# Every rendered "TITLE (N):" header — the same shape _category_block emits —
+# Every rendered "TITLE (N):" header — the same shape _category_section emits —
 # parsed independently of the ParadeDoc/CosDoc fields that produced it.
 _HEADER_RE = re.compile(r"^(.+?) \((\d+)\):$")
 
