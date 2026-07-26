@@ -63,7 +63,9 @@ def pair(p, **rows):
 
 # --- golden: an NSF PS as COS, the six categories exercised (criterion 1) -
 
-COS = person("SSG Ethan Ng")  # NSF PS running duty on D; greeting subject only.
+# NSF PS running duty on D; the greeting takes the display STRING, not a Person
+# (the COS may be typed as free text and need not be on the roster at all).
+COS = parade.parade_line(person("SSG Ethan Ng"))
 
 
 def _cos_roster():
@@ -215,7 +217,7 @@ def test_double_listed_cos_doc_raises_on_validate():
     # The at-most-once guarantee: a hand-built doc with a name in two categories
     # is refused (compute can't produce this, but the invariant is enforced).
     doc = parade.CosDoc(
-        day=DAY, cos_person=COS,
+        day=DAY, cos_display=COS,
         stay_out=("CPT OSCAR ONG",),
         leave=("CPT OSCAR ONG",),
     )

@@ -8,6 +8,7 @@ from app.blueprints.parade import bp
 from app.blueprints.parade.forms import FpBulkAddForm, StatusEntryForm
 from app.domain import participants, presence
 from app.domain.dates import today_sgt
+from app.domain.parade import parade_line
 from app.domain.types import (
     DayPart,
     LeaveType,
@@ -38,26 +39,20 @@ def _set_status_person_choices(form):
     ]
 
 
-def _validate_cos_person(raw, day, roster=None):
-    """Resolve a `cos=` id (query or posted) to an active Person; fallback
-    order is CONFIRMED COS of the page date, then current_user (P4.8 closes
-    the P3 hook this function's comment has named since P3b.3). An explicit
-    valid `?cos=` always wins — auto-fill must not override a deliberate
-    hand-selection. Invalid or inactive ids never 400 — a keying mistake costs
-    one reload — and resolving against the active roster means a tampered
-    query value can't name someone off-roster. `roster` lets a caller that
-    already fetched the active roster pass it in.
+COS_DISPLAY_MAX = 60
+
+
+def _cos_display(raw) -> str:
+    """The greeting's "RANK NAME" string, from the free-text `cos_name=` param.
+
+    Free text, not a roster pick (owner decision 2026-07-26): the COS of a given
+    night is not always someone this app holds, and the default is simply whoever
+    is looking at the page — no confirmed-roster autofill. Whitespace-collapsed,
+    length-capped, and uppercased so a pasted blob cannot bend the greeting out
+    of the WhatsApp format; blank or missing falls back to the logged-in user.
     """
-    roster = roster if roster is not None else event_service.active_roster()
-    try:
-        cos_id = int(raw)
-    except (TypeError, ValueError):
-        cos_id = None
-    if cos_id is not None:
-        person = next((p for p in roster if p.id == cos_id), None)
-        if person is not None:
-            return person
-    return duty_service.cos_of_day(day) or current_user
+    typed = " ".join((raw or "").split())[:COS_DISPLAY_MAX].upper()
+    return typed or parade_line(current_user)
 
 
 def _row_label(row) -> str:
@@ -235,17 +230,18 @@ def cos_message():
     # Compiled the evening before, forecasting the next duty day (assumption
     # 4) — the one page fixed to tomorrow, not today.
     day = today_sgt() + timedelta(days=1)
-    roster = event_service.active_roster()
-    cos_person = _validate_cos_person(request.args.get("cos", ""), day, roster)
-    built = parade_service.build_doc(day, ParadeVariant.COS_MESSAGE, cos_person=cos_person)
+    cos_name = request.args.get("cos_name", "")
+    built = parade_service.build_doc(
+        day, ParadeVariant.COS_MESSAGE, cos_display=_cos_display(cos_name)
+    )
     conflicts = _conflict_lines(built.pairs)
 
     return render_template(
         "parade/state.html",
         doc="cos",
         day=day,
-        cos_person=cos_person,
-        roster=roster,
+        cos_name=cos_name,
+        cos_placeholder=f"{parade_line(current_user)} (you)",
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,

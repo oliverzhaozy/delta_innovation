@@ -18,7 +18,7 @@ from app.services import presence_service
 BuiltDoc = namedtuple("BuiltDoc", "pairs doc text imbalance")
 
 
-def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
+def build_doc(day, variant, *, cos_display=None) -> BuiltDoc:
     """The ONE owner of the presence_inputs -> categorize/compute -> render
     pipeline (pre-flight addendum A2). Every parade page — and the meals
     compute — builds documents through here, so a convention added to the
@@ -27,8 +27,8 @@ def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
     field rather than a raise: the conflicts panel needs `pairs` even when the
     document itself is refused.
     """
-    if variant is ParadeVariant.COS_MESSAGE and cos_person is None:
-        raise ValueError("COS_MESSAGE needs a cos_person for its greeting")
+    if variant is ParadeVariant.COS_MESSAGE and cos_display is None:
+        raise ValueError("COS_MESSAGE needs a cos_display for its greeting")
     # The duty_day convention lives HERE and nowhere else (A2): the roll call
     # labeled `day` covers the night day−1 → day, so it reads the duty of
     # day−1; morning parade and the COS message read the duty of their own day.
@@ -42,7 +42,7 @@ def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
             doc = parade_domain.categorize(day, pairs, "roll_call")
             text = parade_domain.render_roll_call(doc)
         elif variant is ParadeVariant.COS_MESSAGE:
-            doc = parade_domain.compute_cos_message(day, cos_person, pairs)
+            doc = parade_domain.compute_cos_message(day, cos_display, pairs)
             text = parade_domain.render_cos(doc)
         else:  # pragma: no cover — ParadeVariant is closed; a new member must land here deliberately
             raise ValueError(f"unknown parade variant: {variant!r}")

@@ -176,7 +176,7 @@ def test_phase4_end_to_end(app, client, make_person):
         # (DUTY overrides stay-out) — without the duty pipe this would be 2.
         assert counts.overnight == 3
 
-    # --- 8. The COS selector pre-fills the confirmed COS of the page date ----
+    # --- 8. cos_of_day resolves the confirmed COS of any date ----------------
     _switch(client, "ps_boss")
     with app.app_context():
         cos_holder_id = (
@@ -184,11 +184,9 @@ def test_phase4_end_to_end(app, client, make_person):
             .filter_by(date=pd, duty=Duty.COS, state=DutyState.CONFIRMED)
             .scalar()
         )
-        # The COS selector prefills _validate_cos_person -> duty_service.cos_of_day
-        # of the page date. The live page is fixed to tomorrow now, so the
-        # arbitrary-page-date prefill is pinned at the service level here; the
-        # page wiring itself is covered by
-        # test_duty_rights.test_cos_selector_prefills_confirmed_cos.
+        # The COS page no longer autofills from the roster (P10.1: free text,
+        # defaulting to the logged-in user), but cos_of_day itself still feeds
+        # the RO's COS line — pinned here for an arbitrary phase date.
         assert duty_service.cos_of_day(pd).id == cos_holder_id
 
     # --- 9. Deposed COS: the rights disappear with the assignment ------------

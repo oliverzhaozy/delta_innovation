@@ -16,7 +16,7 @@ import pytest
 
 from app.domain import manning
 from app.domain.events import event_days
-from app.domain.parade import _absent_category
+from app.domain.parade import _absent_category, parade_line
 from app.domain.presence import PresenceState, resolve
 from app.domain.types import (
     Appointment,
@@ -187,7 +187,7 @@ def test_participant_appears_under_on_course_on_every_variant(app, make_person, 
     with app.app_context():
         cos = db.session.query(Person).filter_by(username="crs_ps").one()
         day = DAY
-        built = parade_service.build_doc(day, variant, cos_person=cos)
+        built = parade_service.build_doc(day, variant, cos_display=parade_line(cos))
         assert built.imbalance is None
         assert built.doc.on_course == ("PTE GOES ONCOURSE",)
         assert "ON COURSE (1):\n1. PTE GOES ONCOURSE" in built.text

@@ -182,8 +182,10 @@ def test_parade_invariants_hold_for_a_random_roster(seed):
 
     morning_doc = parade.categorize(D, pairs, "morning")
     roll_doc = parade.categorize(D, pairs, "roll_call")
-    cos_person = _make_person(rng, -1)  # COS is the greeting subject only, not a roster member
-    cos_doc = parade.compute_cos_message(D, cos_person, pairs)
+    # COS is the greeting subject only, not a roster member — and it enters as a
+    # display string, not a Person.
+    cos_display = parade.parade_line(_make_person(rng, -1))
+    cos_doc = parade.compute_cos_message(D, cos_display, pairs)
 
     morning_text = parade.render_morning(morning_doc)
     roll_text = parade.render_roll_call(roll_doc)

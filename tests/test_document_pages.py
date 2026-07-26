@@ -9,6 +9,7 @@ page's rendered output; duplicating ~10 lines is the lower-risk option).
 """
 from datetime import timedelta
 
+from app.blueprints.parade.routes import COS_DISPLAY_MAX
 from app.domain.dates import today_sgt
 from app.domain.types import (
     Appointment,
@@ -23,11 +24,6 @@ from app.models import LeaveRequest, Person
 from tests.conftest import login
 
 DAY = today_sgt()  # the pages are fixed to today (roll call) / tomorrow (COS)
-
-
-def pid(app, username):
-    with app.app_context():
-        return db.session.query(Person.id).filter_by(username=username).scalar()
 
 
 def plant_leave(app, username, type_=LeaveType.OFF, status=RequestStatus.APPROVED,
@@ -61,6 +57,9 @@ def test_roll_call_defaults_to_today(client, make_person):
 
 
 # --- done-criterion 2: COS selector ------------------------------------------
+#
+# P10.1: the selector is free text (`?cos_name=`), not a roster dropdown, and
+# the default is the logged-in user — there is no confirmed-COS autofill.
 
 def test_cos_selector_defaults_to_current_user(client, make_person):
     login(client, make_person(username="viewer3", display_name="Percy Sim",
@@ -70,39 +69,30 @@ def test_cos_selector_defaults_to_current_user(client, make_person):
     assert b"3SG PERCY SIM is the COS" in resp.data
 
 
-def test_cos_selector_query_param_selects_other_person(app, client, make_person):
-    make_person(username="viewer4", display_name="Percy Sim", rank=Rank.THREE_SG)
-    make_person(username="other_cos", display_name="Oscar Ong", rank=Rank.CPT)
-    login(client, "viewer4")
-    other_id = pid(app, "other_cos")
-    resp = client.get(f"/parade/cos-message?cos={other_id}")
+def test_cos_selector_typed_name_is_uppercased_into_the_greeting(client, make_person):
+    login(client, make_person(username="viewer4", display_name="Percy Sim",
+                               rank=Rank.THREE_SG))
+    resp = client.get("/parade/cos-message?cos_name=3sg tan ah kow")
     assert resp.status_code == 200
-    assert b"CPT OSCAR ONG is the COS" in resp.data
+    assert b"3SG TAN AH KOW is the COS" in resp.data
+    assert b"3SG PERCY SIM is the COS" not in resp.data
 
 
-def test_cos_selector_invalid_id_falls_back_to_current_user(client, make_person):
+def test_cos_selector_blank_name_falls_back_to_current_user(client, make_person):
     login(client, make_person(username="viewer5", display_name="Percy Sim",
                                rank=Rank.THREE_SG))
-    resp = client.get("/parade/cos-message?cos=999999")
+    resp = client.get("/parade/cos-message?cos_name=%20%20")
     assert resp.status_code == 200
     assert b"3SG PERCY SIM is the COS" in resp.data
 
-    resp2 = client.get("/parade/cos-message?cos=garbage")
-    assert resp2.status_code == 200
-    assert b"3SG PERCY SIM is the COS" in resp2.data
 
-
-def test_cos_selector_inactive_person_id_falls_back_to_current_user(app, client, make_person):
+def test_cos_selector_overlong_name_is_capped_not_a_500(client, make_person):
     login(client, make_person(username="viewer5b", display_name="Percy Sim",
                                rank=Rank.THREE_SG))
-    make_person(username="inactive_guy", display_name="Ghost Guy", rank=Rank.CPL,
-                is_active=False)
-    inactive_id = pid(app, "inactive_guy")
-
-    resp = client.get(f"/parade/cos-message?cos={inactive_id}")
+    resp = client.get(f"/parade/cos-message?cos_name={'a' * 300}")
     assert resp.status_code == 200
-    assert b"3SG PERCY SIM is the COS" in resp.data
-    assert b"GHOST GUY" not in resp.data
+    assert ("A" * COS_DISPLAY_MAX + " is the COS").encode() in resp.data
+    assert ("A" * (COS_DISPLAY_MAX + 1)).encode() not in resp.data
 
 
 # --- done-criterion 3: planted data renders correctly on both ---------------

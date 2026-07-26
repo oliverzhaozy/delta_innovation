@@ -6,6 +6,7 @@ call labeled D really counts the duty of D−1 on day D.
 import re
 from datetime import date, timedelta
 
+from app.domain.parade import parade_line
 from app.domain.presence import PresenceState
 from app.domain.types import (
     Appointment, DayPart, Duty, DutyState, LeaveType, ParadeVariant, Rank,
@@ -134,7 +135,9 @@ def test_morning_and_cos_read_duty_of_own_day(app, make_person):
         built = parade_service.build_doc(D, ParadeVariant.MORNING)
         assert pid(app, "cos_guy") in strength_ids(built)
         greeter = db.session.query(Person).filter_by(username="greeter").one()
-        built = parade_service.build_doc(D, ParadeVariant.COS_MESSAGE, cos_person=greeter)
+        built = parade_service.build_doc(
+            D, ParadeVariant.COS_MESSAGE, cos_display=parade_line(greeter)
+        )
         # DUTY people are omitted like PRESENT — this document requests statuses.
         assert "Cos Guy" not in built.text
 

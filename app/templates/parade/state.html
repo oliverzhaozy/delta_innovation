@@ -21,15 +21,12 @@
 {% if doc == "cos" %}
 <section class="card">
   <h2>COS</h2>
-  {# Plain GET form, no JS/no persistence — pre-filled from the confirmed
-     duty roster (P4.8); a keying mistake here costs one reload. #}
+  {# Plain GET form, no JS/no persistence — free text, because the COS of a
+     given night need not be on this app's roster; empty means "me". #}
   <form method="get" action="{{ url_for('parade.cos_message') }}" style="display:flex; gap:0.5rem; align-items:center">
-    <label for="cos-select">Set COS</label>
-    <select id="cos-select" name="cos">
-      {% for p in roster %}
-      <option value="{{ p.id }}" {% if p.id == cos_person.id %}selected{% endif %}>{{ p.rank.value }} {{ p.display_name }}</option>
-      {% endfor %}
-    </select>
+    <label for="cos-name">Set COS</label>
+    <input type="text" id="cos-name" name="cos_name" value="{{ cos_name }}"
+           placeholder="{{ cos_placeholder }}" maxlength="60" autocomplete="off">
     <button type="submit" class="btn secondary">Set</button>
   </form>
 </section>

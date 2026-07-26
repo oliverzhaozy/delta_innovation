@@ -138,21 +138,3 @@ def test_cos_of_day_and_cdos_of_day(app, make_person):
     with app.app_context():
         assert duty_service.cos_of_day(today_sgt()).id == pid(app, "opr1")
         assert duty_service.cdos_of_day(today_sgt()) is None
-
-
-def test_cos_selector_prefills_confirmed_cos(app, client, make_person):
-    make_opr(make_person)
-    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
-    tomorrow = today_sgt() + timedelta(days=1)
-    plant_cos(app, "opr1", tomorrow)
-    login(client, "ps2")
-
-    opr_id, ps_id = pid(app, "opr1"), pid(app, "ps2")
-    # The COS page is fixed to tomorrow, which is exactly the day the duty was
-    # planted on — so the plain page prefills the confirmed COS.
-    html = client.get("/parade/cos-message").get_data(as_text=True)
-    assert f'value="{opr_id}" selected' in html
-
-    # Explicit hand-selection still wins — the app proposes, a human decides.
-    html = client.get(f"/parade/cos-message?cos={ps_id}").get_data(as_text=True)
-    assert f'value="{ps_id}" selected' in html

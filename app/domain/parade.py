@@ -398,12 +398,14 @@ class CosDoc:
     Like ParadeDoc, it holds rendered `RANK NAME` bodies so a header count is
     the `len()` of the very tuple it labels — count and list can never disagree.
     Unlike ParadeDoc there is NO total/balance check: the message omits present
-    NSFs, so it legitimately covers only a subset of the company. `cos_person`
-    rides along for the greeting line; the six category order is the skeleton's.
+    NSFs, so it legitimately covers only a subset of the company. `cos_display`
+    is the already-uppercased "RANK NAME" the greeting prints — a string, not a
+    Person, because the COS may be typed as free text and need not be on this
+    app's roster at all; the six category order is the skeleton's.
     """
 
     day: date
-    cos_person: object
+    cos_display: str
     stay_out: tuple = ()
     leave: tuple = ()
     off_oil: tuple = ()
@@ -455,7 +457,7 @@ class CosDoc:
         )
 
 
-def compute_cos_message(day, cos_person, pairs) -> CosDoc:
+def compute_cos_message(day, cos_display, pairs) -> CosDoc:
     """Build the Message 1 (COS request) doc from parade-sorted `(person,
     resolution)` pairs for `day` (D, the NEXT duty day — the route owns picking
     tomorrow, not this pure module). Order within a category follows the input.
@@ -487,7 +489,7 @@ def compute_cos_message(day, cos_person, pairs) -> CosDoc:
 
     doc = CosDoc(
         day=day,
-        cos_person=cos_person,
+        cos_display=cos_display,
         **{name: tuple(lines[name]) for name in _COS_CATEGORIES},
         **{f"{name}_people": tuple(people[name]) for name in _COS_CATEGORIES},
     )
@@ -505,7 +507,7 @@ def render_cos(doc: CosDoc) -> str:
     """
     doc.validate()
     greeting = (
-        f"Hello all, {parade_line(doc.cos_person)} is the COS for "
+        f"Hello all, {doc.cos_display} is the COS for "
         f"{format_ddmmyy(doc.day)}. "
         "Please indicate if you are on course/off/ma etc:"
     )

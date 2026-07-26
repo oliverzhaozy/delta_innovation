@@ -56,16 +56,21 @@ def test_build_doc_roll_call_matches_domain_pipeline(app, make_person):
         assert built.text == expected
 
 
-def test_build_doc_cos_message_uses_cos_person(app, make_person):
+def test_build_doc_cos_message_uses_cos_display(app, make_person):
     make_person(username="cos_guy", appointment=Appointment.OPR, display_name="Marcus Tan",
                 rank=Rank.CPL)
     make_person(username="off_guy", display_name="Daniel Lim", rank=Rank.CFC)
     _plant_mc(app, "off_guy")
     with app.app_context():
         cos = db.session.query(Person).filter_by(username="cos_guy").one()
+        cos_display = parade_domain.parade_line(cos)
         pairs = presence_service.presence_inputs(DAY)
-        expected = parade_domain.render_cos(parade_domain.compute_cos_message(DAY, cos, pairs))
-        built = parade_service.build_doc(DAY, ParadeVariant.COS_MESSAGE, cos_person=cos)
+        expected = parade_domain.render_cos(
+            parade_domain.compute_cos_message(DAY, cos_display, pairs)
+        )
+        built = parade_service.build_doc(
+            DAY, ParadeVariant.COS_MESSAGE, cos_display=cos_display
+        )
         assert built.text == expected
 
 
@@ -94,7 +99,7 @@ def test_build_doc_success_has_no_imbalance(app, make_person):
         assert built.imbalance is None
 
 
-def test_build_doc_cos_message_without_cos_person_raises(app, make_person):
+def test_build_doc_cos_message_without_cos_display_raises(app, make_person):
     make_person(username="off_guy")
     with app.app_context():
         try:
@@ -102,4 +107,4 @@ def test_build_doc_cos_message_without_cos_person_raises(app, make_person):
         except ValueError:
             pass
         else:
-            raise AssertionError("COS_MESSAGE without cos_person must raise ValueError")
+            raise AssertionError("COS_MESSAGE without cos_display must raise ValueError")
