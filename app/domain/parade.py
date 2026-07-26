@@ -7,16 +7,22 @@ TECH_PLAN "Jinja text templates" line): hand-built strings dodge
 template-whitespace landmines so the golden tests can pin the output to
 docs/PARADE_FORMATS.md byte-for-byte.
 """
+import bisect
+import dataclasses
 from collections import namedtuple
 from dataclasses import dataclass
 from datetime import date
+from typing import Mapping
 
 from app.domain.dates import format_ddmmyy
 from app.domain.presence import PresenceState
 from app.domain.types import (
+    ALLOWED_OVERRIDE_TARGETS,
     Appointment,
     CourseAbsenceType,
     LeaveType,
+    OverrideCategory,
+    ParadeVariant,
     Rank,
     StatusType,
 )
@@ -101,8 +107,12 @@ CATEGORY_TITLES = {
     "others": "OTHERS",
 }
 
-# CosDoc's category fields: the six night/absent categories only (ParadeDoc
-# carries these plus the two present-in-camp ones, named inline in categorize).
+# The full set of ParadeDoc category fields (categorize() populates all eight);
+# CosDoc carries the six night/absent categories only.
+_PARADE_CATEGORIES = (
+    "current_strength", "others_in_camp", "leave", "off_oil",
+    "on_course", "mc", "others", "stay_out",
+)
 _COS_CATEGORIES = ("stay_out", "leave", "off_oil", "on_course", "mc", "others")
 
 
@@ -576,4 +586,81 @@ def render_cos(doc: CosDoc) -> str:
     """
     doc.validate()
     return "\n\n".join(section.text for section in _cos_sections(doc))
+
+
+# --- drag-and-drop recategorization overrides (P8, reinstated P10.3) ------
+#
+# A stored override moves one person from the category the presence engine put
+# them in to a keyer-chosen one, WITHOUT touching any leave/status data. The
+# move happens on the built doc, inside the one build pipeline, so the meal
+# counters (which read the same doc) inherit every drag (owner decision 6).
+
+
+def _doc_variant(doc) -> ParadeVariant:
+    """The ParadeVariant a built doc belongs to. CosDoc has no `variant`
+    string, so its type is the discriminator; ParadeDoc carries the compute
+    variant string the categorize/render pair use."""
+    if isinstance(doc, CosDoc):
+        return ParadeVariant.COS_MESSAGE
+    return ParadeVariant.MORNING if doc.variant == "morning" else ParadeVariant.ROLL_CALL
+
+
+def _doc_categories(doc) -> tuple:
+    return _COS_CATEGORIES if isinstance(doc, CosDoc) else _PARADE_CATEGORIES
+
+
+def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
+    """Return a copy of `doc` with each `{person_id: target}` override applied,
+    or `doc` itself when `overrides` is empty (identity — no rebuild).
+
+    A disallowed target for the doc's variant is a wiring bug (the route
+    validates the target against ALLOWED_OVERRIDE_TARGETS before it ever stores
+    one) — raise ValueError. A person no longer in the doc is a stale override
+    that self-heals — silently skipped. A person already in the target bucket is
+    a no-op. The moved line is the BARE parade_line (any OTHERS IN CAMP reason
+    suffix is dropped, and never added on the way in), inserted at its
+    parade_sort_key position so the category stays in parade order. The result
+    is validated: a move that unbalanced the doc is refused like any other.
+
+    CURRENT_STRENGTH on a CosDoc REMOVES the person (decision D4): Message 1 has
+    no present-in-camp block, so "back to present" there means the line leaves
+    the message. Legal only because a CosDoc has no headcount invariant.
+    """
+    if not overrides:
+        return doc
+    variant = _doc_variant(doc)
+    allowed = ALLOWED_OVERRIDE_TARGETS[variant]
+    categories = _doc_categories(doc)
+    lines = {c: list(getattr(doc, c)) for c in categories}
+    people = {c: list(getattr(doc, c + "_people")) for c in categories}
+    location = {p.id: c for c in categories for p in people[c]}
+    for person_id, target in overrides.items():
+        if target not in allowed:
+            raise ValueError(
+                f"{target.value!r} is not a valid override target for {variant.value}"
+            )
+        current = location.get(person_id)
+        if current is None or current == target.value:
+            continue
+        idx = next(i for i, p in enumerate(people[current]) if p.id == person_id)
+        person = people[current].pop(idx)
+        lines[current].pop(idx)
+        if (
+            variant is ParadeVariant.COS_MESSAGE
+            and target is OverrideCategory.CURRENT_STRENGTH
+        ):
+            # D4: dropped out of the message entirely; there is no bucket to
+            # land in. Undo is Reset — the line is no longer there to drag back.
+            location.pop(person_id)
+            continue
+        dest = target.value
+        pos = bisect.bisect_right(people[dest], parade_sort_key(person), key=parade_sort_key)
+        people[dest].insert(pos, person)
+        lines[dest].insert(pos, parade_line(person))
+        location[person_id] = dest
+    replacements = {}
+    for c in categories:
+        replacements[c] = tuple(lines[c])
+        replacements[c + "_people"] = tuple(people[c])
+    return dataclasses.replace(doc, **replacements).validate()
 
