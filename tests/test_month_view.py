@@ -170,11 +170,11 @@ def test_prev_next_today_links_present(client, make_person):
     assert b"Today" in resp.data
 
 
-def test_day_number_links_to_snapshot_history(client, make_person):
-    # T4 (owner decision 5): the day-number now links to the snapshot-history
-    # archive filtered to that date — the parade pages are today-fixed, so a
-    # past date is only meaningful as "what was copied that day".
+def test_day_number_is_plain_text_with_no_parade_destination(client, make_person):
+    # P9.2: the archive is gone and the parade pages are today-fixed, so no past
+    # date has a parade destination — the day number is plain text, not a link.
     login(client, make_person(username="mv_dayno_viewer"))
     resp = client.get("/calendar/month?ym=2026-07")
-    assert b"/parade/history?date=2026-07-08" in resp.data
+    assert b'<span class="day-num">8</span>' in resp.data
+    assert b"/parade/history" not in resp.data
     assert b"/parade/morning?date=" not in resp.data

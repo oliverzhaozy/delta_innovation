@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -19,25 +19,8 @@ from app.domain.types import (
     StatusType,
 )
 from app.extensions import db
-from app.models import DirectAbsence, ParadeSnapshot, Person, StatusEntry
+from app.models import DirectAbsence, Person, StatusEntry
 from app.services import duty_service, event_service, parade_service
-
-
-def _variant_day(key):
-    """The ONE owner of the page-date convention: morning and roll call are
-    today's documents; the COS message is compiled the evening before for
-    tomorrow's duty day. An unrecognised key is a stale or tampered POST — 400,
-    never a silent default onto some date. Returns (ParadeVariant, date).
-    """
-    today = today_sgt()
-    mapping = {
-        "morning": (ParadeVariant.MORNING, today),
-        "roll_call": (ParadeVariant.ROLL_CALL, today),
-        "cos": (ParadeVariant.COS_MESSAGE, today + timedelta(days=1)),
-    }
-    if key not in mapping:
-        abort(400)
-    return mapping[key]
 
 
 def _set_fp_people_choices(form):
@@ -301,49 +284,6 @@ def roll_call():
         absent_holders=absent_holders,
         can_adjust=duty_service.can_key_parade_today(current_user),
     )
-
-
-# --- Snapshot archive (what was copied to WhatsApp) --------------------------
-
-@bp.route("/snapshot", methods=["POST"])
-@login_required
-def snapshot():
-    # Any viewer can Copy, so any viewer can archive — the row records whoever
-    # copied. The text is re-rendered HERE through build_doc, never taken from
-    # the client, so the archive is exactly what the server would render.
-    variant, day = _variant_day(request.form.get("variant", ""))
-    cos_person = None
-    if variant is ParadeVariant.COS_MESSAGE:
-        cos_person = _validate_cos_person(request.form.get("cos", ""), day)
-    built = parade_service.build_doc(day, variant, cos_person=cos_person)
-    if built.imbalance is not None:
-        # A refused document has no copyable text — nothing was sent, nothing
-        # is archived.
-        abort(409)
-    parade_service.save_snapshot(day, variant, built.text, created_by_id=current_user.id)
-    db.session.commit()
-    return "", 204
-
-
-@bp.route("/history")
-@login_required
-def history():
-    raw = request.args.get("date", "")
-    try:
-        filter_date = date.fromisoformat(raw) if raw else None
-    except ValueError:
-        # A malformed ?date= shows everything rather than 404ing — same
-        # forgiving posture the calendar's ?ym= uses.
-        filter_date = None
-    groups = parade_service.snapshots_by_date(filter_date)
-    return render_template("parade/history.html", groups=groups, filter_date=filter_date)
-
-
-@bp.route("/history/<int:snapshot_id>")
-@login_required
-def history_detail(snapshot_id):
-    snap = db.session.get(ParadeSnapshot, snapshot_id) or abort(404)
-    return render_template("parade/history_detail.html", snap=snap)
 
 
 # --- Statuses (MC/course/other) ----------------------------------------------

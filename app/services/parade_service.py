@@ -8,12 +8,8 @@ from the live APPROVED requests + statuses + direct absences.
 from collections import namedtuple
 from datetime import timedelta
 
-from sqlalchemy.orm import joinedload
-
 from app.domain import parade as parade_domain
 from app.domain.types import ParadeVariant
-from app.extensions import db
-from app.models import ParadeSnapshot
 from app.services import presence_service
 
 # pairs: the presence_inputs PersonPresence list (routes read conflicts off it);
@@ -53,59 +49,3 @@ def build_doc(day, variant, *, cos_person=None) -> BuiltDoc:
     except parade_domain.ParadeImbalance as exc:
         return BuiltDoc(pairs=pairs, doc=None, text=None, imbalance=str(exc))
     return BuiltDoc(pairs=pairs, doc=doc, text=text, imbalance=None)
-
-
-def save_snapshot(day, variant, text, *, created_by_id) -> "ParadeSnapshot | None":
-    """Append `text` as the archive of `variant` for `day`, unless the newest
-    existing row for that (date, variant) already holds byte-identical text —
-    hitting Copy twice on an unchanged document must not grow the archive
-    (append-only, dedup-on-identical; owner default 2026-07-24). The caller
-    commits; this only stages the row. Returns the new row, or None when the
-    identical-text guard skipped the insert.
-    """
-    newest = (
-        db.session.query(ParadeSnapshot)
-        .filter(ParadeSnapshot.date == day, ParadeSnapshot.variant == variant)
-        .order_by(ParadeSnapshot.created_at.desc(), ParadeSnapshot.id.desc())
-        .first()
-    )
-    if newest is not None and newest.rendered_text == text:
-        return None
-    snap = ParadeSnapshot(
-        date=day, variant=variant, rendered_text=text, created_by_id=created_by_id
-    )
-    db.session.add(snap)
-    return snap
-
-
-def snapshots_for(day=None):
-    """Archived snapshots newest-first, optionally narrowed to one date. The
-    copier is eager-loaded because the history page prints their name per row
-    (N+1 rule: a relationship looped in a template is a query per row).
-    """
-    query = (
-        db.session.query(ParadeSnapshot)
-        .options(joinedload(ParadeSnapshot.created_by))
-        .order_by(
-            ParadeSnapshot.date.desc(),
-            ParadeSnapshot.created_at.desc(),
-            ParadeSnapshot.id.desc(),
-        )
-    )
-    if day is not None:
-        query = query.filter(ParadeSnapshot.date == day)
-    return query.all()
-
-
-def snapshots_by_date(day=None):
-    """`snapshots_for` folded into (date, rows) pairs, dates newest-first — the
-    shape the history page's day cards iterate. Rows arrive already sorted
-    date-desc, so same-date rows are contiguous and group in one pass.
-    """
-    groups = []
-    for snap in snapshots_for(day):
-        if not groups or groups[-1][0] != snap.date:
-            groups.append((snap.date, []))
-        groups[-1][1].append(snap)
-    return groups
-

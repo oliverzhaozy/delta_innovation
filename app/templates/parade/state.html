@@ -2,9 +2,8 @@
    Morning / COS message / Roll call are URL-backed tabs over this single
    template — `doc` picks the chrome, the document pipeline stays build_doc's.
    The pages are fixed to their operational date (morning/roll call = today,
-   COS = tomorrow); there is no day navigation — past states live in the
-   snapshot archive, not a date-nav walk.
-   The document is copy-only: the <pre> text is exactly what build_doc renders,
+   COS = tomorrow); there is no day navigation and no archive — the document is
+   always re-derived, so the <pre> text is exactly what build_doc renders now
    and the Copy button is the only action on it. #}
 {% extends "base.html" %}
 {% block title %}{{ {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
@@ -63,15 +62,7 @@
 <section class="card sheet">
   <div class="sheet-rule">
     <span>{{ doc_label }} — {{ day.strftime("%a %d %b %Y") }}</span>
-    {# Copy also archives a snapshot (P8.3): the data-snapshot-* attributes tell
-       app.js to POST /parade/snapshot after a successful copy. The server
-       re-renders the text from these — variant (and cos, on the COS page) —
-       so the archive is never the client's copy of the <pre>. #}
-    <button type="button" class="btn secondary" data-copy="#{{ pre_id }}"
-            data-snapshot-url="{{ url_for('parade.snapshot') }}"
-            data-snapshot-variant="{{ doc }}"
-            {% if doc == "cos" %}data-snapshot-cos="{{ cos_person.id }}"{% endif %}
-            data-csrf="{{ csrf_token() }}">Copy</button>
+    <button type="button" class="btn secondary" data-copy="#{{ pre_id }}">Copy</button>
   </div>
   <pre id="{{ pre_id }}" style="white-space:pre-wrap; margin:0">{{ text }}</pre>
 </section>

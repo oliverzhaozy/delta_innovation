@@ -18,20 +18,6 @@ document.addEventListener("click", (event) => {
     const original = button.textContent;
     button.textContent = "Copied ✓";
     setTimeout(() => (button.textContent = original), 1500);
-
-    // Archive what was just copied — parade pages only (they carry
-    // data-snapshot-url; the history detail's plain copy button does not, so
-    // copying a past state never re-archives). Fire-and-forget: the server
-    // re-renders and stores the text, and a failed archive must never break
-    // the copy the user asked for, so any error is swallowed.
-    const snapshotUrl = button.dataset.snapshotUrl;
-    if (snapshotUrl) {
-      const body = new FormData();
-      body.append("csrf_token", button.dataset.csrf);
-      body.append("variant", button.dataset.snapshotVariant);
-      if (button.dataset.snapshotCos) body.append("cos", button.dataset.snapshotCos);
-      fetch(snapshotUrl, { method: "POST", body }).catch(() => {});
-    }
   });
 });
 
