@@ -433,6 +433,13 @@ h2 {
 
 .sheet-rule .btn { width: auto; margin: 0; flex-shrink: 0; }
 
+.sheet-rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
 .sheet pre {
   padding: 1rem 1.1rem;
   font-family: var(--mono);
@@ -441,6 +448,115 @@ h2 {
   line-height: 1.5;
   color: var(--ink);
 }
+
+/* ---------- In-message drag recategorization (parade overrides) ----------
+   The keyer's drag surface IS the document: .sheet-live mirrors `.sheet pre`
+   typography exactly, its category blocks are drop zones, and each person's line
+   is draggable. One .sheet-line per printed line, one .sheet-section per document
+   section — the blank line between sections is the section margin, so the
+   interactive sheet reads as the same message the <pre> holds. Drop outlines
+   appear only mid-drag, so the resting page stays a plain message. */
+
+.sheet-live {
+  padding: 1rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.sheet-section + .sheet-section { margin-top: 1.5em; }
+
+.sheet-line.draggable {
+  cursor: grab;
+  border-radius: 4px;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
+}
+
+.sheet-line.draggable:hover { background: var(--accent-tint); }
+.sheet-line.draggable:active { cursor: grabbing; }
+
+.drag-active .drop-zone {
+  outline: 1px dashed var(--faint);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.drag-active .drop-zone.drop-hover {
+  outline: 1px solid var(--accent);
+  background: var(--accent-tint);
+}
+
+/* COS-only "drop here to remove" strip: no such block exists in the document,
+   so it only appears while a line is actually in flight. */
+.drop-zone--remove {
+  display: none;
+  margin-top: 1.5em;
+  padding: 0.45rem 0.6rem;
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drag-active .drop-zone--remove { display: block; }
+
+.moves-active {
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-tint);
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+}
+
+.moves-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0;
+}
+
+/* ---------- Modal (drag confirmation) ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(16, 24, 40, 0.45);
+}
+
+.modal-backdrop[hidden] { display: none; }
+
+.modal {
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.15rem 1.2rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+}
+
+.modal h2 { margin: 0 0 0.5rem; }
+.modal p { margin: 0 0 1rem; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.modal-actions .btn { width: auto; margin: 0; }
 
 .toollist { list-style: none; margin: 0; padding: 0; }
 

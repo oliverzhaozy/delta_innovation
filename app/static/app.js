@@ -21,6 +21,106 @@ document.addEventListener("click", (event) => {
   });
 });
 
+// In-message drag recategorization (P10.5). Delegated so it works on all three
+// parade pages. The client does NO count math: a drop only fills the hidden
+// #override-form (person id + target category) and submits it — the server
+// re-renders the whole document and the rebalanced numbers come back in the
+// response, which is the only source of truth. HTML5 drag is desktop-only by
+// design (decision D8): there is no touch fallback.
+let draggedLine = null;
+
+function dragSheet() {
+  return document.getElementById("sheet-live");
+}
+
+function dragConfirm() {
+  return document.getElementById("drag-confirm");
+}
+
+function submitOverride() {
+  const form = document.getElementById("override-form");
+  if (form) form.submit();
+}
+
+function closeDragConfirm() {
+  const modal = dragConfirm();
+  if (modal) modal.hidden = true;
+}
+
+document.addEventListener("dragstart", (event) => {
+  const line = event.target.closest("[data-drag-person]");
+  if (!line) return;
+  draggedLine = line;
+  event.dataTransfer.setData("text/plain", line.dataset.dragPerson);
+  event.dataTransfer.effectAllowed = "move";
+  const sheet = dragSheet();
+  if (sheet) sheet.classList.add("drag-active");
+});
+
+document.addEventListener("dragend", () => {
+  const sheet = dragSheet();
+  if (sheet) sheet.classList.remove("drag-active");
+  document.querySelectorAll(".drop-hover").forEach((zone) => {
+    zone.classList.remove("drop-hover");
+  });
+});
+
+document.addEventListener("dragover", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  event.preventDefault(); // a droppable target must cancel dragover
+  zone.classList.add("drop-hover");
+});
+
+document.addEventListener("dragleave", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  // Ignore leaves into a child of the same zone; only clear when truly out.
+  if (!zone.contains(event.relatedTarget)) zone.classList.remove("drop-hover");
+});
+
+document.addEventListener("drop", (event) => {
+  const zone = event.target.closest(".drop-zone");
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove("drop-hover");
+  const personId = event.dataTransfer.getData("text/plain");
+  const form = document.getElementById("override-form");
+  if (!personId || !form) return;
+  form.querySelector('input[name="person_id"]').value = personId;
+  form.querySelector('input[name="target"]').value = zone.dataset.dropCategory;
+  // A person whose line rests on keyed data (leave, MC, a course, a partial, an
+  // in-camp remark) asks before moving; a plain present/stay-out line does not.
+  const conflict = draggedLine ? draggedLine.dataset.conflict : "";
+  const modal = dragConfirm();
+  if (!conflict || !modal) {
+    submitOverride();
+    return;
+  }
+  modal.querySelector("[data-confirm-message]").textContent =
+    conflict + " Move to " + zone.dataset.dropTitle + " anyway?";
+  modal.hidden = false;
+  const ok = modal.querySelector("[data-confirm-ok]");
+  if (ok) ok.focus();
+});
+
+document.addEventListener("click", (event) => {
+  const modal = dragConfirm();
+  if (!modal || modal.hidden) return;
+  if (event.target.closest("[data-confirm-ok]")) {
+    submitOverride();
+    return;
+  }
+  // Cancel, or a click on the backdrop itself (never on the dialog inside it).
+  if (event.target.closest("[data-confirm-cancel]") || event.target === modal) {
+    closeDragConfirm();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeDragConfirm();
+});
+
 // Calendar layer toggles: each pill hides/shows its colour layer on the month
 // grid, persisted in localStorage so the choice survives month navigation.
 // Purely cosmetic — the server already omits ARCTIC chips for non-command users.

@@ -8,7 +8,7 @@ from app.blueprints.parade import bp
 from app.blueprints.parade.forms import FpBulkAddForm, StatusEntryForm
 from app.domain import participants, presence
 from app.domain.dates import today_sgt
-from app.domain.parade import parade_line
+from app.domain.parade import parade_line, sheet_sections
 from app.domain.types import (
     ALLOWED_OVERRIDE_TARGETS,
     DayPart,
@@ -125,6 +125,37 @@ def _conflict_lines(pairs):
     return lines
 
 
+def _sections_for(built):
+    """The structured sections the keyer's drag sheet iterates — None when the
+    engine refused the document (then the page shows the imbalance card and no
+    sheet at all). The very sections build_doc's `text` was joined from, so the
+    interactive rows and the copyable text can never disagree."""
+    return sheet_sections(built.doc) if built.doc is not None else None
+
+
+def _conflict_notes(pairs) -> dict:
+    """{person_id: one-sentence note} for every person whose parade line rests on
+    keyed or derived data — the winning absence, a row it shadowed, a PM partial,
+    or an in-camp annotation.
+
+    Decision D7: a drag on such a person raises the confirm modal, because moving
+    them contradicts something someone keyed; a plain present/stay-out person has
+    no note and moves without a prompt. The note is built from the SAME row
+    labels the conflicts panel prints, so the two can't describe a row differently.
+    """
+    notes = {}
+    for person, resolution in pairs:
+        rows = [resolution.row] if resolution.row is not None else []
+        rows.extend(resolution.conflicts)
+        rows.extend(resolution.partial_rows)
+        rows.extend(resolution.in_camp_rows)
+        if not rows:
+            continue
+        keyed = ", ".join(f"{_row_label(row)} ({_row_range(row)})" for row in rows)
+        notes[person.id] = f"{parade_line(person)} — {keyed} keyed."
+    return notes
+
+
 def _fp_rows(day):
     # Defined by shape (OTHER + in_camp + single-day + start==end==day), not a
     # hidden flag — a quick-add IS just a StatusEntry of this shape, so the
@@ -178,6 +209,8 @@ def morning():
         command_ids=command_ids,
         can_adjust=can_adjust,
         has_overrides=built.has_overrides,
+        sections=_sections_for(built),
+        conflict_notes=_conflict_notes(built.pairs),
     )
 
 
@@ -281,6 +314,8 @@ def cos_message():
         conflicts=conflicts,
         can_adjust=duty_service.can_key_parade_today(current_user),
         has_overrides=built.has_overrides,
+        sections=_sections_for(built),
+        conflict_notes=_conflict_notes(built.pairs),
     )
 
 
@@ -313,6 +348,8 @@ def roll_call():
         absent_holders=absent_holders,
         can_adjust=duty_service.can_key_parade_today(current_user),
         has_overrides=built.has_overrides,
+        sections=_sections_for(built),
+        conflict_notes=_conflict_notes(built.pairs),
     )
 
 

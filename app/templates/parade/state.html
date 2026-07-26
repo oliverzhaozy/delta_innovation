@@ -3,13 +3,31 @@
    template — `doc` picks the chrome, the document pipeline stays build_doc's.
    The pages are fixed to their operational date (morning/roll call = today,
    COS = tomorrow); there is no day navigation and no archive — the document is
-   always re-derived, so the <pre> text is exactly what build_doc renders now
-   and the Copy button is the only action on it. #}
+   always re-derived, so the <pre> text is exactly what build_doc renders now.
+
+   For a keyer the document ALSO renders as an interactive sheet (P10.5): the
+   same `sheet_sections` the <pre> text was joined from, laid out as drop zones
+   so a person's line can be dragged into another category. The <pre> stays in
+   the DOM (hidden) as the Copy button's source, so Copy always yields the exact
+   WhatsApp text and never the drag markup. #}
 {% extends "base.html" %}
 {% block title %}{{ {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call"}[doc] }}{% endblock %}
 
 {% set pre_id = {"morning": "paradetext", "cos": "costext", "roll_call": "rollcalltext"}[doc] %}
 {% set doc_label = {"morning": "Morning parade state", "cos": "COS message", "roll_call": "Roll call state"}[doc] %}
+{% set live = can_adjust and sections %}
+
+{# The badge + Reset pair. Rendered from two places (the sheet rule and the
+   imbalance card, D6), so it is a macro with everything it needs passed in. #}
+{% macro moves_control(variant_key, typed_cos) %}
+<span class="moves-active">Moves active</span>
+<form method="post" action="{{ url_for('parade.override_reset') }}" class="inline-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="variant" value="{{ variant_key }}">
+  {% if variant_key == "cos" %}<input type="hidden" name="cos_name" value="{{ typed_cos }}">{% endif %}
+  <button type="submit" class="linklike">Reset</button>
+</form>
+{% endmacro %}
 
 {% block content %}
 <div class="page-head">
@@ -54,15 +72,79 @@
 {% if imbalance %}
 <section class="card">
   <p class="error">Parade state out of balance — refusing to render; check keyed data</p>
+  {# D6: Reset lives OUTSIDE the healthy-render branch too, so a stored move that
+     unbalances the document can never lock the keyer out of undoing it. #}
+  {% if can_adjust and has_overrides %}
+  <p class="moves-line">{{ moves_control(doc, cos_name) }}</p>
+  {% endif %}
 </section>
 {% else %}
 <section class="card sheet">
   <div class="sheet-rule">
     <span>{{ doc_label }} — {{ day.strftime("%a %d %b %Y") }}</span>
-    <button type="button" class="btn secondary" data-copy="#{{ pre_id }}">Copy</button>
+    <span class="sheet-rule-actions">
+      {% if can_adjust and has_overrides %}{{ moves_control(doc, cos_name) }}{% endif %}
+      <button type="button" class="btn secondary" data-copy="#{{ pre_id }}">Copy</button>
+    </span>
   </div>
-  <pre id="{{ pre_id }}" style="white-space:pre-wrap; margin:0">{{ text }}</pre>
+  {% if live %}
+  <div class="sheet-live" id="sheet-live">
+    {% for section in sections %}
+    {% set lines = section.text.split("\n") %}
+    {% if section.key %}
+    <div class="sheet-section drop-zone" data-drop-category="{{ section.key }}" data-drop-title="{{ section.title }}">
+      <div class="sheet-line">{{ lines[0] }}</div>
+      {% for entry in section.entries %}
+      <div class="sheet-line draggable" draggable="true" data-drag-person="{{ entry.person_id }}"{% if conflict_notes.get(entry.person_id) %} data-conflict="{{ conflict_notes[entry.person_id] }}"{% endif %}>{{ entry.text }}</div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="sheet-section">
+      {% for line in lines %}<div class="sheet-line">{{ line }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% if doc == "cos" %}
+    {# COS-only (D4): Message 1 has no CURRENT STRENGTH block, so "present" there
+       means "nothing to report" — dropping a line here removes it. Page chrome,
+       deliberately NOT a sheet_sections section: the document has no such block
+       to render. Visible only mid-drag. #}
+    <div class="drop-zone drop-zone--remove" data-drop-category="current_strength" data-drop-title="Present">
+      Present — drop here to remove from the message
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <pre id="{{ pre_id }}"{% if live %} hidden{% endif %} style="white-space:pre-wrap; margin:0">{{ text }}</pre>
 </section>
+
+{% if live %}
+{# One hidden form the drop handler fills (person_id + target) and submits;
+   variant (and the typed COS name) pin which document the server re-renders.
+   The client does NO count math — the rebalanced numbers come back in the
+   response, which is the only source of truth. #}
+<form method="post" action="{{ url_for('parade.override') }}" id="override-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="variant" value="{{ doc }}">
+  {% if doc == "cos" %}<input type="hidden" name="cos_name" value="{{ cos_name }}">{% endif %}
+  <input type="hidden" name="person_id" value="">
+  <input type="hidden" name="target" value="">
+</form>
+
+{# Confirm-on-drag (D7): dropping someone whose line rests on keyed data asks
+   first. A custom dialog, not window.confirm — that one is unstylable and blocks
+   browser automation. #}
+<div class="modal-backdrop" id="drag-confirm" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="drag-confirm-title">
+    <h2 id="drag-confirm-title">Move against keyed data?</h2>
+    <p data-confirm-message></p>
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" data-confirm-cancel>Cancel</button>
+      <button type="button" class="btn" data-confirm-ok>Move anyway</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 {% if doc == "morning" and fp_form %}
