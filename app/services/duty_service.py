@@ -56,13 +56,17 @@ def availability_for_month(month: str):
     people = event_service.active_roster()
     pools = {duty: eligibility.pool(duty, people) for duty in Duty}
 
-    leaves, statuses = presence_service.fetch_absence_rows(first, last)
+    leaves, statuses, courses = presence_service.fetch_absence_rows(first, last)
     absence_rows = defaultdict(list)
     for row in leaves:
         absence_rows[row.person_id].append(row)
     for row in statuses:
         if not row.in_camp:
             absence_rows[row.person_id].append(row)
+    # A course cover is out of camp by construction — it has no in_camp flag to
+    # test, and someone on course cannot hold a duty.
+    for row in courses:
+        absence_rows[row.person_id].append(row)
 
     overnight = defaultdict(list)
     window_start = datetime.combine(first, time.min)
@@ -313,23 +317,25 @@ def can_key_parade_today(person) -> bool:
 
 def _absent_assignment_ids(rows, first, last):
     """Assignment ids whose CONFIRMED holder resolves ABSENT on the duty date,
-    derived from the shared fetch (A8): an MC and approved leave flag the same
-    way, because the predicate IS presence, not a leave-table join. Never
-    stored — recomputed at render."""
+    derived from the shared fetch (A8): an MC, a course, and approved leave all
+    flag the same way, because the predicate IS presence, not a leave-table join.
+    Never stored — recomputed at render."""
     confirmed = [r for r in rows if r.state is DutyState.CONFIRMED]
     if not confirmed:
         return frozenset()
-    leaves, statuses = presence_service.fetch_absence_rows(first, last)
-    by_person = defaultdict(lambda: ([], []))
+    leaves, statuses, courses = presence_service.fetch_absence_rows(first, last)
+    by_person = defaultdict(lambda: ([], [], []))
     for row in leaves:
         by_person[row.person_id][0].append(row)
     for row in statuses:
         by_person[row.person_id][1].append(row)
+    for row in courses:
+        by_person[row.person_id][2].append(row)
     flagged = set()
     for r in confirmed:
-        p_leaves, p_statuses = by_person.get(r.person_id, ((), ()))
+        p_leaves, p_statuses, p_courses = by_person.get(r.person_id, ((), (), ()))
         resolution = presence.resolve(
-            r.person, r.date, leaves=p_leaves, statuses=p_statuses,
+            r.person, r.date, leaves=p_leaves, statuses=p_statuses, courses=p_courses,
         )
         if resolution.state is presence.PresenceState.ABSENT:
             flagged.add(r.id)

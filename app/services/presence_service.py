@@ -2,8 +2,8 @@
 leave panel, and (from P3a.6) every parade document read.
 
 There is exactly ONE fetch of the presence sources (APPROVED leave + COS-keyed
-statuses). `absences_between` normalises it to away-only `AbsenceRow`s (in-camp
-statuses dropped — in camp is not away);
+statuses + TP-calendar course covers). `absences_between` normalises it to
+away-only `AbsenceRow`s (in-camp statuses dropped — in camp is not away);
 `presence_inputs` resolves every active person through the pure precedence
 engine (in-camp statuses kept, as annotations). Two views of one fetch, never
 two fetches with different filters — a second derivation is exactly the drift
@@ -12,13 +12,24 @@ bug this app exists to kill. Semantics (precedence, day-part) live in
 """
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 from typing import NamedTuple
 
 from app.domain import parade, presence
 from app.domain.dates import iter_days
-from app.domain.types import DayPart, DutyState, RequestStatus, Service
+from app.domain.events import event_days
+from app.domain.types import (
+    Calendar,
+    CourseAbsenceType,
+    DayPart,
+    DutyState,
+    RequestStatus,
+    Service,
+    TpLabel,
+)
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, Person, StatusEntry
+from app.models import DutyAssignment, Event, LeaveRequest, Person, StatusEntry
+from app.services import event_service
 
 
 @dataclass(frozen=True)
@@ -39,21 +50,76 @@ class AbsenceRow:
     person_id: int
     label: str
     day_part: DayPart
-    source: str  # "leave" | "status"
+    source: str  # "leave" | "status" | "course"
     in_camp: bool
     remarks: object = None
+
+
+# A course absence has no table: this adapter gives a TP course event × one of its
+# participants the same duck-typed shape every other absence row has, so the pure
+# engine and _absence_row need no course-specific branch beyond the kind marker.
+# `id` is the source Event's id (identifies the row for the away surfaces),
+# `day_part` is always FULL, and `remarks` carries the event title so the away
+# panel reads "On course — Sig Course".
+_CourseCover = namedtuple(
+    "CourseCover", "id person person_id type start_date end_date day_part remarks"
+)
+
+
+def _course_covers(start_date, end_date):
+    """One `_CourseCover` per (TP course event × resolved participant) overlapping
+    [start_date, end_date], ordered platoon NULLS FIRST → display_name to match
+    the SQL fetches this sits beside.
+
+    The date span of each event comes from `event_days` (the ONE owner of the
+    times-ignored rule), never from `.date()` here. The SQL filter uses a
+    datetime envelope over whole days so an event whose clock times fall outside
+    the window but whose DATES overlap it is still a candidate.
+    """
+    envelope_start = datetime.combine(start_date, time.min)
+    envelope_end = datetime.combine(end_date + timedelta(days=1), time.min)
+    events = (
+        db.session.query(Event)
+        .filter(
+            Event.calendar == Calendar.TP,
+            Event.label == TpLabel.ON_COURSE.value,
+            Event.start_dt < envelope_end,
+            Event.end_dt > envelope_start,
+        )
+        .order_by(Event.start_dt, Event.id)
+        .all()
+    )
+    covers = []
+    for event in events:
+        first, last = event_days(event.start_dt, event.end_dt)
+        for person in event_service.resolve_participants(event):
+            covers.append(
+                _CourseCover(
+                    id=event.id,
+                    person=person,
+                    person_id=person.id,
+                    type=CourseAbsenceType.COURSE,
+                    start_date=first,
+                    end_date=last,
+                    day_part=DayPart.FULL,
+                    remarks=event.title,
+                )
+            )
+    covers.sort(key=lambda c: (c.person.platoon or 0, c.person.display_name))
+    return covers
 
 
 def fetch_absence_rows(start_date, end_date):
     """The ONE query layer, now the shared public fetch that `absences_between`,
     `presence_inputs`, and duty availability (P4.4) all read: APPROVED leave +
-    statuses that overlap [start_date, end_date] for ACTIVE people, each ordered
-    platoon NULLS FIRST → display_name. Returns the ORIGINAL model rows as two
+    statuses + TP-calendar course covers that overlap [start_date, end_date] for
+    ACTIVE people, each ordered platoon NULLS FIRST → display_name. Returns the
+    leave/status ORIGINAL model rows plus the synthesized course covers as three
     lists.
 
-    Extracting the leave/status filter here (written once) is the whole point of
-    the task: `absences_between` and `presence_inputs` are two views of THIS
-    fetch, so they can never drift on which rows count.
+    Extracting the leave/status/course filter here (written once) is the whole
+    point of the task: `absences_between` and `presence_inputs` are two views of
+    THIS fetch, so they can never drift on which rows count.
     """
 
     def _overlapping(model, *extra):
@@ -72,7 +138,10 @@ def fetch_absence_rows(start_date, end_date):
 
     leaves = _overlapping(LeaveRequest, LeaveRequest.status == RequestStatus.APPROVED)
     statuses = _overlapping(StatusEntry)
-    return leaves, statuses
+    # resolve_participants already restricts to the active roster, so course
+    # covers carry the same active-only filter the two queries above apply.
+    courses = _course_covers(start_date, end_date)
+    return leaves, statuses, courses
 
 
 def _absence_row(row, source):
@@ -81,6 +150,8 @@ def _absence_row(row, source):
     here (that lives in app.domain.presence)."""
     if source == "leave":
         label, in_camp = row.type.value, False
+    elif source == "course":
+        label, in_camp = row.type.label, False
     else:  # status
         label, in_camp = row.type.label, row.in_camp
     return AbsenceRow(
@@ -96,19 +167,19 @@ def _absence_row(row, source):
 
 
 def absences_between(start_date, end_date):
-    """Away rows (leave + out-of-camp status) overlapping [start_date, end_date]
-    for active people, bucketed per day.
+    """Away rows (leave + out-of-camp status + course) overlapping
+    [start_date, end_date] for active people, bucketed per day.
 
     In-camp statuses are EXCLUDED — in camp is not away; they surface only in
     parade documents (via `presence_inputs`). All day-parts appear (the board
     shows a PM as a partial); the away-counting surfaces (the leave panel)
-    dedupe on person_id and so naturally include MC'd people. The home month grid
-    does NOT read this — it reads the leave-only `nsf_leave_between` layer, so MC
-    never appears there.
+    dedupe on person_id and so naturally include MC'd and on-course people. The
+    home month grid does NOT read this — it reads the leave-only
+    `nsf_leave_between` layer, so MC/course never appear there.
     """
-    leaves, statuses = fetch_absence_rows(start_date, end_date)
+    leaves, statuses, courses = fetch_absence_rows(start_date, end_date)
     by_day = {d: [] for d in iter_days(start_date, end_date)}
-    for source, rows in (("leave", leaves), ("status", statuses)):
+    for source, rows in (("leave", leaves), ("status", statuses), ("course", courses)):
         for row in rows:
             if source == "status" and row.in_camp:
                 continue  # in camp ≠ away
@@ -120,7 +191,7 @@ def absences_between(start_date, end_date):
                 by_day[d].append(away)
     # Re-order each day platoon NULLS FIRST → display_name across the merged
     # sources (each was ordered alone). Stable sort, so a person's overlapping
-    # rows keep fetch order (leave, then status).
+    # rows keep fetch order (leave, then status, then course).
     for rows in by_day.values():
         rows.sort(key=lambda a: (a.person.platoon or 0, a.person.display_name))
     return by_day
@@ -132,8 +203,9 @@ def nsf_leave_between(start_date, end_date):
 
     A filtered VIEW of `absences_between`, never a second query — same single
     derivation. Keeps only leave-sourced rows (source == "leave" is exactly the
-    APPROVED LeaveRequest rows; MC/other statuses are another layer) whose person
-    is NSF. Each day's list stays in the parent's platoon → name order.
+    APPROVED LeaveRequest rows; MC/other statuses and course covers are other
+    layers) whose person is NSF. Each day's list stays in the parent's platoon →
+    name order.
     """
     return {
         day: [r for r in rows if r.source == "leave" and r.person.service is Service.NSF]
@@ -181,7 +253,7 @@ def presence_inputs(day, *, duty_day=None):
     D−1→D, so its build passes duty_day=D−1 but the duty must count ON day D.
     Default None means the duty of `day` itself (morning parade, COS message).
     """
-    leaves, statuses = fetch_absence_rows(day, day)
+    leaves, statuses, courses = fetch_absence_rows(day, day)
     duty_rows = (
         db.session.query(DutyAssignment)
         .filter(
@@ -193,11 +265,13 @@ def presence_inputs(day, *, duty_day=None):
     by_duty = defaultdict(list)
     for row in duty_rows:
         by_duty[row.person_id].append(_DutyCover(start_date=day, end_date=day))
-    by_leave, by_status = defaultdict(list), defaultdict(list)
+    by_leave, by_status, by_course = defaultdict(list), defaultdict(list), defaultdict(list)
     for row in leaves:
         by_leave[row.person_id].append(row)
     for row in statuses:
         by_status[row.person_id].append(row)
+    for row in courses:
+        by_course[row.person_id].append(row)
 
     people = db.session.query(Person).filter_by(is_active=True).all()
     people.sort(key=parade.parade_sort_key)  # parade display order (P3a.3)
@@ -209,6 +283,7 @@ def presence_inputs(day, *, duty_day=None):
                 day,
                 leaves=by_leave.get(person.id, ()),
                 statuses=by_status.get(person.id, ()),
+                courses=by_course.get(person.id, ()),
                 duties=by_duty.get(person.id, ()),
             ),
         )

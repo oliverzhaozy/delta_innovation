@@ -29,3 +29,15 @@ def all_day_bounds(start_date, end_date):
     `.date()` — lands the event on exactly [start_date, end_date] and no day after.
     """
     return datetime.combine(start_date, time.min), datetime.combine(end_date, time.max)
+
+
+def event_days(start_dt, end_dt):
+    """(start_date, end_date) — the inclusive span of DATES an event covers.
+
+    THE single owner of the times-ignored rule (owner decision 3, 2026-07-26): an
+    event's clock times never narrow its day span, so a 23:00→01:00 event covers
+    BOTH calendar days in full. Every consumer calls this instead of reaching for
+    `.date()` itself, so a course cover and a course chip can never disagree on
+    which days are covered.
+    """
+    return start_dt.date(), end_dt.date()

@@ -65,5 +65,22 @@ def test_every_label_slug_is_unique_across_both_calendars():
 def test_slug_is_css_safe_and_calendar_prefixed():
     assert TpLabel.MPT_PMCS_EAS.slug == "tp-mpt-pmcs-eas"
     assert ArcticLabel.OPS_OPS_RELATED.slug == "arctic-ops-ops-related"
+    assert TpLabel.ON_COURSE.slug == "tp-on-course"  # keys .ev-tp-on-course
     for slug in [m.slug for m in TpLabel] + [m.slug for m in ArcticLabel]:
         assert slug.replace("-", "").isalnum()
+
+
+# ---------- value distinctness across the two calendars ----------
+
+def test_every_label_value_is_distinct_across_both_calendars():
+    """A stored label string must map to exactly one calendar: `is_valid_label`
+    accepts a value per calendar, the event form renders ONE <select> over both
+    enums, and its JS maps value -> owning calendar. A value in both enums would
+    make all three ambiguous. This is why TpLabel.ON_COURSE is "Course" and not
+    "On Course" — ArcticLabel.ON_COURSE already owns that string."""
+    values = [m.value for m in TpLabel] + [m.value for m in ArcticLabel]
+    assert len(values) == len(set(values))
+    assert TpLabel.ON_COURSE.value == "Course"
+    assert ArcticLabel.ON_COURSE.value == "On Course"
+    assert not is_valid_label(Calendar.ARCTIC, TpLabel.ON_COURSE.value)
+    assert not is_valid_label(Calendar.TP, ArcticLabel.ON_COURSE.value)

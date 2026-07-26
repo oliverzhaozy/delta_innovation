@@ -154,6 +154,20 @@ STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
 }
 
 
+class CourseAbsenceType(str, enum.Enum):
+    """The kind marker on a synthesized course-cover row (P9.4). A course absence
+    has no table of its own — it is derived from TP calendar events labelled
+    `TpLabel.ON_COURSE` — so this enum exists purely so `_absent_category` can
+    discriminate the row by the class of its `.type`, exactly as it does for
+    LeaveType and StatusType. One member: there is one course category."""
+
+    COURSE = "COURSE"
+
+    @property
+    def label(self) -> str:
+        return {"COURSE": "On course"}[self.value]
+
+
 class ParadeVariant(str, enum.Enum):
     """Which of the 3 WhatsApp parade documents the build pipeline renders.
     Distinct from the lowercase "morning"/"roll_call" strings domain.parade's
@@ -267,6 +281,13 @@ class TpLabel(str, enum.Enum):
     IPPT = "IPPT"
     OPS = "Ops"
     HOLIDAYS = "Holidays"
+    # The ON COURSE source for every parade document (P9.4): every participant of
+    # a TP event carrying this label is out of camp for every date it covers. The
+    # value is deliberately "Course", NOT "On Course" — ArcticLabel.ON_COURSE owns
+    # that string, and label values must stay distinct across the two enums (the
+    # comment above; the event form's single label <select> and its value→calendar
+    # map both depend on it). The parade block still prints "ON COURSE".
+    ON_COURSE = "Course"
     OTHERS = "Others"
 
     @property

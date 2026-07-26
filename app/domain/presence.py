@@ -6,23 +6,28 @@ day-part semantics are the semantic core of the phase.
 The caller pre-filters and passes rows for a SINGLE person: `leaves` are
 APPROVED leave rows only (this module never sees a status field — the approval
 decision is upstream in the leave flow), `statuses` are COS-keyed exceptions
-(MC/other), and `duties` are CONFIRMED duty covers. Rows are duck-typed: every
-row exposes `.start_date`, `.end_date`, `.day_part`; status rows additionally
-expose `.in_camp`. The engine never copies a row — it returns the caller's own
-objects so downstream rendering keeps every field.
+(MC/other), `courses` are covers derived from TP calendar course events, and
+`duties` are CONFIRMED duty covers. Rows are duck-typed: every row exposes
+`.start_date`, `.end_date`, `.day_part`; status rows additionally expose
+`.in_camp`. The engine never copies a row — it returns the caller's own objects
+so downstream rendering keeps every field.
 
 Regulars are NOT tracked here (owner directive 2026-07-26): their off/leave
 lives in the external ARCTIC FOE system, so a regular appears in current
-strength unless a keyed status says otherwise.
+strength unless a keyed status or a course says otherwise.
 
 Precedence (highest wins), matching TECH_PLAN's parade precedence rule:
 
     deactivated
       > approved leave
       > out-of-camp status                (MC / other…)
+      > course                            (derived from the TP calendar)
       > duty
       > stay-out                          (stay_out flag OR REGULAR service)
       > present
+
+A keyed status outranks a derived course: the COS keyed the MC deliberately, the
+course cover is inferred. The loser still lands in `conflicts`.
 
 Only FULL and AM absences take the person off the parade for the day
 (`absent_for_day`, decision (i)); a PM absence leaves them PRESENT but is
@@ -86,13 +91,13 @@ def absent_for_day(day_part) -> bool:
     return day_part in (DayPart.FULL, DayPart.AM)
 
 
-def resolve(person, day, *, leaves=(), statuses=(), duties=()) -> Resolution:
+def resolve(person, day, *, leaves=(), statuses=(), courses=(), duties=()) -> Resolution:
     """Resolve `person`'s presence for `day` from the pre-filtered rows.
 
     See the module docstring for the input contract and the precedence rule.
     """
-    # Absent-making rows in precedence order — leave, then out-of-camp status —
-    # so the first is the winner and the rest are conflicts.
+    # Absent-making rows in precedence order — leave, then out-of-camp status,
+    # then course — so the first is the winner and the rest are conflicts.
     absent_making = []
     partial_rows = []
     in_camp_rows = []
@@ -121,6 +126,14 @@ def resolve(person, day, *, leaves=(), statuses=(), duties=()) -> Resolution:
         else:
             partial_rows.append(row)
     absent_making.extend(out_of_camp_absent)
+
+    # Course covers are always out of camp for the whole day (owner decision 3),
+    # so no day_part branch: covering at all means absent-making. They rank last
+    # among the absent-makers — a keyed status is a deliberate act, a course cover
+    # is derived — and a loser still surfaces in `conflicts`.
+    for row in courses:
+        if covers(row, day):
+            absent_making.append(row)
 
     covering_duty = any(covers(row, day) for row in duties)
 
