@@ -269,25 +269,51 @@ def morning_fp_new():
     return redirect(url_for("parade.morning"))
 
 
-@bp.route("/morning/fp/<int:entry_id>/remove", methods=["POST"])
+@bp.route("/morning/fp/remove", methods=["POST"])
 @require(duty_service.can_key_parade_today)
-def morning_fp_remove(entry_id):
+def morning_fp_remove():
+    """Bulk remove, symmetric to the bulk add: tick the rows, one action.
+
+    Ids that don't name a same-shaped quick-add row for the page the keyer is
+    actually viewing are SKIPPED and counted, not 404 — a tampered or stale id
+    in a batch must not throw away the valid removals alongside it. The shape
+    guard itself is unchanged: this is a same-morning correction of a
+    seconds-old slip, never general status deletion.
+    """
     day = today_sgt()
-    row = db.session.get(StatusEntry, entry_id)
-    # Guard: only a same-shaped quick-add row for the page the keyer is
-    # actually viewing may be hard-deleted here — this is a same-morning
-    # correction of a seconds-old slip, not general status deletion.
-    is_quick_add = (
-        row is not None
-        and row.type is StatusType.OTHER
-        and row.in_camp
-        and row.start_date == row.end_date == day
-    )
-    if not is_quick_add:
-        abort(404)
-    db.session.delete(row)
-    db.session.commit()
-    flash("Removed.", "success")
+    raw_ids = request.form.getlist("entry_ids")
+    if not raw_ids:
+        flash("Select at least one entry.", "error")
+        return redirect(url_for("parade.morning"))
+
+    ids = []
+    for raw in raw_ids:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value not in ids:
+            ids.append(value)
+
+    removed = 0
+    for entry_id in ids:
+        row = db.session.get(StatusEntry, entry_id)
+        is_quick_add = (
+            row is not None
+            and row.type is StatusType.OTHER
+            and row.in_camp
+            and row.start_date == row.end_date == day
+        )
+        if not is_quick_add:
+            continue
+        db.session.delete(row)
+        removed += 1
+    db.session.commit()  # the whole batch lands or fails as one transaction
+    skipped = len(raw_ids) - removed
+    message = f"Removed {removed}."
+    if skipped:
+        message += f" Skipped {skipped}."
+    flash(message, "success")
     return redirect(url_for("parade.morning"))
 
 

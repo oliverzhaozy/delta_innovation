@@ -621,6 +621,10 @@ textarea:focus-visible {
 
 .check label { margin: 0; font-weight: 500; }
 
+/* Bulk-remove rows (parade FP list): the whole row IS the checkbox's label, so
+   it takes .check's layout instead of the stacked form-label defaults. */
+.toollist label.check { margin: 0; font-size: 0.95rem; font-weight: 500; }
+
 input[type="checkbox"] {
   width: 1.05rem;
   height: 1.05rem;

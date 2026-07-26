@@ -164,17 +164,23 @@
   </form>
 
   {% if fp_rows %}
-  <ul class="toollist" style="margin-top:1rem">
-    {% for row in fp_rows %}
-    <li>
-      <span>{{ row.person.rank.value }} {{ row.person.display_name }} ({{ row.remarks }})</span>
-      <form method="post" action="{{ url_for('parade.morning_fp_remove', entry_id=row.id) }}" class="inline-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="linklike">Remove</button>
-      </form>
-    </li>
-    {% endfor %}
-  </ul>
+  {# Bulk remove (P10.6), symmetric to the bulk add above: tick rows, one
+     action. A SIBLING form, never nested inside the add form — the page must
+     keep exactly one form[data-people-picker] for the picker script. #}
+  <form method="post" action="{{ url_for('parade.morning_fp_remove') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <ul class="toollist" style="margin-top:1rem">
+      {% for row in fp_rows %}
+      <li>
+        <label class="check">
+          <input type="checkbox" name="entry_ids" value="{{ row.id }}">
+          <span>{{ row.person.rank.value }} {{ row.person.display_name }} ({{ row.remarks }})</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    <button type="submit" class="btn secondary">Remove selected</button>
+  </form>
   {% endif %}
 </section>
 {% endif %}

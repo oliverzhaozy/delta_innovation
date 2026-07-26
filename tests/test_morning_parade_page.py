@@ -190,42 +190,75 @@ def test_bulk_add_empty_selection_creates_nothing(app, client, make_person):
         assert db.session.query(StatusEntry).count() == 0
 
 
-# --- done-criterion 3: remove round-trips; guarded against non-quick-add rows --
+# --- done-criterion 3: bulk remove round-trips; non-quick-add rows survive ----
 
-def test_remove_quick_add_row_restores_current_strength(app, client, make_person):
+def test_remove_selected_rows_restores_current_strength(app, client, make_person):
     make_person(username="ps_keyer2", appointment=Appointment.PS)
     make_person(username="target2", display_name="Wong Kai", rank=Rank.PTE, platoon=1)
-    entry_id = plant_status(app, "target2", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
+    make_person(username="target2b", display_name="Lim Boon", rank=Rank.PTE, platoon=1)
+    first = plant_status(app, "target2", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
+    second = plant_status(app, "target2b", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     login(client, "ps_keyer2")
 
     resp = client.get("/parade/morning")
     assert b"PTE WONG KAI (BDO)" in resp.data
+    assert b"PTE LIM BOON (BDO)" in resp.data
+    # The remove form is a SIBLING of the add form, never nested inside it —
+    # nesting would break the picker script's one-form hook.
+    assert resp.data.count(b"data-people-picker") == 1
+    assert resp.data.count(b'action="/parade/morning/fp/remove"') == 1
 
     remove_resp = client.post(
-        f"/parade/morning/fp/{entry_id}/remove",
+        "/parade/morning/fp/remove",
+        data={"entry_ids": [str(first), str(second)]},
         follow_redirects=True,
     )
     assert remove_resp.status_code == 200
+    assert b"Removed 2." in remove_resp.data
     assert b"WONG KAI (BDO)" not in remove_resp.data
-    assert b"WONG KAI" in remove_resp.data  # back under CURRENT STRENGTH
+    assert b"LIM BOON (BDO)" not in remove_resp.data
+    # Both are back under CURRENT STRENGTH.
+    assert b"WONG KAI" in remove_resp.data
+    assert b"LIM BOON" in remove_resp.data
     with app.app_context():
         assert db.session.query(StatusEntry).count() == 0
 
 
-def test_remove_on_non_quick_add_row_404s_and_leaves_row_untouched(app, client, make_person):
+def test_mixed_batch_skips_non_quick_add_rows_and_reports_the_count(app, client, make_person):
+    # The shape guard survives the move to bulk: a multiday MC id smuggled into
+    # the batch is skipped and counted, while the real quick-add still goes.
     make_person(username="ps_keyer3", appointment=Appointment.PS)
     make_person(username="mc_target", display_name="Multi Day Mc")
-    entry_id = plant_multiday_status(app, "mc_target", type_=StatusType.MC)
+    make_person(username="fp_target", display_name="Quick Add", rank=Rank.PTE, platoon=1)
+    mc_id = plant_multiday_status(app, "mc_target", type_=StatusType.MC)
+    fp_id = plant_status(app, "fp_target", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     login(client, "ps_keyer3")
 
     resp = client.post(
-        f"/parade/morning/fp/{entry_id}/remove",
+        "/parade/morning/fp/remove",
+        data={"entry_ids": [str(fp_id), str(mc_id)]},
+        follow_redirects=True,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert b"Removed 1. Skipped 1." in resp.data
     with app.app_context():
-        row = db.session.get(StatusEntry, entry_id)
+        row = db.session.get(StatusEntry, mc_id)
         assert row is not None
         assert row.type is StatusType.MC
+        assert db.session.get(StatusEntry, fp_id) is None
+
+
+def test_remove_with_nothing_selected_is_an_error_and_writes_nothing(app, client, make_person):
+    make_person(username="ps_keyer3b", appointment=Appointment.PS)
+    make_person(username="target3b", display_name="Stays Put", rank=Rank.PTE, platoon=1)
+    entry_id = plant_status(app, "target3b", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
+    login(client, "ps_keyer3b")
+
+    resp = client.post("/parade/morning/fp/remove", data={}, follow_redirects=True)
+    assert resp.status_code == 200
+    assert b"Select at least one entry." in resp.data
+    with app.app_context():
+        assert db.session.get(StatusEntry, entry_id) is not None
 
 
 # --- done-criterion 4: non-keyer sees the doc but no forms; mutations 403 --
@@ -250,7 +283,8 @@ def test_non_keyer_sees_document_but_no_forms_and_403_on_mutations(app, client, 
 
     entry_id = plant_status(app, "target3", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
     remove_resp = client.post(
-        f"/parade/morning/fp/{entry_id}/remove",
+        "/parade/morning/fp/remove",
+        data={"entry_ids": [str(entry_id)]},
     )
     assert remove_resp.status_code == 403
 
