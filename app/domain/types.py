@@ -182,38 +182,6 @@ class ParadeVariant(str, enum.Enum):
         }[self.value]
 
 
-class OverrideCategory(str, enum.Enum):
-    """A drag-and-drop parade recategorization target (P8). Each VALUE is
-    EXACTLY a ParadeDoc/CosDoc category field name, so `.value` indexes the doc
-    tuple directly — there is no second field→category mapping that could drift
-    out of step with the renderer's tuples."""
-
-    CURRENT_STRENGTH = "current_strength"
-    OTHERS_IN_CAMP = "others_in_camp"
-    STAY_OUT = "stay_out"
-    LEAVE = "leave"
-    OFF_OIL = "off_oil"
-    ON_COURSE = "on_course"
-    MC = "mc"
-    OTHERS = "others"
-
-
-# Which categories a drag may target on each document, mirroring the categories
-# that variant actually renders: morning has no STAY OUT (it dissolves into
-# CURRENT STRENGTH); roll call has no OTHERS IN CAMP (always a literal 0); the
-# COS request has neither present-in-camp category. A route validates the posted
-# target against this set before writing an override; apply_overrides treats a
-# disallowed target as a wiring bug and raises.
-ALLOWED_OVERRIDE_TARGETS: dict = {
-    ParadeVariant.MORNING: frozenset(OverrideCategory) - {OverrideCategory.STAY_OUT},
-    ParadeVariant.ROLL_CALL: frozenset(OverrideCategory) - {OverrideCategory.OTHERS_IN_CAMP},
-    ParadeVariant.COS_MESSAGE: (
-        frozenset(OverrideCategory)
-        - {OverrideCategory.CURRENT_STRENGTH, OverrideCategory.OTHERS_IN_CAMP}
-    ),
-}
-
-
 class RoSection(str, enum.Enum):
     """The six standing 'Matters' sections of the RO, in document order
     (docs/RO_FORMATS.md decision (o)). The format fixes the order, so member

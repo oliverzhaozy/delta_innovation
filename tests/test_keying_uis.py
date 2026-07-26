@@ -240,9 +240,9 @@ def test_in_camp_default_resolves_per_type_and_morning_respects_it(app, client, 
         assert rows["c4_mc_default"] is False
 
     morning = client.get("/parade/morning").data
-    # Split the parade DOCUMENT (the <pre>), not the whole page: the keyer's
-    # drag grid below echoes the same names in its category drop-zones, so a
-    # present-in-camp person would otherwise leak into the "absent" half.
+    # Split the parade DOCUMENT (the <pre>), not the whole page: page chrome
+    # outside the document can echo the same names, so a present-in-camp person
+    # would otherwise leak into the "absent" half.
     doc_text = morning.split(b'id="paradetext"')[1].split(b">", 1)[1].split(b"</pre>")[0]
     present, absent = (
         doc_text.split(b"NOT PRESENT IN CAMP")[0],
