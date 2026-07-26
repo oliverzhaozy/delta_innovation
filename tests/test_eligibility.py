@@ -23,8 +23,11 @@ from app.domain.types import Appointment, DayPart, Duty, Rank
 DAY = date(2026, 8, 5)  # a Wednesday
 
 
-def person(rank, appointment, *, is_active=True, id=1):
-    return SimpleNamespace(id=id, rank=rank, appointment=appointment, is_active=is_active)
+def person(rank, appointment, *, is_active=True, duty_exempt=False, id=1):
+    return SimpleNamespace(
+        id=id, rank=rank, appointment=appointment,
+        is_active=is_active, duty_exempt=duty_exempt,
+    )
 
 
 def absence(start=DAY, end=DAY, day_part=DayPart.FULL):
@@ -78,6 +81,16 @@ def test_pool_filters_by_rule_and_activity():
     d = person(Rank.TWO_SG, Appointment.PS, id=4)                  # CDOS material
     assert pool(Duty.COS, [a, b, c, d]) == [a, b]
     assert pool(Duty.CDOS, [a, b, c, d]) == [d]
+
+
+def test_pool_excludes_duty_exempt_but_the_rules_still_pass_them():
+    # The carve-out is pool-level data (owner 2026-07-24, the 3WO P2IC case):
+    # an exempt person still SATISFIES the law, so only pool() drops them.
+    exempt_p2ic = person(Rank.THREE_WO, Appointment.P2IC, duty_exempt=True, id=1)
+    exempt_opr = person(Rank.CPL, Appointment.OPR, duty_exempt=True, id=2)
+    assert eligible_cdos(exempt_p2ic) and eligible_cos(exempt_opr)
+    assert pool(Duty.CDOS, [exempt_p2ic]) == []
+    assert pool(Duty.COS, [exempt_opr]) == []
 
 
 # --- TU slot mapping (P6 consumer; the TU Det Comd trap) -----------------------

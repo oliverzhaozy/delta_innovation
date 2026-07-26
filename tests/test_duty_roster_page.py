@@ -190,6 +190,28 @@ def test_assign_ineligible_is_400(app, client, make_person):
         assert db.session.query(DutyAssignment).count() == 0
 
 
+def test_duty_exempt_person_out_of_pool_and_assign_is_400(app, client, make_person):
+    # Owner 2026-07-24: duty_exempt carves a person out of the pools AND out
+    # of manual assignment — still rank/appointment-eligible, so this pins the
+    # flag, not the law.
+    make_full_cast(make_person)
+    make_person(username="p2ic_x", rank=Rank.THREE_WO, appointment=Appointment.P2IC,
+                platoon=None, duty_exempt=True, display_name="Exempt Ptwoic")
+    login(client, "ps2")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "CDO/S pool (1)" in html  # ps2 alone — the exempt P2IC is carved out
+    assert "Exempt Ptwoic" not in html
+
+    resp = client.post(
+        "/duty/roster/assign",
+        data=assign_form("p2ic_x", app, date(2026, 8, 5), duty=Duty.CDOS),
+    )
+    assert resp.status_code == 400
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+
+
 def test_assign_unavailable_requires_confirm(app, client, make_person):
     make_full_cast(make_person)
     plant_leave(app, "det1", date(2026, 8, 5))

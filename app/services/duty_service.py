@@ -215,6 +215,11 @@ def assign(day, duty, person, *, actor, override_availability):
         raise IneligibleAssignment(
             f"{person.display_name} can never hold {duty.label} — rank/appointment rule."
         )
+    if person.duty_exempt:
+        raise IneligibleAssignment(
+            f"{person.display_name} is exempt from duty — clear the exemption "
+            "in Admin → People first."
+        )
     reasons = _availability_reasons(person, day, duty)
     if reasons and not override_availability:
         raise NeedsAvailabilityConfirm(reasons)

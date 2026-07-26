@@ -60,6 +60,8 @@ def register_cli(app):
                         platoon=int(col("platoon")) if col("platoon") else None,
                         service=Service(col("service")),
                         stay_out=col("stay_out") == "1",
+                        # Optional column, like is_admin: absent -> not exempt.
+                        duty_exempt=col("duty_exempt") == "1",
                         is_admin=col("is_admin") == "1",
                     )
                 except ValueError as exc:

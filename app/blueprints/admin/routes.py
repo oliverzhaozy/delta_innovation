@@ -35,6 +35,7 @@ _AUDIT_FIELDS = (
     "platoon",
     "service",
     "stay_out",
+    "duty_exempt",
     "is_admin",
     "is_active",
 )
@@ -69,6 +70,7 @@ def _apply_form(person, form):
     person.platoon = int(form.platoon.data) if form.platoon.data else None
     person.service = Service(form.service.data)
     person.stay_out = form.stay_out.data
+    person.duty_exempt = form.duty_exempt.data
     person.is_admin = form.is_admin.data
     person.is_active = form.is_active.data
 

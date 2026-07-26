@@ -1,39 +1,39 @@
-username,display_name,rank,appointment,company_role,platoon,service,stay_out,is_admin
-samuel_c,Samuel Chuang,CPT,OC,,,REGULAR,1,0
-lixuan_w,Wong Li Xuan,CPT,2IC,,,REGULAR,1,0
-jingyu_q,Quek Jing Yu,LTA,PC,,1,REGULAR,1,0
-andy_l,Andy Leow,3WO,SM,,,REGULAR,1,0
-jingheng_w,Wong Jingheng,3WO,P2IC,,,REGULAR,1,0
-marcus_s,Marcus Seah,MSG,P2IC,,,REGULAR,1,0
-carson_j,Carson David Joshua,2SG,P2IC,,,REGULAR,1,0
-changrui_l,Lai Changrui,LTA,PC,,3,NSF,0,0
-shuming_w,Wong Shu Ming,LTA,PC,,2,NSF,0,0
-yaole_c,Cheah Yao Le,2SG,PS,,1,NSF,0,0
-raybriel_w,Raybriel Wong,2SG,PS,,2,NSF,0,0
-oliver_z,Oliver Zhao,2SG,PS,,3,NSF,0,1
-freddy_n,Ng Zheng Swee Freddy,2SG,DET_COMD,,1,NSF,0,0
-jeymus_t,Jeymus Tan,2SG,DET_COMD,,2,NSF,0,0
-jeremy_l,Jeremy Loke,2SG,DET_COMD,,2,NSF,0,0
-jowayne_n,Ng Jo-Wayne,2SG,DET_COMD,,2,NSF,0,0
-ethan_l,Ethan Loh,2SG,DET_COMD,,2,NSF,0,0
-xiangrui_x,Xu Xiangrui,2SG,DET_COMD,,3,NSF,0,0
-branden_t,Branden Tung,3SG,DET_COMD,,1,NSF,0,0
-christopher_d,Christopher Orlando Deng,3SG,DET_COMD,,1,NSF,0,0
-kendrix_y,Kendrix Yap,3SG,DET_COMD,,1,NSF,0,0
-qiyuan_l,Loy Qiyuan,3SG,DET_COMD,,1,NSF,0,0
-weixuan_w,Wong Wei Xuan,3SG,DET_COMD,,1,NSF,0,0
-stanley_l,Stanley Lim,3SG,DET_COMD,S3,3,NSF,0,1
-kaden_t,Kaden Teo,3SG,DET_COMD,,3,NSF,0,0
-ryan_t,Ryan Tan,3SG,DET_COMD,,3,NSF,0,0
-marcus_soh,Marcus Soh,3SG,DET_COMD,,3,NSF,0,0
-yizhou_t,Toh Yi Zhou,CFC,OPR,,2,NSF,0,0
-joshua_t,Joshua Tan,CFC,OPR,,2,NSF,0,0
-wenqi_y,Yu Wenqi,CFC,OPR,,3,NSF,0,0
-yuheng_t,Tan Yu Heng,CPL,OPR,,1,NSF,0,0
-chengze_a,Ang Cheng Ze,CPL,OPR,,3,NSF,0,0
-junzhe_t,Toh Jun Zhe,CPL,OPR,S4,3,NSF,0,0
-jovan_t,Jovan Ting Jun Heng,LCP,OPR,,1,NSF,0,0
-jerriel_l,Lim Wei Jerriel,LCP,OPR,,1,NSF,0,0
-samuel_l,Samuel Lim,LCP,OPR,,2,NSF,0,0
-seth_c,Seth Mikael Cher,2LT,PC,,2,NSF,0,0
-brian_j,Brian Jeremiah,2LT,PC,,3,REGULAR,0,0
+username,display_name,rank,appointment,company_role,platoon,service,stay_out,duty_exempt,is_admin
+samuel_c,Samuel Chuang,CPT,OC,,,REGULAR,1,0,0
+lixuan_w,Wong Li Xuan,CPT,2IC,,,REGULAR,1,0,0
+jingyu_q,Quek Jing Yu,LTA,PC,,1,REGULAR,1,0,0
+andy_l,Andy Leow,3WO,SM,,,REGULAR,1,0,0
+jingheng_w,Wong Jingheng,3WO,P2IC,,,REGULAR,1,1,0
+marcus_s,Marcus Seah,MSG,P2IC,,,REGULAR,1,0,0
+carson_j,Carson David Joshua,2SG,P2IC,,,REGULAR,1,0,0
+changrui_l,Lai Changrui,LTA,PC,,3,NSF,0,0,0
+shuming_w,Wong Shu Ming,LTA,PC,,2,NSF,0,0,0
+yaole_c,Cheah Yao Le,2SG,PS,,1,NSF,0,0,0
+raybriel_w,Raybriel Wong,2SG,PS,,2,NSF,0,0,0
+oliver_z,Oliver Zhao,2SG,PS,,3,NSF,0,0,1
+freddy_n,Ng Zheng Swee Freddy,2SG,DET_COMD,,1,NSF,0,0,0
+jeymus_t,Jeymus Tan,2SG,DET_COMD,,2,NSF,0,0,0
+jeremy_l,Jeremy Loke,2SG,DET_COMD,,2,NSF,0,0,0
+jowayne_n,Ng Jo-Wayne,2SG,DET_COMD,,2,NSF,0,0,0
+ethan_l,Ethan Loh,2SG,DET_COMD,,2,NSF,0,0,0
+xiangrui_x,Xu Xiangrui,2SG,DET_COMD,,3,NSF,0,0,0
+branden_t,Branden Tung,3SG,DET_COMD,,1,NSF,0,0,0
+christopher_d,Christopher Orlando Deng,3SG,DET_COMD,,1,NSF,0,0,0
+kendrix_y,Kendrix Yap,3SG,DET_COMD,,1,NSF,0,0,0
+qiyuan_l,Loy Qiyuan,3SG,DET_COMD,,1,NSF,0,0,0
+weixuan_w,Wong Wei Xuan,3SG,DET_COMD,,1,NSF,0,0,0
+stanley_l,Stanley Lim,3SG,DET_COMD,S3,3,NSF,0,0,1
+kaden_t,Kaden Teo,3SG,DET_COMD,,3,NSF,0,0,0
+ryan_t,Ryan Tan,3SG,DET_COMD,,3,NSF,0,0,0
+marcus_soh,Marcus Soh,3SG,DET_COMD,,3,NSF,0,0,0
+yizhou_t,Toh Yi Zhou,CFC,OPR,,2,NSF,0,0,0
+joshua_t,Joshua Tan,CFC,OPR,,2,NSF,0,0,0
+wenqi_y,Yu Wenqi,CFC,OPR,,3,NSF,0,0,0
+yuheng_t,Tan Yu Heng,CPL,OPR,,1,NSF,0,0,0
+chengze_a,Ang Cheng Ze,CPL,OPR,,3,NSF,0,0,0
+junzhe_t,Toh Jun Zhe,CPL,OPR,S4,3,NSF,0,0,0
+jovan_t,Jovan Ting Jun Heng,LCP,OPR,,1,NSF,0,0,0
+jerriel_l,Lim Wei Jerriel,LCP,OPR,,1,NSF,0,0,0
+samuel_l,Samuel Lim,LCP,OPR,,2,NSF,0,0,0
+seth_c,Seth Mikael Cher,2LT,PC,,2,NSF,0,0,0
+brian_j,Brian Jeremiah,2LT,PC,,3,REGULAR,0,0,0

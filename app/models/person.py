@@ -35,6 +35,10 @@ class Person(UserMixin, db.Model):
     phone = db.Column(db.String(20), nullable=True)
     service = db.Column(db.Enum(Service, values_callable=_values, name="service"), nullable=False)
     stay_out = db.Column(db.Boolean, nullable=False, default=False)
+    # Person-level carve-out from the COS/CDO-S duty pools (owner decision
+    # 2026-07-24, first case: the 3WO P2IC). The rank/appointment rules stay
+    # law in eligibility.py; this flag is the unit's judgment call per person.
+    duty_exempt = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     password_hash = db.Column(db.String(255), nullable=False)

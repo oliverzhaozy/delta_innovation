@@ -30,5 +30,6 @@ class PersonForm(FlaskForm):
     )
     service = SelectField("Service", choices=[(s.value, s.value) for s in Service])
     stay_out = BooleanField("Stay out")
+    duty_exempt = BooleanField("Exempt from duty (COS/CDO-S pools)")
     is_admin = BooleanField("Admin access")
     is_active = BooleanField("Active", default=True)

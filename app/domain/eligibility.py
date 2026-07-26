@@ -48,11 +48,13 @@ def eligible_cdos(p) -> bool:
 
 
 def pool(duty, people) -> list:
-    """The computed candidate pool for one duty: eligible AND active, roster
-    order preserved. Always displayed on the roster page — an accidentally
-    tiny/empty pool must be visible immediately (the 3SG-PS gap is real)."""
+    """The computed candidate pool for one duty: eligible AND active AND not
+    duty_exempt (the per-person carve-out is data, not law — the rank/
+    appointment rules above stay pure), roster order preserved. Always
+    displayed on the roster page — an accidentally tiny/empty pool must be
+    visible immediately (the 3SG-PS gap is real)."""
     rule = eligible_cos if duty is Duty.COS else eligible_cdos
-    return [p for p in people if p.is_active and rule(p)]
+    return [p for p in people if p.is_active and not p.duty_exempt and rule(p)]
 
 
 def available(p, day, *, absence_rows=(), overnight_events=(), other_duty_dates=()) -> bool:
