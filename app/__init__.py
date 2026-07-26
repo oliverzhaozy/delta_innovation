@@ -11,6 +11,14 @@ def create_app(config_class=None):
     app.config.from_object(config_class)
     config_class.validate(app)
 
+    if app.config["PROXY_FIX"]:
+        # Behind Caddy every request arrives from 127.0.0.1: without this,
+        # rate limits key one shared bucket and generated URLs say http.
+        # One hop only — Caddy overwrites (never appends) X-Forwarded-*.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)

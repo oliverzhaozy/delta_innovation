@@ -19,6 +19,10 @@ class Config:
     # Dev-only quick user switcher (password bypass) — off everywhere except
     # DevConfig; ProdConfig.validate refuses to boot with it on.
     DEV_LOGIN_SWITCHER = False
+    # Trust X-Forwarded-* from exactly one reverse proxy. Only prod runs behind
+    # one (Caddy); trusting these headers without a proxy lets clients spoof
+    # remote_addr, so everywhere else stays False.
+    PROXY_FIX = False
 
     @classmethod
     def validate(cls, app):
@@ -41,6 +45,7 @@ class TestConfig(Config):
 class ProdConfig(Config):
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
+    PROXY_FIX = True
 
     @classmethod
     def validate(cls, app):
