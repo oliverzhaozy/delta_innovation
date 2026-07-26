@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Delta DB backup
+
+[Timer]
+# 03:30 VM-local time; the VM runs Asia/Singapore to match the app.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

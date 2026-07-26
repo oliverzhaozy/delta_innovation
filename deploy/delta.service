@@ -1,0 +1,19 @@
+[Unit]
+Description=Delta Coy Admin (gunicorn)
+After=network.target
+
+[Service]
+User=delta
+Group=delta
+WorkingDirectory=/opt/delta/app
+# SECRET_KEY, DATABASE_URL, APP_CONFIG live in the 600 env file, never the unit.
+EnvironmentFile=/etc/delta/env
+# 2 workers x 4 threads: SQLite is single-writer; 8 concurrent requests is
+# ample at 40 users (TECH_PLAN deployment notes). Bound to loopback — Caddy
+# is the only public listener.
+ExecStart=/opt/delta/venv/bin/gunicorn -w 2 -k gthread --threads 4 -b 127.0.0.1:8000 wsgi:app
+Restart=on-failure
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

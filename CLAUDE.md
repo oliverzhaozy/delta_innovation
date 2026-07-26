@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Implementation is **in progress** (started 2026-07-05 at Phase 0). `SPEC.md` is the product spec; `docs/TECH_PLAN.md` is the approved technical plan and the authoritative reference for the data model, architecture, permission layers, build phases, and the P0/P1 task breakdown — work through its tasks in order and check git log to see where the build stands. Read TECH_PLAN.md before doing anything substantive; do not re-plan what it already decides. P0.8 (deploy) targets the GCP always-free e2-micro with a sanitized demo roster, pending the owner's GCP account (decision (w) 2026-07-26 — Oracle signup kept failing); the P0.7 OC gate is deferred per TECH_PLAN decision (k).
+Implementation is **in progress** (started 2026-07-05 at Phase 0). `SPEC.md` is the product spec; `docs/TECH_PLAN.md` is the approved technical plan and the authoritative reference for the data model, architecture, permission layers, build phases, and the P0/P1 task breakdown — work through its tasks in order and check git log to see where the build stands. Read TECH_PLAN.md before doing anything substantive; do not re-plan what it already decides. P0.8 (deploy) is DONE (2026-07-27): live at coyadmin.duckdns.org on the GCP always-free e2-micro with the sanitized demo roster — `DEPLOY.md` is the runbook, and its whitelist-tarball build is the rule that keeps real data off the host; the P0.7 OC gate remains deferred per TECH_PLAN decision (k).
 
 ## Executor cognitive profile
 

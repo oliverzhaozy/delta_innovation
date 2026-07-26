@@ -161,7 +161,7 @@ Eligibility ∧ availability feeds auto-pick; humans always confirm; manual assi
 **P0.5** Mobile-first base layout, role-aware nav, flash messages, minimal CSS. *Done:* sane at phone width.
 **P0.6** `domain/policy.py` + `@require` decorator + tests incl. platoon scoping and an Opr-vs-S3-page denial test. *Done:* deny-by-default proven.
 **P0.7** OPSEC gate: OC's written OK to host; data-minimization rules in README (no NRIC/phones/diagnoses); bland branding. *Done:* recorded before any deploy.
-**P0.8** Deploy: GCP e2-micro (decision (w)), gunicorn(127.0.0.1, gthread), ProxyFix, Caddy HTTPS + noindex headers, systemd + EnvironmentFile, ufw/key-only SSH/unattended-upgrades, nightly encrypted backup + restore drill, DEPLOY.md. *Done:* login page reachable from a phone at home over HTTPS.
+**P0.8** `[DONE 2026-07-27 — live at coyadmin.duckdns.org, demo roster; commands + runbook in DEPLOY.md]` Deploy: GCP e2-micro (decision (w)), gunicorn(127.0.0.1, gthread), ProxyFix, Caddy HTTPS + noindex headers, systemd + EnvironmentFile, ufw/key-only SSH/unattended-upgrades, nightly encrypted backup + restore drill, DEPLOY.md. *Done:* login page reachable from a phone at home over HTTPS.
 
 **P1.1** Admin people pages: list/create/edit/deactivate (deactivation lists the person's future leave/pending requests for S3 to void), stay-out toggle, password reset. *Done:* onboard + offboard end-to-end.
 **P1.2** LeaveRequest + LedgerEntry models, migrations, constraints (half-day ⇒ single day; ledger uniqueness backstop) and indexes. *Done:* migration applies; constraints tested.

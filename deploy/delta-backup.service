@@ -1,0 +1,8 @@
+[Unit]
+Description=Encrypted nightly backup of the Delta DB to GCS
+
+[Service]
+Type=oneshot
+User=delta
+Group=delta
+ExecStart=/usr/local/bin/delta-backup.sh

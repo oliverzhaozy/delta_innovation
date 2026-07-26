@@ -1,0 +1,11 @@
+coyadmin.duckdns.org {
+	# Bland public face + noindex everywhere: OPSEC posture per TECH_PLAN
+	# decision (k) — the app is not meant to be discoverable.
+	header X-Robots-Tag "noindex, nofollow"
+	respond /robots.txt <<TXT
+		User-agent: *
+		Disallow: /
+		TXT
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
