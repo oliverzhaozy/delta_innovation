@@ -8,18 +8,15 @@ from app.domain import policy
 from app.domain.types import BalanceKind, LedgerSource
 from app.extensions import db
 from app.models import Person
-from app.services import ledger_service
+from app.services import event_service, ledger_service
 
 
 @bp.route("/")
 @require(policy.can_manage_ledger)
 def index():
-    people = (
-        db.session.query(Person)
-        .filter_by(is_active=True)
-        .order_by(Person.platoon.nulls_first(), Person.display_name)
-        .all()
-    )
+    # The shared active-roster fetch, so this table reads the same people in the
+    # same parade order (appointment → rank) as every other list in the app.
+    people = event_service.active_roster()
     return render_template(
         "ledger/index.html", people=people, all_balances=ledger_service.balances_for_everyone()
     )

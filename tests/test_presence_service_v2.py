@@ -102,6 +102,22 @@ def test_absences_between_merges_leave_and_out_of_camp_status(app, make_person):
     assert all(r.in_camp is False for r in rows)
 
 
+def test_absences_between_days_are_parade_ordered(app, make_person):
+    # UI-22: each day's away rows sit in parade order (appointment, then rank) —
+    # the month-calendar OFF/LEAVE chips render this list as-is. The Opr is
+    # platoon 1 AND alphabetizes first, so the old platoon → name order (and any
+    # alphabetical one) led with her; on parade the PS leads.
+    make_person(username="ord_zps", display_name="Zed Ps", rank=Rank.TWO_SG,
+                appointment=Appointment.PS, platoon=3)
+    make_person(username="ord_aopr", display_name="Ann Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    plant_leave(app, "ord_aopr")
+    plant_leave(app, "ord_zps")
+    with app.app_context():
+        rows = presence_service.absences_between(DAY, DAY)[DAY]
+        assert [r.person.username for r in rows] == ["ord_zps", "ord_aopr"]
+
+
 def test_absences_between_excludes_in_camp_status(app, make_person):
     make_person(username="ic_brief", platoon=1)
     make_person(username="oc_mc", platoon=1)

@@ -2,29 +2,23 @@
 from datetime import datetime, time, timedelta
 
 from app.domain import clash, parade, participants
-from app.domain.types import RANK_ORDER, Calendar, ParticipantCategory
+from app.domain.types import Calendar, ParticipantCategory
 from app.extensions import db
 from app.models import Event, Person
 
 
 def active_roster():
-    """Active people, ordered platoon -> rank (seniority) -> name — the
-    deterministic ordering TECH_PLAN specifies for every roster-derived list.
-    Rank seniority isn't expressible as a plain column ORDER BY (the stored
-    enum value doesn't sort in seniority order), so the rank/name tiebreak
-    happens in Python via a stable sort over the already platoon+name
-    ordered query; at ~40 rows this costs nothing.
+    """Active people in PARADE order — appointment, then rank, then platoon,
+    then keyed order (owner directive 2026-07-26: every user-facing list of
+    people reads the same order the documents print, never alphabetical).
+    Neither appointment nor rank seniority is expressible as a column ORDER BY
+    (the stored enum values sort by neither), so the one canonical key does it
+    in Python; at ~40 rows this costs nothing. Every roster-derived list —
+    pickers, pools, candidates, dropdowns — inherits from here.
     """
-    people = (
-        db.session.query(Person)
-        .filter_by(is_active=True)
-        .order_by(Person.platoon.nulls_first(), Person.display_name)
-        .all()
-    )
-    return sorted(
-        people,
-        key=lambda p: (p.platoon if p.platoon is not None else -1, -RANK_ORDER[p.rank]),
-    )
+    people = db.session.query(Person).filter_by(is_active=True).all()
+    people.sort(key=parade.parade_sort_key)
+    return people
 
 
 _PICKER_CATEGORIES = (

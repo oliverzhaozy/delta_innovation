@@ -8,7 +8,7 @@ from app.blueprints.parade import bp
 from app.blueprints.parade.forms import FpBulkAddForm, StatusEntryForm
 from app.domain import participants, presence
 from app.domain.dates import today_sgt
-from app.domain.parade import parade_line, sheet_sections
+from app.domain.parade import parade_line, parade_sort_key, sheet_sections
 from app.domain.types import (
     ALLOWED_OVERRIDE_TARGETS,
     DayPart,
@@ -20,7 +20,7 @@ from app.domain.types import (
     StatusType,
 )
 from app.extensions import db
-from app.models import Person, StatusEntry
+from app.models import StatusEntry
 from app.services import duty_service, event_service, parade_service
 
 
@@ -160,18 +160,20 @@ def _fp_rows(day):
     # Defined by shape (OTHER + in_camp + single-day + start==end==day), not a
     # hidden flag — a quick-add IS just a StatusEntry of this shape, so the
     # list is a read of the same table the document itself reads.
-    return (
+    rows = (
         db.session.query(StatusEntry)
-        .join(Person, StatusEntry.person_id == Person.id)
         .filter(
             StatusEntry.type == StatusType.OTHER,
             StatusEntry.in_camp.is_(True),
             StatusEntry.start_date == day,
             StatusEntry.end_date == day,
         )
-        .order_by(Person.platoon.nulls_first(), Person.display_name)
         .all()
     )
+    # Parade order, like every other people list — the same order the document
+    # above the list prints these people in.
+    rows.sort(key=lambda row: parade_sort_key(row.person))
+    return rows
 
 
 @bp.route("/morning")
@@ -441,11 +443,12 @@ def statuses_list():
     today = today_sgt()
     rows = (
         db.session.query(StatusEntry)
-        .join(Person, StatusEntry.person_id == Person.id)
         .filter(StatusEntry.end_date >= today)
-        .order_by(StatusEntry.start_date)
         .all()
     )
+    # Parade order major so a person's entries sit together where the keyer
+    # expects to find them; their own rows stay chronological beneath.
+    rows.sort(key=lambda row: (parade_sort_key(row.person), row.start_date, row.id))
     return render_template("parade/statuses.html", rows=rows, today=today)
 
 

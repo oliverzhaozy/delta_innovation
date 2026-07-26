@@ -54,7 +54,7 @@
   {% for duty, pair in view.violations.spread.items() %}
     <p>&#9888; {{ duty.label }} spread: min {{ pair[0] }}, max {{ pair[1] }}</p>
   {% endfor %}
-  {% for person_id, d1, d2 in view.violations.adjacency %}
+  {% for person_id, d1, d2 in adjacency_rows %}
     <p>&#9888; {{ people_by_id[person_id].display_name if person_id in people_by_id else "Person #" ~ person_id }}: {{ d1.strftime("%d %b") }} &amp; {{ d2.strftime("%d %b") }} adjacent</p>
   {% endfor %}
 </section>

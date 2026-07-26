@@ -130,6 +130,24 @@ def test_quick_add_moves_person_to_others_in_camp_and_is_idempotent(app, client,
         assert db.session.query(StatusEntry).count() == 1
 
 
+def test_fp_rows_list_is_parade_ordered_not_platoon_or_alphabetical(app, client, make_person):
+    # UI-22: the remove list reads the same parade order the document above it
+    # prints. The Opr is platoon 1 AND alphabetizes first — the old
+    # platoon → name order led with her; on parade the Det Comd leads.
+    make_person(username="fp_ps2", appointment=Appointment.PS, display_name="Keyer Guy",
+                rank=Rank.TWO_SG, platoon=3)
+    make_person(username="fp_aopr", display_name="Ann Opr", rank=Rank.PTE, platoon=1)
+    make_person(username="fp_zdet", display_name="Zed Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=2)
+    plant_status(app, "fp_aopr", type_=StatusType.OTHER, in_camp=True, remarks="BDO")
+    plant_status(app, "fp_zdet", type_=StatusType.OTHER, in_camp=True, remarks="RP")
+    login(client, "fp_ps2")
+
+    body = client.get("/parade/morning").get_data(as_text=True)
+    fp_list = body.split("Not joining FP")[1]
+    assert fp_list.index("3SG Zed Det") < fp_list.index("PTE Ann Opr")
+
+
 def test_bulk_add_expands_category_dedupes_and_skips_tagged(app, client, make_person):
     # UI-19: a category + an overlapping individual tick lands ONE row per
     # person; a re-post with a new reason skips everyone already tagged.

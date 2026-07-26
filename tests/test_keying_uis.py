@@ -107,6 +107,24 @@ def test_ps_keys_mc_appears_in_list_and_morning_parade(app, client, make_person)
         assert db.session.query(StatusEntry).count() == 1
 
 
+def test_statuses_list_is_parade_ordered_not_date_or_alphabetical(app, client, make_person):
+    # UI-22: person-major parade order (appointment, then rank), so a keyer finds
+    # a person's rows together. The Opr's row starts earlier AND alphabetizes
+    # first — under the old start_date order (or any alphabetical one) it would
+    # lead; on parade the PS does.
+    make_person(username="ord_keyer", appointment=Appointment.PS)
+    make_person(username="ord_zps", display_name="Zed Ps", rank=Rank.TWO_SG,
+                appointment=Appointment.PS, platoon=2)
+    make_person(username="ord_aopr", display_name="Ann Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    plant_status(app, "ord_aopr", start=YESTERDAY, end=TOMORROW)
+    plant_status(app, "ord_zps", start=TODAY, end=TOMORROW)
+    login(client, "ord_keyer")
+
+    body = client.get("/parade/statuses").get_data(as_text=True)
+    assert body.index("2SG Zed Ps") < body.index("PTE Ann Opr")
+
+
 def test_status_form_offers_no_course_option(app, client, make_person):
     # P9.5: ON COURSE has exactly one source — a TP calendar event labelled
     # "Course". The keying form's choices are an enum comprehension over

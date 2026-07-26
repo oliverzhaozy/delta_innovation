@@ -12,6 +12,7 @@ from app.authz import require
 from app.blueprints.duty import bp
 from app.domain import policy
 from app.domain.dates import today_sgt
+from app.domain.parade import parade_sort_key
 from app.domain.types import Duty
 from app.extensions import db
 from app.models import Person
@@ -28,6 +29,17 @@ def _parse_month(raw: str) -> str:
         return today_sgt().strftime("%Y-%m")
 
 
+def _flag_order(person, person_id):
+    """Parade order for one adjacency flag's holder. A holder outside this
+    month's pools (a prior-month tail row, or someone since deactivated) has no
+    parade key at all — they sort after the roster, by id, rather than ahead of
+    it on an empty key.
+    """
+    if person is None:
+        return (1, (person_id,))
+    return (0, parade_sort_key(person))
+
+
 @bp.route("/roster")
 @login_required
 def roster():
@@ -37,14 +49,21 @@ def roster():
     adjacency_marks = {
         (person_id, d) for person_id, d1, d2 in view.violations.adjacency for d in (d1, d2)
     }
+    # roster.violations is pure and carries person IDS, so the parade order of
+    # its flag lines is applied HERE, where the page already holds the people.
+    adjacency_rows = sorted(
+        view.violations.adjacency,
+        key=lambda flag: (_flag_order(people_by_id.get(flag[0]), flag[0]), flag[1], flag[2]),
+    )
     return render_template(
         "duty/roster.html",
         month=month,
         view=view,
         Duty=Duty,
-        roster_people=sorted(people_by_id.values(), key=lambda p: p.display_name),
+        roster_people=sorted(people_by_id.values(), key=parade_sort_key),
         people_by_id=people_by_id,
         adjacency_marks=adjacency_marks,
+        adjacency_rows=adjacency_rows,
         prev_month=(view.first - timedelta(days=1)).strftime("%Y-%m"),
         next_month=(view.last + timedelta(days=1)).strftime("%Y-%m"),
     )

@@ -5,9 +5,10 @@ from flask import abort, redirect, session, url_for
 from flask_login import current_user, login_user
 
 from app.blueprints.dev import bp
-from app.domain.types import APPOINTMENT_ORDER
+from app.domain.parade import parade_sort_key
 from app.extensions import db
 from app.models import Person
+from app.services import event_service
 
 
 def _profile_key(person):
@@ -29,26 +30,14 @@ def _profile_label(person):
 @bp.app_context_processor
 def inject_dev_switch_entries():
     # base.html renders the switcher dropdown on every page (dev only): one
-    # entry per distinct profile, backed by an arbitrary active holder.
-    people = (
-        db.session.query(Person)
-        .filter_by(is_active=True)
-        .order_by(Person.display_name)
-        .all()
-    )
+    # entry per distinct profile, backed by an active holder. The shared roster
+    # fetch arrives in parade order, so each profile's representative is its
+    # senior-most holder and the entries themselves list appointment then rank.
     representatives = {}
-    for person in people:
+    for person in event_service.active_roster():
         representatives.setdefault(_profile_key(person), person)
     current_key = _profile_key(current_user) if current_user.is_authenticated else None
-    ordered = sorted(
-        representatives.items(),
-        key=lambda kv: (
-            APPOINTMENT_ORDER[kv[0][0]],
-            kv[0][1] is not None,
-            kv[0][1].value if kv[0][1] else "",
-            kv[0][2],
-        ),
-    )
+    ordered = sorted(representatives.items(), key=lambda kv: parade_sort_key(kv[1]))
     return {
         "dev_switch_entries": [
             {"id": person.id, "label": _profile_label(person), "is_current": key == current_key}

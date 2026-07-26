@@ -4,6 +4,7 @@ from datetime import datetime
 from app.domain.types import Appointment, Calendar, ParticipantCategory, Rank, Service
 from app.extensions import db
 from app.models import Event, EventParticipant, Person
+from app.services import event_service
 from tests.conftest import login
 
 START = "2026-08-01T08:00"
@@ -336,6 +337,31 @@ def test_edit_collapses_nsf_regular_to_all_and_round_trips(app, client, make_per
     # Round-trip stable: a second edit GET still collapses to a checked ALL.
     body = client.get(f"/calendar/{event_id}/edit").data.decode()
     assert tag_is_checked(body, "ALL")
+
+
+# ---------- The roster fetch every people list inherits is parade-ordered ----------
+
+def test_active_roster_is_parade_ordered_not_platoon_or_alphabetical(app, make_person):
+    # UI-22: `active_roster` is THE order for every roster-derived list (picker,
+    # duty pools, manning candidates, dropdowns). The cast breaks all three of
+    # the orderings it replaced: 2IC displays above SM on parade but below it in
+    # the declaration APPOINTMENT_ORDER, 3WO is hoisted above LTA on parade but
+    # not in the legal RANK_ORDER, and the names alphabetize in reverse.
+    make_person(username="ar_2ic", display_name="Zed Two", rank=Rank.LTA,
+                appointment=Appointment.TWO_IC, platoon=None, service=Service.REGULAR)
+    make_person(username="ar_sm", display_name="Yan Sm", rank=Rank.THREE_WO,
+                appointment=Appointment.SM, platoon=None, service=Service.REGULAR)
+    make_person(username="ar_p2ic_wo", display_name="Bee P2ic", rank=Rank.THREE_WO,
+                appointment=Appointment.P2IC, platoon=1)
+    make_person(username="ar_p2ic_lta", display_name="Ace P2ic", rank=Rank.LTA,
+                appointment=Appointment.P2IC, platoon=2)
+    make_person(username="ar_gone", display_name="Aaa Oc", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None, is_active=False)
+
+    with app.app_context():
+        assert [p.username for p in event_service.active_roster()] == [
+            "ar_2ic", "ar_sm", "ar_p2ic_wo", "ar_p2ic_lta",
+        ]
 
 
 # ---------- Group members ordered by appointment then rank, never alphabetical ----------

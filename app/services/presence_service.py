@@ -68,8 +68,8 @@ _CourseCover = namedtuple(
 
 def _course_covers(start_date, end_date):
     """One `_CourseCover` per (TP course event × resolved participant) overlapping
-    [start_date, end_date], ordered platoon NULLS FIRST → display_name to match
-    the SQL fetches this sits beside.
+    [start_date, end_date], in parade order (appointment → rank) to match the
+    fetches this sits beside.
 
     The date span of each event comes from `event_days` (the ONE owner of the
     times-ignored rule), never from `.date()` here. The SQL filter uses a
@@ -105,7 +105,7 @@ def _course_covers(start_date, end_date):
                     remarks=event.title,
                 )
             )
-    covers.sort(key=lambda c: (c.person.platoon or 0, c.person.display_name))
+    covers.sort(key=lambda c: (parade.parade_sort_key(c.person), c.id))
     return covers
 
 
@@ -113,9 +113,9 @@ def fetch_absence_rows(start_date, end_date):
     """The ONE query layer, now the shared public fetch that `absences_between`,
     `presence_inputs`, and duty availability (P4.4) all read: APPROVED leave +
     statuses + TP-calendar course covers that overlap [start_date, end_date] for
-    ACTIVE people, each ordered platoon NULLS FIRST → display_name. Returns the
-    leave/status ORIGINAL model rows plus the synthesized course covers as three
-    lists.
+    ACTIVE people, each in parade order (appointment → rank, then the row's own
+    id). Returns the leave/status ORIGINAL model rows plus the synthesized
+    course covers as three lists.
 
     Extracting the leave/status/course filter here (written once) is the whole
     point of the task: `absences_between` and `presence_inputs` are two views of
@@ -123,7 +123,10 @@ def fetch_absence_rows(start_date, end_date):
     """
 
     def _overlapping(model, *extra):
-        return (
+        # The join stays for the active-only filter; the ORDER is parade order,
+        # which no column ORDER BY can express (enum values sort by neither
+        # appointment nor seniority), so it happens in Python over the rows.
+        rows = (
             db.session.query(model)
             .join(Person, model.person_id == Person.id)
             .filter(
@@ -132,9 +135,10 @@ def fetch_absence_rows(start_date, end_date):
                 Person.is_active.is_(True),
                 *extra,
             )
-            .order_by(Person.platoon.nulls_first(), Person.display_name)
             .all()
         )
+        rows.sort(key=lambda row: (parade.parade_sort_key(row.person), row.id))
+        return rows
 
     leaves = _overlapping(LeaveRequest, LeaveRequest.status == RequestStatus.APPROVED)
     statuses = _overlapping(StatusEntry)
@@ -189,11 +193,11 @@ def absences_between(start_date, end_date):
             last = min(row.end_date, end_date)
             for d in iter_days(first, last):
                 by_day[d].append(away)
-    # Re-order each day platoon NULLS FIRST → display_name across the merged
-    # sources (each was ordered alone). Stable sort, so a person's overlapping
-    # rows keep fetch order (leave, then status, then course).
+    # Re-order each day into parade order across the merged sources (each was
+    # ordered alone). Stable sort, so a person's overlapping rows keep fetch
+    # order (leave, then status, then course).
     for rows in by_day.values():
-        rows.sort(key=lambda a: (a.person.platoon or 0, a.person.display_name))
+        rows.sort(key=lambda a: parade.parade_sort_key(a.person))
     return by_day
 
 
@@ -204,8 +208,8 @@ def nsf_leave_between(start_date, end_date):
     A filtered VIEW of `absences_between`, never a second query — same single
     derivation. Keeps only leave-sourced rows (source == "leave" is exactly the
     APPROVED LeaveRequest rows; MC/other statuses and course covers are other
-    layers) whose person is NSF. Each day's list stays in the parent's platoon →
-    name order.
+    layers) whose person is NSF. Each day's list stays in the parent's parade
+    order.
     """
     return {
         day: [r for r in rows if r.source == "leave" and r.person.service is Service.NSF]

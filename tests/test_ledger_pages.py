@@ -43,6 +43,20 @@ def test_balances_table_flags_negatives(app, client, make_person):
     assert b'class="neg"' in resp.data
 
 
+def test_ledger_index_is_parade_ordered_not_platoon_or_alphabetical(client, make_person):
+    # UI-22: the balances table reads the shared active-roster fetch, so the PS
+    # leads despite the Opr sitting in platoon 1 AND alphabetizing first (the
+    # old platoon → name order led with her).
+    make_person(username="led_zps", display_name="Zed Ps", rank=Rank.TWO_SG,
+                appointment=Appointment.PS, platoon=3)
+    make_person(username="led_aopr", display_name="Ann Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    login(client, make_s3(make_person))
+
+    body = client.get("/ledger/").get_data(as_text=True)
+    assert body.index("Zed Ps") < body.index("Ann Opr")
+
+
 def test_manual_adjustment_appears_in_history_and_balance(app, client, make_person):
     make_person(username="awardee")
     login(client, make_s3(make_person))

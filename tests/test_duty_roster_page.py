@@ -96,6 +96,37 @@ def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
     assert "/duty/roster/confirm" not in html
 
 
+def test_manual_assign_select_is_parade_ordered(app, client, make_person):
+    # UI-22: the assign dropdown was the last alphabetical people list. Parade
+    # order now: PC, P2IC (3WO above LTA — the parade hoist, not the legal
+    # RANK_ORDER), PS, Det Comd, Opr. The names alphabetize in a different order
+    # entirely, so a regression to display_name fails here.
+    make_person(username="ord_pc", display_name="Yankee Pc", rank=Rank.LTA,
+                appointment=Appointment.PC, platoon=1)
+    make_person(username="ord_p2ic_wo", display_name="Bravo P2ic", rank=Rank.THREE_WO,
+                appointment=Appointment.P2IC, platoon=2)
+    make_person(username="ord_p2ic_lta", display_name="Alpha P2ic", rank=Rank.LTA,
+                appointment=Appointment.P2IC, platoon=3)
+    make_person(username="ord_det", display_name="Zulu Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="ord_opr", display_name="Charlie Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    make_person(username="ord_ps", display_name="Delta Ps", rank=Rank.TWO_SG,
+                appointment=Appointment.PS, platoon=2)
+    login(client, "ord_ps")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    select = re.search(r'<select name="person_id">.*?</select>', html, re.S).group(0)
+    assert re.findall(r'<option value="\d+">([^<]+)</option>', select) == [
+        "LTA Yankee Pc",
+        "3WO Bravo P2ic",
+        "LTA Alpha P2ic",
+        "2SG Delta Ps",
+        "3SG Zulu Det",
+        "PTE Charlie Opr",
+    ]
+
+
 def test_roster_mutations_403_for_opr(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")

@@ -11,12 +11,11 @@ from app.blueprints.admin import bp
 from app.blueprints.admin.forms import PersonForm
 from app.domain import policy
 from app.domain.dates import today_sgt
+from app.domain.parade import parade_sort_key
 from app.domain.types import (
-    APPOINTMENT_ORDER,
     Appointment,
     CompanyRole,
     PENDING_STATUSES,
-    RANK_ORDER,
     Rank,
     RequestStatus,
     Service,
@@ -85,18 +84,12 @@ def _username_taken(username, exclude_id=None):
 @bp.route("/people")
 @require(policy.can_manage_people)
 def people():
-    # Appointment then rank isn't an alphabetical order, so sort in Python by the
-    # declared seniority maps (36 rows — a CASE ladder would just restate them).
-    # Active first keeps ORD/posted-out members from interleaving the live roster.
+    # The canonical parade key (appointment, then rank — 36 rows, so a CASE
+    # ladder would just restate it), never a second ordering of its own.
+    # Active first keeps ORD/posted-out members from interleaving the live roster;
+    # inactive people are why this page can't read `active_roster()`.
     everyone = db.session.query(Person).all()
-    everyone.sort(
-        key=lambda p: (
-            not p.is_active,
-            APPOINTMENT_ORDER[p.appointment],
-            -RANK_ORDER[p.rank],
-            p.display_name,
-        )
-    )
+    everyone.sort(key=lambda p: (not p.is_active, *parade_sort_key(p)))
     return render_template("admin/people.html", people=everyone)
 
 

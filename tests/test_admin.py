@@ -28,6 +28,30 @@ def test_s3_lists_people(client, make_person):
     assert b"Opr B" in resp.data
 
 
+def test_people_page_is_parade_ordered_with_inactive_last(client, make_person):
+    # UI-22: the People page reads the canonical parade key, so 2IC sits above
+    # SM (the declaration APPOINTMENT_ORDER says otherwise) and a 3WO above an
+    # LTA of the same appointment (the legal RANK_ORDER says otherwise). Names
+    # alphabetize in reverse of the expected order. Active still comes first:
+    # an OC who has ORD'd must not head the live roster.
+    make_person(username="ord_2ic", display_name="Zed Two", rank=Rank.LTA,
+                appointment=Appointment.TWO_IC, platoon=None)
+    make_person(username="ord_sm", display_name="Yan Sm", rank=Rank.THREE_WO,
+                appointment=Appointment.SM, platoon=None)
+    make_person(username="ord_p2ic_wo", display_name="Bee P2ic", rank=Rank.THREE_WO,
+                appointment=Appointment.P2IC, platoon=1)
+    make_person(username="ord_p2ic_lta", display_name="Ace P2ic", rank=Rank.LTA,
+                appointment=Appointment.P2IC, platoon=2)
+    make_person(username="ord_gone", display_name="Aaa Oc", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None, is_active=False)
+    login(client, make_s3(make_person))
+
+    body = client.get("/admin/people").get_data(as_text=True)
+    positions = [body.index(name) for name in ("Zed Two", "Yan Sm", "Bee P2ic", "Ace P2ic")]
+    assert positions == sorted(positions)
+    assert body.index("Aaa Oc") > positions[-1]
+
+
 def test_create_person_end_to_end(app, client, make_person):
     login(client, make_s3(make_person))
     resp = client.post(
