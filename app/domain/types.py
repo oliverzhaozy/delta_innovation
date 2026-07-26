@@ -128,19 +128,20 @@ OCCUPYING_STATUSES = frozenset(
 )
 
 
-# BRIEFING and SITE_TESTING were removed 2026-07-11 (owner directive) — a
-# migration remaps any stored rows to OTHER, so the enum must never regrow
-# those values without a matching data plan.
+# Removal history — each removed value has a migration remapping stored rows to
+# OTHER, so the enum must never regrow one without a matching data plan:
+#   BRIEFING, SITE_TESTING  removed 2026-07-11 (owner directive, f31c09a7d5e2)
+#   COURSE                  removed 2026-07-26 (owner directive, b4d70e3f1a29) —
+#     ON COURSE now derives solely from TP calendar events labelled
+#     TpLabel.ON_COURSE; there is no keyed course status.
 class StatusType(str, enum.Enum):
     MC = "MC"
-    COURSE = "COURSE"
     OTHER = "OTHER"
 
     @property
     def label(self) -> str:
         return {
             "MC": "MC",
-            "COURSE": "On course",
             "OTHER": "Other",
         }[self.value]
 
@@ -149,7 +150,6 @@ class StatusType(str, enum.Enum):
 # override it (e.g. an in-camp "not joining FP" OTHER).
 STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
     StatusType.MC: False,
-    StatusType.COURSE: False,
     StatusType.OTHER: False,
 }
 

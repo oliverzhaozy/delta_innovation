@@ -83,7 +83,7 @@ def test_out_of_camp_status_and_declaration_flag_in_camp_status_does_not(app, ma
     period_id = make_period(app)
     with app.app_context():
         db.session.add(StatusEntry(
-            person_id=pid(app, "opr1"), type=StatusType.COURSE,
+            person_id=pid(app, "opr1"), type=StatusType.OTHER,
             start_date=date(2026, 6, 25), end_date=date(2026, 7, 16),
             day_part=DayPart.FULL, in_camp=False, created_by_id=pid(app, "opr1"),
         ))

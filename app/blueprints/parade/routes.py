@@ -284,7 +284,7 @@ def roll_call():
     )
 
 
-# --- Statuses (MC/course/other) ----------------------------------------------
+# --- Statuses (MC/other) ------------------------------------------------------
 
 def _resolve_in_camp(type_value, in_camp_choice):
     if in_camp_choice == "IN":

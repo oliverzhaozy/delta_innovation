@@ -17,7 +17,9 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import resolve
-from app.domain.types import DayPart, LeaveType, Rank, Service, StatusType
+from app.domain.types import (
+    CourseAbsenceType, DayPart, LeaveType, Rank, Service, StatusType,
+)
 
 DAY = date(2026, 7, 6)  # D, the next duty day → DDMMYY "060726"
 YESTERDAY = DAY - timedelta(days=1)
@@ -38,6 +40,13 @@ def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
 
 def leave_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
+
+
+def course_row(start=DAY, end=DAY):
+    # A synthesized TP-calendar course cover — since P9.5 the ONE source of
+    # ON COURSE (there is no keyed course status).
+    return SimpleNamespace(type=CourseAbsenceType.COURSE, start_date=start,
+                           end_date=end, day_part=DayPart.FULL)
 
 
 def status_row(type, start=DAY, end=DAY, *, in_camp, day_part=DayPart.FULL, remarks=None):
@@ -179,14 +188,15 @@ def test_present_and_duty_nsfs_are_omitted():
         (leave_row(LeaveType.LL), "leave"),
         (leave_row(LeaveType.OL), "leave"),
         (status_row(StatusType.MC, in_camp=False), "mc"),
-        (status_row(StatusType.COURSE, in_camp=False), "on_course"),
+        (course_row(), "on_course"),
         (status_row(StatusType.OTHER, in_camp=False), "others"),
     ],
 )
 def test_absent_kind_maps_to_cos_category(row, category):
     p = person("3SG Test Person", id=1)
     # Route the row to the right resolve() argument by its enum family.
-    kwargs = {LeaveType: "leaves", StatusType: "statuses"}[type(row.type)]
+    kwargs = {LeaveType: "leaves", StatusType: "statuses",
+              CourseAbsenceType: "courses"}[type(row.type)]
     doc = parade.compute_cos_message(DAY, COS, [pair(p, **{kwargs: [row]})])
     assert getattr(doc, category) == ("3SG TEST PERSON",)
 

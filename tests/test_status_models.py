@@ -21,16 +21,16 @@ def person_id_of(app, username):
 def test_status_type_enum_members_and_labels():
     # BRIEFING and SITE_TESTING were removed UI-21 (owner directive 2026-07-11);
     # a briefing/site-testing is keyed as OTHER with the reason in remarks.
-    assert [t.value for t in StatusType] == ["MC", "COURSE", "OTHER"]
+    # COURSE was removed P9.5 (owner directive 2026-07-26) — ON COURSE derives
+    # from the TP calendar, so there is no keyed course status at all.
+    assert [t.value for t in StatusType] == ["MC", "OTHER"]
     assert StatusType.MC.label == "MC"
-    assert StatusType.COURSE.label == "On course"
     assert StatusType.OTHER.label == "Other"
 
 
 def test_status_in_camp_default_pinned_and_total():
     assert STATUS_IN_CAMP_DEFAULT == {
         StatusType.MC: False,
-        StatusType.COURSE: False,
         StatusType.OTHER: False,
     }
     # Totality: every enum member must have a default, so a new member

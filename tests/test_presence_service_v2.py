@@ -115,13 +115,13 @@ def test_absences_between_excludes_in_camp_status(app, make_person):
 
 def test_absences_between_label_mapping_per_source(app, make_person):
     make_person(username="lab_oil", platoon=1)
-    make_person(username="lab_course", platoon=1)
+    make_person(username="lab_mc", platoon=1)
     plant_leave(app, "lab_oil", type_=LeaveType.OIL)
-    plant_status(app, "lab_course", type_=StatusType.COURSE, in_camp=False)
+    plant_status(app, "lab_mc", type_=StatusType.MC, in_camp=False)
 
     labels = {r.person.username: r.label for r in rows_on(app)}
-    assert labels["lab_oil"] == "OIL"        # leave → type.value
-    assert labels["lab_course"] == "On course"  # status → type.label
+    assert labels["lab_oil"] == "OIL"   # leave → type.value
+    assert labels["lab_mc"] == "MC"     # status → type.label
 
 
 def test_absences_between_clips_range_and_buckets_each_day(app, make_person):

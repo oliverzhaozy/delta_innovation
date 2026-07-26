@@ -8,7 +8,7 @@ someone declared), so the best the app can honestly say is NO_KNOWN_CONFLICT.
 Per A8 the caller shapes ALL absence kinds (approved leave incl. LL/OL,
 direct absences, out-of-camp statuses) from the shared fetch into
 `absence_rows`; a leave-table-only join would miss the most common real
-conflict (an MC or a long course).
+conflict (an MC or a course from the TP calendar).
 """
 import enum
 from collections import namedtuple

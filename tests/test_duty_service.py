@@ -122,14 +122,14 @@ def test_availability_in_camp_status_does_not_block(app, make_person):
     opr = pid(app, "cos_opr")
     plant_status(app, opr, date(2026, 7, 10), date(2026, 7, 12), in_camp=True)
     plant_status(app, opr, date(2026, 7, 20), date(2026, 7, 21), in_camp=False,
-                 type_=StatusType.COURSE)
+                 type_=StatusType.OTHER)
 
     with app.app_context():
         _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
         # In camp is not away — an in-camp status can hold a duty.
         assert availability(person, date(2026, 7, 11)) is True
-        # An out-of-camp course blocks.
+        # An out-of-camp status blocks.
         assert availability(person, date(2026, 7, 20)) is False
 
 

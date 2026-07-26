@@ -107,6 +107,20 @@ def test_ps_keys_mc_appears_in_list_and_morning_parade(app, client, make_person)
         assert db.session.query(StatusEntry).count() == 1
 
 
+def test_status_form_offers_no_course_option(app, client, make_person):
+    # P9.5: ON COURSE has exactly one source — a TP calendar event labelled
+    # "Course". The keying form's choices are an enum comprehension over
+    # StatusType, so a regrown COURSE member would show up here immediately.
+    make_person(username="c1b_ps", appointment=Appointment.PS)
+    login(client, "c1b_ps")
+
+    form = client.get("/parade/statuses/new").data
+    assert b'value="MC"' in form
+    assert b'value="OTHER"' in form
+    assert b'value="COURSE"' not in form
+    assert b"On course" not in form
+
+
 # --- criterion 2: Opr 403s on every status URL ------------------------------
 
 def test_opr_403_on_every_status_url(app, client, make_person):
@@ -235,7 +249,7 @@ def test_end_today_on_future_entry_errors_and_leaves_unchanged(app, client, make
     make_person(username="c5b_ps", appointment=Appointment.PS)
     make_person(username="c5b_future")
     future_start, future_end = TOMORROW, TOMORROW + timedelta(days=3)
-    entry_id = plant_status(app, "c5b_future", type_=StatusType.COURSE, start=future_start,
+    entry_id = plant_status(app, "c5b_future", type_=StatusType.OTHER, start=future_start,
                              end=future_end, in_camp=False)
     login(client, "c5b_ps")
 

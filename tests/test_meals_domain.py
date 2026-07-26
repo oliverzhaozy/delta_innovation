@@ -22,7 +22,7 @@ from app.domain import parade
 from app.domain.meals import NsfPresence, nsf_presence
 from app.domain.presence import PresenceState, Resolution, resolve
 from app.domain.types import (
-    DayPart, LeaveType, Meal, Rank, Service, StatusType,
+    CourseAbsenceType, DayPart, LeaveType, Meal, Rank, Service, StatusType,
 )
 
 D = date(2026, 7, 6)      # the day meals are computed for
@@ -47,6 +47,13 @@ def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
 
 def leave_row(type, start=D, end=D, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
+
+
+def course_row(start=D, end=D):
+    # A synthesized TP-calendar course cover — since P9.5 the ONE source of
+    # ON COURSE (there is no keyed course status).
+    return SimpleNamespace(type=CourseAbsenceType.COURSE, start_date=start,
+                           end_date=end, day_part=DayPart.FULL)
 
 
 def status_row(type, start=D, end=D, *, in_camp=False, day_part=DayPart.FULL, remarks=None):
@@ -93,7 +100,7 @@ def test_person_lists_populated_parallel_for_every_morning_category():
         (p4, absent(leave_row(LeaveType.OFF))),            # → OFF/OIL
         (p5, absent(status_row(StatusType.MC))),           # → MC
         (p6, present(in_camp_rows=[status_row(StatusType.OTHER, remarks="BDO")])),  # → OTHERS IN CAMP
-        (p7, absent(status_row(StatusType.COURSE))),       # → ON COURSE
+        (p7, absent(course_row())),                        # → ON COURSE
         (p8, absent(status_row(StatusType.OTHER))),         # → OTHERS (out of camp)
     ]
     doc = parade.categorize(DAY, pairs, "morning")

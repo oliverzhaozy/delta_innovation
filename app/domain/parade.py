@@ -219,8 +219,9 @@ def _absent_category(row) -> str:
     mapping. Discriminated on the enum class of `row.type` — the one attribute
     every source row shares — so no source-specific attribute sniffing:
     LeaveType → OFF/OIL or LEAVE, CourseAbsenceType → ON COURSE, StatusType →
-    MC / ON COURSE / OTHERS (an out-of-camp status; in-camp ones are never
-    absent-making, so they never reach here).
+    MC or OTHERS (an out-of-camp status; in-camp ones are never absent-making,
+    so they never reach here). ON COURSE has exactly one source since P9.5 —
+    the TP calendar — so no status can land there.
     """
     kind = row.type
     if isinstance(kind, LeaveType):
@@ -228,11 +229,7 @@ def _absent_category(row) -> str:
     if isinstance(kind, CourseAbsenceType):
         return "on_course"
     if isinstance(kind, StatusType):
-        if kind is StatusType.MC:
-            return "mc"
-        if kind is StatusType.COURSE:
-            return "on_course"
-        return "others"  # out-of-camp OTHER
+        return "mc" if kind is StatusType.MC else "others"  # out-of-camp OTHER
     raise ParadeImbalance(f"unclassifiable absence row: {row!r}")
 
 

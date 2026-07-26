@@ -14,7 +14,7 @@ import pytest
 
 from app.domain import parade
 from app.domain.presence import PresenceState, Resolution
-from app.domain.types import LeaveType, Rank, StatusType
+from app.domain.types import CourseAbsenceType, LeaveType, Rank, StatusType
 
 DAY = date(2026, 7, 6)  # → DDMMYY "060726"
 
@@ -35,6 +35,12 @@ def leave_row(type):
 
 def status_row(type, remarks=None):
     return SimpleNamespace(type=type, remarks=remarks)
+
+
+def course_row():
+    # A synthesized TP-calendar course cover — since P9.5 the ONE source of
+    # ON COURSE (there is no keyed course status).
+    return SimpleNamespace(type=CourseAbsenceType.COURSE)
 
 
 def absent(row):
@@ -182,7 +188,7 @@ def test_golden_empty_categories_header_only():
         (leave_row(LeaveType.LL), "leave", "LEAVE"),
         (leave_row(LeaveType.OL), "leave", "LEAVE"),
         (status_row(StatusType.MC), "mc", "MC"),
-        (status_row(StatusType.COURSE), "on_course", "ON COURSE"),
+        (course_row(), "on_course", "ON COURSE"),
         (status_row(StatusType.OTHER), "others", "OTHERS"),
     ],
 )
