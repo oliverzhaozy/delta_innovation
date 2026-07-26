@@ -7,6 +7,7 @@ TECH_PLAN "Jinja text templates" line): hand-built strings dodge
 template-whitespace landmines so the golden tests can pin the output to
 docs/PARADE_FORMATS.md byte-for-byte.
 """
+from collections import namedtuple
 from dataclasses import dataclass
 from datetime import date
 
@@ -289,14 +290,124 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
     return doc.validate()
 
 
-def _category_block(title: str, lines: tuple) -> str:
-    # Header count is len() of the same tuple that renders below it, so the two
-    # cannot disagree. An empty category is the header alone (no numbered line).
+# --- structured sections (P10.2) -----------------------------------------
+#
+# One document renders in two places: the copyable WhatsApp text and (for a
+# keyer) the interactive drag sheet. sheet_sections is the SINGLE source both
+# read, so the two can never drift — the renderers are literally a join over it.
+
+# person_id is None only for a hand-built line-only doc (no `*_people` tuples);
+# such an entry still renders but carries nothing to drag.
+SheetEntry = namedtuple("SheetEntry", "person_id text")
+
+# key/title None marks inert chrome (title+date, strength lines, the "——" rules,
+# umbrella headers, the greeting, roll call's literal OTHERS IN CAMP line); a set
+# key names the ParadeDoc/CosDoc field the section prints, i.e. a drop target.
+SheetSection = namedtuple("SheetSection", "key title text entries")
+
+
+def _plain(text: str) -> SheetSection:
+    return SheetSection(key=None, title=None, text=text, entries=())
+
+
+def _category_section(doc, name: str) -> SheetSection:
+    """One printed category as a section: the header, then one SheetEntry per
+    line. The "N. " numbering happens HERE and nowhere else, and the section's
+    text is assembled from those very entries — so a numbered line on the drag
+    sheet and the same line in the copied text are the same string by
+    construction. Header count is len() of the tuple that renders below it, so
+    the two cannot disagree; an empty category is the header alone.
+    """
+    lines = getattr(doc, name)
+    people = getattr(doc, f"{name}_people")
+    ids = [p.id for p in people] if people else [None] * len(lines)
+    entries = tuple(
+        SheetEntry(person_id=person_id, text=f"{n}. {line}")
+        for n, (line, person_id) in enumerate(zip(lines, ids), 1)
+    )
+    title = CATEGORY_TITLES[name]
     header = f"{title} ({len(lines)}):"
-    if not lines:
-        return header
-    numbered = [f"{n}. {line}" for n, line in enumerate(lines, 1)]
-    return "\n".join([header, *numbered])
+    return SheetSection(
+        key=name,
+        title=title,
+        text="\n".join([header, *(entry.text for entry in entries)]),
+        entries=entries,
+    )
+
+
+def _morning_sections(doc: ParadeDoc) -> tuple:
+    a = len(doc.current_strength)
+    k = len(doc.others_in_camp)
+    c = a + k
+    d = len(doc.leave) + len(doc.off_oil) + len(doc.on_course) + len(doc.mc) + len(doc.others)
+    # B (absent strength) == D by definition on the morning state; deriving it
+    # here keeps the header pair from ever drifting apart.
+    return (
+        _plain(f"DELTA MORNING PARADE STATE:\n{format_ddmmyy(doc.day)}"),
+        _plain(f"TOTAL STRENGTH: {doc.total}"),
+        _plain(f"CURRENT STRENGTH: {a}"),
+        _plain(f"ABSENT STRENGTH: {d}"),
+        _plain("——"),
+        _plain(f"PRESENT IN CAMP ({c}):"),
+        _category_section(doc, "current_strength"),
+        _category_section(doc, "others_in_camp"),
+        _plain("——"),
+        _plain(f"NOT PRESENT IN CAMP ({d}):"),
+        _category_section(doc, "leave"),
+        _category_section(doc, "off_oil"),
+        _category_section(doc, "on_course"),
+        _category_section(doc, "mc"),
+        _category_section(doc, "others"),
+    )
+
+
+def _roll_call_sections(doc: ParadeDoc) -> tuple:
+    a = len(doc.current_strength)
+    # PRESENT IN CAMP is exactly CURRENT STRENGTH: OTHERS IN CAMP is always 0.
+    c = a
+    d = (
+        len(doc.stay_out) + len(doc.leave) + len(doc.off_oil)
+        + len(doc.on_course) + len(doc.mc) + len(doc.others)
+    )
+    # B (absent strength) == D by definition; deriving it here keeps the header
+    # pair from ever drifting apart.
+    return (
+        _plain(f"DELTA ROLL CALL STATE:\n{format_ddmmyy(doc.day)}"),
+        _plain(f"TOTAL STRENGTH: {doc.total}"),
+        _plain(f"CURRENT STRENGTH: {a}"),
+        _plain(f"ABSENT STRENGTH: {d}"),
+        _plain("——"),
+        _plain(f"PRESENT IN CAMP ({c}):"),
+        _category_section(doc, "current_strength"),
+        # Literal 0, and INERT, by rule — not a category section on the (empty)
+        # tuple, so nothing can be dropped into a bucket roll call does not have.
+        _plain(f"{CATEGORY_TITLES['others_in_camp']} (0):"),
+        _plain("——"),
+        _plain(f"NOT PRESENT IN CAMP ({d}):"),
+        _category_section(doc, "stay_out"),
+        _category_section(doc, "leave"),
+        _category_section(doc, "off_oil"),
+        _category_section(doc, "on_course"),
+        _category_section(doc, "mc"),
+        _category_section(doc, "others"),
+    )
+
+
+def sheet_sections(doc) -> tuple:
+    """The section list behind BOTH renderings of `doc` — the plain WhatsApp
+    text (a join over `.text`) and the keyer's interactive sheet (which iterates
+    the same objects). Section order mirrors the document skeletons exactly.
+
+    Validated first: the app refuses to describe a document it knows is wrong.
+    """
+    doc.validate()
+    if isinstance(doc, CosDoc):
+        return _cos_sections(doc)
+    if doc.variant == "morning":
+        return _morning_sections(doc)
+    if doc.variant == "roll_call":
+        return _roll_call_sections(doc)
+    raise ValueError(f"unknown parade variant: {doc.variant!r}")
 
 
 def render_morning(doc: ParadeDoc) -> str:
@@ -309,31 +420,7 @@ def render_morning(doc: ParadeDoc) -> str:
     doc.validate()
     if doc.variant != "morning":
         raise ValueError(f"render_morning expects a morning doc, got {doc.variant!r}")
-
-    a = len(doc.current_strength)
-    k = len(doc.others_in_camp)
-    c = a + k
-    d = len(doc.leave) + len(doc.off_oil) + len(doc.on_course) + len(doc.mc) + len(doc.others)
-    # B (absent strength) == D by definition on the morning state; deriving it
-    # here keeps the header pair from ever drifting apart.
-    sections = [
-        f"DELTA MORNING PARADE STATE:\n{format_ddmmyy(doc.day)}",
-        f"TOTAL STRENGTH: {doc.total}",
-        f"CURRENT STRENGTH: {a}",
-        f"ABSENT STRENGTH: {d}",
-        "——",
-        f"PRESENT IN CAMP ({c}):",
-        _category_block(CATEGORY_TITLES["current_strength"], doc.current_strength),
-        _category_block(CATEGORY_TITLES["others_in_camp"], doc.others_in_camp),
-        "——",
-        f"NOT PRESENT IN CAMP ({d}):",
-        _category_block(CATEGORY_TITLES["leave"], doc.leave),
-        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
-        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
-        _category_block(CATEGORY_TITLES["mc"], doc.mc),
-        _category_block(CATEGORY_TITLES["others"], doc.others),
-    ]
-    return "\n\n".join(sections)
+    return "\n\n".join(section.text for section in _morning_sections(doc))
 
 
 def render_roll_call(doc: ParadeDoc) -> str:
@@ -349,37 +436,7 @@ def render_roll_call(doc: ParadeDoc) -> str:
     doc.validate()
     if doc.variant != "roll_call":
         raise ValueError(f"render_roll_call expects a roll_call doc, got {doc.variant!r}")
-
-    a = len(doc.current_strength)
-    # PRESENT IN CAMP is exactly CURRENT STRENGTH: OTHERS IN CAMP is always 0.
-    c = a
-    d = (
-        len(doc.stay_out) + len(doc.leave) + len(doc.off_oil)
-        + len(doc.on_course) + len(doc.mc) + len(doc.others)
-    )
-    # B (absent strength) == D by definition; deriving it here keeps the header
-    # pair from ever drifting apart.
-    sections = [
-        f"DELTA ROLL CALL STATE:\n{format_ddmmyy(doc.day)}",
-        f"TOTAL STRENGTH: {doc.total}",
-        f"CURRENT STRENGTH: {a}",
-        f"ABSENT STRENGTH: {d}",
-        "——",
-        f"PRESENT IN CAMP ({c}):",
-        _category_block(CATEGORY_TITLES["current_strength"], doc.current_strength),
-        # Literal 0, header-only, by rule — not a _category_block on the (empty)
-        # tuple, to make the "roll call has no others-in-camp" invariant explicit.
-        f"{CATEGORY_TITLES['others_in_camp']} (0):",
-        "——",
-        f"NOT PRESENT IN CAMP ({d}):",
-        _category_block(CATEGORY_TITLES["stay_out"], doc.stay_out),
-        _category_block(CATEGORY_TITLES["leave"], doc.leave),
-        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
-        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
-        _category_block(CATEGORY_TITLES["mc"], doc.mc),
-        _category_block(CATEGORY_TITLES["others"], doc.others),
-    ]
-    return "\n\n".join(sections)
+    return "\n\n".join(section.text for section in _roll_call_sections(doc))
 
 
 # --- COS message compute (P3b.1) -----------------------------------------
@@ -387,8 +444,8 @@ def render_roll_call(doc: ParadeDoc) -> str:
 # Message 1 is a REQUEST, not a parade: it asks NSFs to report a status, so
 # clean (PRESENT/DUTY) people are omitted and there is no total-strength
 # invariant to balance — only the at-most-once guarantee. It reuses the exact
-# row-kind mapping (_absent_category) and block renderer (_category_block) the
-# morning document uses, so a category can never mean two different things.
+# row-kind mapping (_absent_category) and section builder (_category_section)
+# the morning document uses, so a category can never mean two different things.
 
 
 @dataclass(frozen=True)
@@ -496,29 +553,27 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
     return doc.validate()
 
 
-def render_cos(doc: CosDoc) -> str:
-    """Render the Message 1 COS request byte-exact to PARADE_FORMATS.md.
-
-    Greeting line, then the six categories STAY OUT / LEAVE / OFF/OIL / ON
-    COURSE / MC / OTHERS, each a `_category_block` (the same helper morning
-    uses), joined by a single blank line — empty categories are header-only.
-    This message has NO "——" separators (only Messages 2 and 3 do). Validated
-    first: the app refuses to emit a document it knows lists someone twice.
-    """
-    doc.validate()
+def _cos_sections(doc: CosDoc) -> tuple:
     greeting = (
         f"Hello all, {doc.cos_display} is the COS for "
         f"{format_ddmmyy(doc.day)}. "
         "Please indicate if you are on course/off/ma etc:"
     )
-    sections = [
-        greeting,
-        _category_block(CATEGORY_TITLES["stay_out"], doc.stay_out),
-        _category_block(CATEGORY_TITLES["leave"], doc.leave),
-        _category_block(CATEGORY_TITLES["off_oil"], doc.off_oil),
-        _category_block(CATEGORY_TITLES["on_course"], doc.on_course),
-        _category_block(CATEGORY_TITLES["mc"], doc.mc),
-        _category_block(CATEGORY_TITLES["others"], doc.others),
-    ]
-    return "\n\n".join(sections)
+    return (
+        _plain(greeting),
+        *(_category_section(doc, name) for name in _COS_CATEGORIES),
+    )
+
+
+def render_cos(doc: CosDoc) -> str:
+    """Render the Message 1 COS request byte-exact to PARADE_FORMATS.md.
+
+    Greeting line, then the six categories STAY OUT / LEAVE / OFF/OIL / ON
+    COURSE / MC / OTHERS, each a `_category_section` (the same helper morning
+    uses), joined by a single blank line — empty categories are header-only.
+    This message has NO "——" separators (only Messages 2 and 3 do). Validated
+    first: the app refuses to emit a document it knows lists someone twice.
+    """
+    doc.validate()
+    return "\n\n".join(section.text for section in _cos_sections(doc))
 

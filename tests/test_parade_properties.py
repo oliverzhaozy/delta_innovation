@@ -191,6 +191,13 @@ def test_parade_invariants_hold_for_a_random_roster(seed):
     roll_text = parade.render_roll_call(roll_doc)
     cos_text = parade.render_cos(cos_doc)
 
+    # 0. One line source: the structured sections the drag sheet iterates
+    # reassemble into the very text the renderers emit, on every random roster.
+    for doc, text in ((morning_doc, morning_text), (roll_doc, roll_text),
+                      (cos_doc, cos_text)):
+        sections = parade.sheet_sections(doc)
+        assert "\n\n".join(section.text for section in sections) == text
+
     # 1. Exactly-once: every roster person appears in exactly one category of
     # the morning doc and the roll-call doc (COS legitimately omits people).
     for person, _res in pairs:
