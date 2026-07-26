@@ -63,9 +63,10 @@ Python lives in the repo venv — use `.venv/Scripts/python` (Windows) directly:
 
 - **Two distinct permission concepts**: app access (RBAC from appointment/company_role, in `policy.py`) vs assignment eligibility (rank+appointment predicates, in `eligibility.py`). Don't mix them.
 - **TU Det Comd ≠ Det Comd**: the manning slot "TU Det Comd" is filled by appointment P2IC/PS; company-appointment Det Comds fill "Det Personnel". Keep enum identifiers distinct; there's a regression test for this.
-- **Leave routing**: PS/Det Comd/Opr → any PC → OC; a PC's own request goes straight to OC; regulars (OC/SM/2IC/P2IC) never use the request flow — S3 keys their absences as `direct_absence` (no ledger). Self-approval is structurally forbidden.
+- **Leave routing**: PS/Det Comd/Opr → any PC → OC; a PC's own request goes straight to OC; regulars (OC/SM/2IC/P2IC) never use the request flow at all — their off/leave lives in the external ARCTIC FOE system (owner directive 2026-07-26), so this app tracks them only via MC/other statuses and TP course events; a regular with nothing keyed appears in CURRENT STRENGTH. There is no `direct_absence` table. Self-approval is structurally forbidden.
 - **Deduction counts working days only** (public_holiday table is a Phase 1 dependency); half-day requests are single-day only; AM+PM same day = one full day.
-- **Parade precedence**: one line per person per parade — deactivated > approved leave > status > duty > stay-out > present; duty overrides stay-out at night; conflicts surface to the COS, never silently resolved.
+- **Parade precedence**: one line per person per parade — deactivated > approved leave > out-of-camp status > course > duty > stay-out > present; duty overrides stay-out at night; conflicts surface to the COS, never silently resolved. The parade state is FULLY DERIVED — there is no manual recategorization layer and no snapshot archive.
+- **ON COURSE has one source**: a TP calendar event labelled `TpLabel.ON_COURSE` (value `"Course"` — `ArcticLabel.ON_COURSE` owns `"On Course"`, and label values must stay distinct across the two enums). Every resolved participant is out of camp for every DATE the event covers, clock times ignored (`domain/events.event_days` owns that rule). There is no course *status*.
 - COS/CDO-S duty rules: COS = rank ≤ 2SG AND appointment Det Comd/Opr; CDO/S = rank ≥ 2SG AND appointment PC/P2IC/PS. The appointment sets are disjoint (a person can never be eligible for both).
 
 ## Data sensitivity
