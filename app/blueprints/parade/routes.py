@@ -10,8 +10,10 @@ from app.domain import participants, presence
 from app.domain.dates import today_sgt
 from app.domain.parade import parade_line
 from app.domain.types import (
+    ALLOWED_OVERRIDE_TARGETS,
     DayPart,
     LeaveType,
+    OverrideCategory,
     ParadeVariant,
     ParticipantCategory,
     STATUS_IN_CAMP_DEFAULT,
@@ -20,6 +22,37 @@ from app.domain.types import (
 from app.extensions import db
 from app.models import Person, StatusEntry
 from app.services import duty_service, event_service, parade_service
+
+
+def _variant_day(key):
+    """The ONE owner of the page-date convention the override routes act on:
+    morning and roll call are today's documents; the COS message is compiled the
+    evening before for tomorrow's duty day. An unrecognised key is a stale or
+    tampered POST — 400, never a silent default onto some date.
+    Returns (ParadeVariant, date).
+    """
+    today = today_sgt()
+    mapping = {
+        "morning": (ParadeVariant.MORNING, today),
+        "roll_call": (ParadeVariant.ROLL_CALL, today),
+        "cos": (ParadeVariant.COS_MESSAGE, today + timedelta(days=1)),
+    }
+    if key not in mapping:
+        abort(400)
+    return mapping[key]
+
+
+def _variant_redirect(variant, cos_name=None):
+    """Send an override POST back to the page it acted on. The COS page carries
+    its typed `cos_name` through so the redirected render rebuilds the very same
+    document the drag was performed against."""
+    if variant is ParadeVariant.MORNING:
+        return redirect(url_for("parade.morning"))
+    if variant is ParadeVariant.ROLL_CALL:
+        return redirect(url_for("parade.roll_call"))
+    return redirect(
+        url_for("parade.cos_message", **({"cos_name": cos_name} if cos_name else {}))
+    )
 
 
 def _set_fp_people_choices(form):
@@ -144,6 +177,7 @@ def morning():
         picker_groups=picker_groups,
         command_ids=command_ids,
         can_adjust=can_adjust,
+        has_overrides=built.has_overrides,
     )
 
 
@@ -246,6 +280,7 @@ def cos_message():
         imbalance=built.imbalance,
         conflicts=conflicts,
         can_adjust=duty_service.can_key_parade_today(current_user),
+        has_overrides=built.has_overrides,
     )
 
 
@@ -277,7 +312,54 @@ def roll_call():
         conflicts=conflicts,
         absent_holders=absent_holders,
         can_adjust=duty_service.can_key_parade_today(current_user),
+        has_overrides=built.has_overrides,
     )
+
+
+# --- Drag-and-drop overrides (recategorize one person on one document) --------
+
+@bp.route("/override", methods=["POST"])
+@require(duty_service.can_key_parade_today)
+def override():
+    # Same keying gate as every other parade write. The variant/date come from
+    # the shared _variant_day owner; the target and person are validated HERE
+    # against the variant's allowed categories and today's active roster, so a
+    # tampered or stale POST can never store an off-roster person or a category
+    # that variant forbids (apply_overrides would raise on the latter).
+    variant, day = _variant_day(request.form.get("variant", ""))
+    cos_name = request.form.get("cos_name", "")
+    try:
+        person_id = int(request.form.get("person_id", ""))
+    except (TypeError, ValueError):
+        person_id = None
+    try:
+        target = OverrideCategory(request.form.get("target", ""))
+    except ValueError:
+        target = None
+    roster_ids = {p.id for p in event_service.active_roster()}
+    if (
+        person_id is None
+        or person_id not in roster_ids
+        or target is None
+        or target not in ALLOWED_OVERRIDE_TARGETS[variant]
+    ):
+        flash("Could not move — check the selection.", "error")
+        return _variant_redirect(variant, cos_name)
+    parade_service.set_override(
+        day, variant, person_id, target, created_by_id=current_user.id
+    )
+    db.session.commit()
+    return _variant_redirect(variant, cos_name)
+
+
+@bp.route("/override/reset", methods=["POST"])
+@require(duty_service.can_key_parade_today)
+def override_reset():
+    variant, day = _variant_day(request.form.get("variant", ""))
+    count = parade_service.clear_overrides(day, variant)
+    db.session.commit()
+    flash(f"Reset {count} move{'s' if count != 1 else ''}.", "success")
+    return _variant_redirect(variant, request.form.get("cos_name", ""))
 
 
 # --- Statuses (MC/other) ------------------------------------------------------
