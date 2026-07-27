@@ -43,11 +43,12 @@ def leave_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
 
 
-def course_row(start=DAY, end=DAY):
+def course_row(start=DAY, end=DAY, remarks="Sig Course"):
     # A synthesized TP-calendar course cover — since P9.5 the ONE source of
-    # ON COURSE (there is no keyed course status).
+    # ON COURSE (there is no keyed course status). `remarks` is the TP event
+    # title, which the ON COURSE line prints ahead of its dates.
     return SimpleNamespace(type=CourseAbsenceType.COURSE, start_date=start,
-                           end_date=end, day_part=DayPart.FULL)
+                           end_date=end, day_part=DayPart.FULL, remarks=remarks)
 
 
 def status_row(type, start=DAY, end=DAY, *, in_camp, day_part=DayPart.FULL, remarks=None):
@@ -120,15 +121,15 @@ GOLDEN_ROLL_CALL = "\n".join([
     "2. 3SG RYAN TAN",
     "",
     "LEAVE (1):",
-    "1. CPL JORDAN TEO",
+    "1. CPL JORDAN TEO (060726)",
     "",
     "OFF/OIL (1):",
-    "1. CFC DANIEL LIM",
+    "1. CFC DANIEL LIM (060726)",
     "",
     "ON COURSE (0):",
     "",
     "MC (1):",
-    "1. 3SG RAVI KUMAR",
+    "1. 3SG RAVI KUMAR (030726 - 080726)",
     "",
     "OTHERS (0):",
 ])
@@ -166,7 +167,7 @@ def test_stay_out_person_on_mc_appears_once_under_mc():
     mc = status_row(StatusType.MC, start=YESTERDAY, end=DAY + timedelta(days=1),
                     in_camp=False)
     doc = parade.categorize(DAY, [pair(p, statuses=[mc])], "roll_call")
-    assert doc.mc == ("3SG RAVI KUMAR",)
+    assert doc.mc == ("3SG RAVI KUMAR (050726 - 070726)",)
     assert doc.stay_out == ()
     rendered = parade.render_roll_call(doc)
     assert rendered.count("RAVI KUMAR") == 1
@@ -251,30 +252,41 @@ def test_am_off_is_absent_pm_off_is_present():
         pair(pm, leaves=[leave_row(LeaveType.OFF, day_part=DayPart.PM)]),
     ]
     doc = parade.categorize(DAY, pairs, "roll_call")
-    assert doc.off_oil == ("CFC DANIEL LIM",)      # AM-off → absent
-    assert doc.current_strength == ("PTE AARON GOH",)  # PM-off → present
+    assert doc.off_oil == ("CFC DANIEL LIM (060726)",)  # AM-off → absent
+    assert doc.current_strength == ("PTE AARON GOH",)   # PM-off → present
 
 
 # --- absent-row kinds route through the shared _absent_category mapping ----
 
 @pytest.mark.parametrize(
-    "row, category",
+    "row, category, suffix",
     [
-        (leave_row(LeaveType.OFF), "off_oil"),
-        (leave_row(LeaveType.OIL), "off_oil"),
-        (leave_row(LeaveType.LL), "leave"),
-        (leave_row(LeaveType.OL), "leave"),
-        (status_row(StatusType.MC, in_camp=False), "mc"),
-        (course_row(), "on_course"),
-        (status_row(StatusType.OTHER, in_camp=False), "others"),
+        (leave_row(LeaveType.OFF), "off_oil", "(060726)"),
+        (leave_row(LeaveType.OIL), "off_oil", "(060726)"),
+        (leave_row(LeaveType.LL), "leave", "(060726)"),
+        (leave_row(LeaveType.OL), "leave", "(060726)"),
+        (status_row(StatusType.MC, in_camp=False), "mc", "(060726)"),
+        (course_row(), "on_course", "(SIG COURSE: 060726)"),
+        (status_row(StatusType.OTHER, in_camp=False, remarks="HL"), "others",
+         "(HL: 060726)"),
     ],
 )
-def test_absent_kind_maps_to_roll_call_category(row, category):
+def test_absent_kind_maps_to_roll_call_category(row, category, suffix):
     p = person("3SG Test Person", id=1)
     kwargs = {LeaveType: "leaves", StatusType: "statuses",
               CourseAbsenceType: "courses"}[type(row.type)]
     doc = parade.categorize(DAY, [pair(p, **{kwargs: [row]})], "roll_call")
-    assert getattr(doc, category) == ("3SG TEST PERSON",)
+    assert getattr(doc, category) == (f"3SG TEST PERSON {suffix}",)
+
+
+def test_roll_call_stay_out_lines_stay_bare():
+    # STAY OUT is not an absence — no backing row, so no date range on the line.
+    pairs = [
+        pair(person("CPT Oscar Ong", service=Service.REGULAR, id=1)),
+        pair(person("3SG Ryan Tan", stay_out=True, id=2)),
+    ]
+    doc = parade.categorize(DAY, pairs, "roll_call")
+    assert doc.stay_out == ("CPT OSCAR ONG", "3SG RYAN TAN")
 
 
 # --- purity (Message 2 renderer must not import flask/services/models) ------

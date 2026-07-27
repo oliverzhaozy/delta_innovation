@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain import manning
+from app.domain.dates import format_ddmmyy_range
 from app.domain.events import event_days
 from app.domain.parade import _absent_category, parade_line
 from app.domain.presence import PresenceState, resolve
@@ -96,6 +97,13 @@ def cover(start=DAY, end=DAY):
 
 def person_like(service=Service.NSF, stay_out=False, is_active=True):
     return SimpleNamespace(is_active=is_active, stay_out=stay_out, service=service)
+
+
+def course_suffix(start=DAY, end=DAY, title="Sig Course"):
+    """The suffix every ON COURSE line carries (owner 2026-07-27): the TP event
+    title uppercased, then the DATES the event covers — the span `event_days`
+    derives, not the clock times."""
+    return f"({title.upper()}: {format_ddmmyy_range(start, end)})"
 
 
 def leave_like(start=DAY, end=DAY, type_=LeaveType.OFF):
@@ -189,8 +197,9 @@ def test_participant_appears_under_on_course_on_every_variant(app, make_person, 
         day = DAY
         built = parade_service.build_doc(day, variant, cos_display=parade_line(cos))
         assert built.imbalance is None
-        assert built.doc.on_course == ("PTE GOES ONCOURSE",)
-        assert "ON COURSE (1):\n1. PTE GOES ONCOURSE" in built.text
+        line = f"PTE GOES ONCOURSE {course_suffix()}"
+        assert built.doc.on_course == (line,)
+        assert f"ON COURSE (1):\n1. {line}" in built.text
         assert "PTE STAYS BACK" not in built.doc.on_course
 
 
@@ -199,7 +208,10 @@ def test_a_category_participant_row_expands_to_its_members(app, make_person):
     plant_course(app, categories=[ParticipantCategory.PLATOON_2])
     with app.app_context():
         built = parade_service.build_doc(DAY, ParadeVariant.MORNING)
-        assert set(built.doc.on_course) == {"PTE GOES ONCOURSE", "PTE STAYS BACK"}
+        assert set(built.doc.on_course) == {
+            f"PTE GOES ONCOURSE {course_suffix()}",
+            f"PTE STAYS BACK {course_suffix()}",
+        }
 
 
 def test_an_excluded_person_is_carved_out_of_the_category(app, make_person):
@@ -207,7 +219,7 @@ def test_an_excluded_person_is_carved_out_of_the_category(app, make_person):
     plant_course(app, categories=[ParticipantCategory.PLATOON_2], excluded=["crs_stay"])
     with app.app_context():
         built = parade_service.build_doc(DAY, ParadeVariant.MORNING)
-        assert built.doc.on_course == ("PTE GOES ONCOURSE",)
+        assert built.doc.on_course == (f"PTE GOES ONCOURSE {course_suffix()}",)
 
 
 def test_an_unlabelled_tp_event_is_not_a_course(app, make_person):
@@ -233,7 +245,7 @@ def test_the_course_expires_with_its_date_range(app, make_person):
                  end_dt=datetime(DAY.year, DAY.month, DAY.day, 23, 0), people=["crs_go"])
     with app.app_context():
         assert parade_service.build_doc(DAY, ParadeVariant.MORNING).doc.on_course == (
-            "PTE GOES ONCOURSE",
+            f"PTE GOES ONCOURSE {course_suffix()}",
         )
         # The next day is not covered — the participant is back in strength.
         after = parade_service.build_doc(NEXT, ParadeVariant.MORNING).doc
@@ -246,9 +258,12 @@ def test_a_night_straddling_course_covers_both_days(app, make_person):
     plant_course(app, start_dt=datetime(DAY.year, DAY.month, DAY.day, 23, 0),
                  end_dt=datetime(NEXT.year, NEXT.month, NEXT.day, 1, 0), people=["crs_go"])
     with app.app_context():
+        # Both days quote the SAME span — the line reports the event's range,
+        # not the day the document is for.
+        line = f"PTE GOES ONCOURSE {course_suffix(end=NEXT)}"
         for day in (DAY, NEXT):
             doc = parade_service.build_doc(day, ParadeVariant.MORNING).doc
-            assert doc.on_course == ("PTE GOES ONCOURSE",), day
+            assert doc.on_course == (line,), day
 
 
 # --- downstream consumers of the shared fetch ------------------------------

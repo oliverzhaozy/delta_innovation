@@ -6,7 +6,7 @@ pin `render_morning` to the Message 3 skeleton in docs/PARADE_FORMATS.md
 byte-for-byte, so any drift in spacing, counts, or category order fails here.
 """
 import ast
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,18 +29,20 @@ def person(display_name, id=0):
     return SimpleNamespace(id=id, display_name=plain, rank=Rank(rank_token))
 
 
-def leave_row(type):
-    return SimpleNamespace(type=type)
+def leave_row(type, start=DAY, end=DAY):
+    return SimpleNamespace(type=type, start_date=start, end_date=end)
 
 
-def status_row(type, remarks=None):
-    return SimpleNamespace(type=type, remarks=remarks)
+def status_row(type, remarks=None, start=DAY, end=DAY):
+    return SimpleNamespace(type=type, remarks=remarks, start_date=start, end_date=end)
 
 
-def course_row():
+def course_row(remarks="Sig Course", start=DAY, end=DAY):
     # A synthesized TP-calendar course cover — since P9.5 the ONE source of
-    # ON COURSE (there is no keyed course status).
-    return SimpleNamespace(type=CourseAbsenceType.COURSE)
+    # ON COURSE (there is no keyed course status). `remarks` is the TP event
+    # title, which the ON COURSE line prints ahead of its dates.
+    return SimpleNamespace(type=CourseAbsenceType.COURSE, remarks=remarks,
+                           start_date=start, end_date=end)
 
 
 def absent(row):
@@ -59,12 +61,15 @@ def stay_out(in_camp_rows=()):
 
 def _mixed_roster():
     # Fed in parade order; categorize preserves order within each category.
+    # Ravi's MC runs three days, so the golden pins BOTH suffix forms — the
+    # collapsed single date and the two-date range.
     return [
         (person("CPT Oscar Ong", 1), stay_out()),                         # regular stay-out → CURRENT
         (person("MSG Michael Tan", 2), present()),                         # present → CURRENT
         (person("CPL Jordan Teo", 3), absent(leave_row(LeaveType.LL))),    # LL → LEAVE
         (person("CFC Daniel Lim", 4), absent(leave_row(LeaveType.OFF))),   # OFF → OFF/OIL
-        (person("3SG Ravi Kumar", 5), absent(status_row(StatusType.MC))),  # MC → MC
+        (person("3SG Ravi Kumar", 5),                                      # MC → MC
+         absent(status_row(StatusType.MC, end=DAY + timedelta(days=2)))),
         (person("3SG Oliver Zhao", 6),                                     # in-camp OTHER "BDO" → OTHERS IN CAMP
          present(in_camp_rows=[status_row(StatusType.OTHER, remarks="BDO")])),
         (person("PTE Aaron Goh", 7), present()),                           # present → CURRENT
@@ -102,15 +107,15 @@ GOLDEN_MIXED = "\n".join([
     "NOT PRESENT IN CAMP (3):",
     "",
     "LEAVE (1):",
-    "1. CPL JORDAN TEO",
+    "1. CPL JORDAN TEO (060726)",
     "",
     "OFF/OIL (1):",
-    "1. CFC DANIEL LIM",
+    "1. CFC DANIEL LIM (060726)",
     "",
     "ON COURSE (0):",
     "",
     "MC (1):",
-    "1. 3SG RAVI KUMAR",
+    "1. 3SG RAVI KUMAR (060726 - 080726)",
     "",
     "OTHERS (0):",
 ])
@@ -181,24 +186,67 @@ def test_golden_empty_categories_header_only():
 # --- done-criterion 3: each ABSENT row kind lands in its category --------
 
 @pytest.mark.parametrize(
-    "row, category, header",
+    "row, category, header, suffix",
     [
-        (leave_row(LeaveType.OFF), "off_oil", "OFF/OIL"),
-        (leave_row(LeaveType.OIL), "off_oil", "OFF/OIL"),
-        (leave_row(LeaveType.LL), "leave", "LEAVE"),
-        (leave_row(LeaveType.OL), "leave", "LEAVE"),
-        (status_row(StatusType.MC), "mc", "MC"),
-        (course_row(), "on_course", "ON COURSE"),
-        (status_row(StatusType.OTHER), "others", "OTHERS"),
+        (leave_row(LeaveType.OFF), "off_oil", "OFF/OIL", "(060726)"),
+        (leave_row(LeaveType.OIL), "off_oil", "OFF/OIL", "(060726)"),
+        (leave_row(LeaveType.LL), "leave", "LEAVE", "(060726)"),
+        (leave_row(LeaveType.OL), "leave", "LEAVE", "(060726)"),
+        (status_row(StatusType.MC), "mc", "MC", "(060726)"),
+        (course_row(), "on_course", "ON COURSE", "(SIG COURSE: 060726)"),
+        (status_row(StatusType.OTHER, remarks="HL"), "others", "OTHERS", "(HL: 060726)"),
+        # No remark on an out-of-camp OTHER → the type label stands in.
+        (status_row(StatusType.OTHER), "others", "OTHERS", "(OTHER: 060726)"),
     ],
 )
-def test_absent_row_kind_maps_to_category(row, category, header):
+def test_absent_row_kind_maps_to_category(row, category, header, suffix):
     pairs = [(person("3SG Test Person", 1), absent(row))]
     doc = parade.categorize(DAY, pairs, "morning")
-    assert getattr(doc, category) == ("3SG TEST PERSON",)
+    assert getattr(doc, category) == (f"3SG TEST PERSON {suffix}",)
     # And it renders under the right header, nowhere else.
     rendered = parade.render_morning(doc)
-    assert f"{header} (1):\n1. 3SG TEST PERSON" in rendered
+    assert f"{header} (1):\n1. 3SG TEST PERSON {suffix}" in rendered
+
+
+@pytest.mark.parametrize(
+    "row, category, suffix",
+    [
+        (leave_row(LeaveType.LL, end=DAY + timedelta(days=4)), "leave",
+         "(060726 - 100726)"),
+        (status_row(StatusType.MC, end=DAY + timedelta(days=1)), "mc",
+         "(060726 - 070726)"),
+        (course_row(end=DAY + timedelta(days=6)), "on_course",
+         "(SIG COURSE: 060726 - 120726)"),
+        (status_row(StatusType.OTHER, remarks="HL", end=DAY + timedelta(days=1)),
+         "others", "(HL: 060726 - 070726)"),
+    ],
+)
+def test_multi_day_absence_prints_both_dates(row, category, suffix):
+    pairs = [(person("3SG Test Person", 1), absent(row))]
+    doc = parade.categorize(DAY, pairs, "morning")
+    assert getattr(doc, category) == (f"3SG TEST PERSON {suffix}",)
+
+
+def test_absent_suffix_uses_the_rows_own_dates_not_the_parade_day():
+    # An absence keyed days earlier and still running quotes ITS range, so the
+    # reader sees when the person is back — not the date of the document.
+    row = status_row(StatusType.MC, start=DAY - timedelta(days=3),
+                     end=DAY + timedelta(days=2))
+    pairs = [(person("3SG Test Person", 1), absent(row))]
+    doc = parade.categorize(DAY, pairs, "morning")
+    assert doc.mc == ("3SG TEST PERSON (030726 - 080726)",)
+
+
+def test_present_and_in_camp_lines_carry_no_date_range():
+    # Only ABSENT lines are dated: a present person has no backing row to quote.
+    pairs = [
+        (person("PTE Aaron Goh", 1), present()),
+        (person("3SG Oliver Zhao", 2),
+         present(in_camp_rows=[status_row(StatusType.OTHER, remarks="BDO")])),
+    ]
+    doc = parade.categorize(DAY, pairs, "morning")
+    assert doc.current_strength == ("PTE AARON GOH",)
+    assert doc.others_in_camp == ("3SG OLIVER ZHAO (BDO)",)
 
 
 def test_others_in_camp_reason_falls_back_to_type_label_when_no_remarks():

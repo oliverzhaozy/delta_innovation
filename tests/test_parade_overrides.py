@@ -51,12 +51,12 @@ def stay_out():
     return Resolution(state=PresenceState.STAY_OUT)
 
 
-def leave_row(type):
-    return SimpleNamespace(type=type)
+def leave_row(type, start=DAY, end=DAY):
+    return SimpleNamespace(type=type, start_date=start, end_date=end)
 
 
-def status_row(type, remarks=None):
-    return SimpleNamespace(type=type, remarks=remarks)
+def status_row(type, remarks=None, start=DAY, end=DAY):
+    return SimpleNamespace(type=type, remarks=remarks, start_date=start, end_date=end)
 
 
 # --- shared docs -------------------------------------------------------------
@@ -116,6 +116,24 @@ def test_reason_suffix_dropped_when_dragged_out_of_others_in_camp():
     assert all("OLIVER ZHAO" not in line for line in moved.others_in_camp)
 
 
+def test_absence_date_suffix_dropped_when_dragged_out():
+    doc = _morning_doc()
+    # Ravi sits in MC as "3SG RAVI KUMAR (060726)" — his row's own range.
+    assert "3SG RAVI KUMAR (060726)" in doc.mc
+    moved = parade.apply_overrides(doc, {5: OverrideCategory.CURRENT_STRENGTH})
+    assert "3SG RAVI KUMAR" in moved.current_strength
+    assert all("RAVI KUMAR" not in line for line in moved.mc)
+
+
+def test_drag_into_an_absent_category_synthesises_no_dates():
+    # Aaron is simply present: there is no backing row, so the drag must not
+    # invent a range for the MC line it creates.
+    doc = _morning_doc()
+    moved = parade.apply_overrides(doc, {1: OverrideCategory.MC})
+    assert "PTE AARON GOH" in moved.mc
+    assert "PTE AARON GOH (" not in "".join(moved.mc)
+
+
 def test_roll_call_stay_out_round_trip():
     doc = _roll_call_doc()
     assert "PTE AARON GOH" in doc.current_strength
@@ -151,7 +169,7 @@ def test_cos_current_strength_target_removes_person_from_message():
         5 not in [p.id for p in getattr(moved, f"{name}_people")]
         for name in parade._COS_CATEGORIES
     )
-    assert "CPL JORDAN TEO" in moved.leave
+    assert "CPL JORDAN TEO (060726)" in moved.leave
 
 
 def test_unknown_person_id_silently_skipped():

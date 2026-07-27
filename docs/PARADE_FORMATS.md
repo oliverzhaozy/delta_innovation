@@ -15,6 +15,15 @@
     (CPT > 3WO > LTA > 2LT > SSG > 2SG > 3SG > CFC > CPL > LCP > PTE). Do not alphabetize within the same rank.
   - *Display output:* strictly `RANK NAME` (e.g. `3WO ANDY LEOW`). Do not include appointment indicators in the
     final output lists.
+- **Date range on every absent line (owner decision, 2026-07-27):** in all three messages, every line under LEAVE,
+  OFF/OIL, ON COURSE, MC, and OTHERS ends with the dates the person is away, in parentheses:
+  - LEAVE / OFF/OIL / MC — `RANK NAME (DDMMYY - DDMMYY)`, collapsing to `RANK NAME (DDMMYY)` on a one-day range.
+    The category already names the reason, so the dates stand alone.
+  - ON COURSE — `RANK NAME (COURSE TITLE: DDMMYY - DDMMYY)`; the category alone does not say which course.
+  - OTHERS — `RANK NAME (REASON: DDMMYY - DDMMYY)`, e.g. `1. CPL JO-WAYNE (HL: 270726 - 280726)`.
+
+  OTHERS IN CAMP is unchanged (reason only, never dates); STAY OUT and CURRENT STRENGTH lines stay bare. A line a
+  keyer DRAGS into a category is also bare: a dragged person has no backing row whose dates could honestly be quoted.
 
 ## Message 1: COS Message
 
@@ -185,3 +194,8 @@ OTHERS ([J]):
   absences of type OTHER.
 - **OTHERS IN CAMP** = in-camp statuses (e.g. briefing, "not joining FP" entries) — morning parade only; roll call
   shows `(0)`.
+- **Absent-line dates** = the winning absence row's own `start_date`/`end_date`, so the line reports when the person
+  is back — never the date of the document they appear on.
+- **ON COURSE course title** = the title of the TP calendar event that put the person on course, uppercased.
+- **OTHERS reason** = the status row's remark, falling back to the status type's label when there is none — the same
+  fallback OTHERS IN CAMP uses.

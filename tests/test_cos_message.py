@@ -42,11 +42,12 @@ def leave_row(type, start=DAY, end=DAY, day_part=DayPart.FULL):
     return SimpleNamespace(type=type, start_date=start, end_date=end, day_part=day_part)
 
 
-def course_row(start=DAY, end=DAY):
+def course_row(start=DAY, end=DAY, remarks="Sig Course"):
     # A synthesized TP-calendar course cover — since P9.5 the ONE source of
-    # ON COURSE (there is no keyed course status).
+    # ON COURSE (there is no keyed course status). `remarks` is the TP event
+    # title, which the ON COURSE line prints ahead of its dates.
     return SimpleNamespace(type=CourseAbsenceType.COURSE, start_date=start,
-                           end_date=end, day_part=DayPart.FULL)
+                           end_date=end, day_part=DayPart.FULL, remarks=remarks)
 
 
 def status_row(type, start=DAY, end=DAY, *, in_camp, day_part=DayPart.FULL, remarks=None):
@@ -96,15 +97,15 @@ GOLDEN_COS = "\n".join([
     "2. MSG MICHAEL TAN",
     "",
     "LEAVE (1):",
-    "1. CPL JORDAN TEO",
+    "1. CPL JORDAN TEO (060726)",
     "",
     "OFF/OIL (1):",
-    "1. CFC DANIEL LIM",
+    "1. CFC DANIEL LIM (060726)",
     "",
     "ON COURSE (0):",
     "",
     "MC (1):",
-    "1. 3SG RAVI KUMAR",
+    "1. 3SG RAVI KUMAR (030726 - 080726)",
     "",
     "OTHERS (0):",
 ])
@@ -135,7 +136,7 @@ def test_regular_out_of_camp_status_overrides_stay_out():
     p = person("CPT Oscar Ong", service=Service.REGULAR, id=1)
     pairs = [pair(p, statuses=[status_row(StatusType.OTHER, in_camp=False)])]
     doc = parade.compute_cos_message(DAY, COS, pairs)
-    assert doc.others == ("CPT OSCAR ONG",)
+    assert doc.others == ("CPT OSCAR ONG (OTHER: 060726)",)
     assert doc.stay_out == ()
 
 
@@ -183,24 +184,33 @@ def test_present_and_duty_nsfs_are_omitted():
 # --- absent-row kinds route through the shared _absent_category mapping ----
 
 @pytest.mark.parametrize(
-    "row, category",
+    "row, category, suffix",
     [
-        (leave_row(LeaveType.OFF), "off_oil"),
-        (leave_row(LeaveType.OIL), "off_oil"),
-        (leave_row(LeaveType.LL), "leave"),
-        (leave_row(LeaveType.OL), "leave"),
-        (status_row(StatusType.MC, in_camp=False), "mc"),
-        (course_row(), "on_course"),
-        (status_row(StatusType.OTHER, in_camp=False), "others"),
+        (leave_row(LeaveType.OFF), "off_oil", "(060726)"),
+        (leave_row(LeaveType.OIL), "off_oil", "(060726)"),
+        (leave_row(LeaveType.LL), "leave", "(060726)"),
+        (leave_row(LeaveType.OL), "leave", "(060726)"),
+        (status_row(StatusType.MC, in_camp=False), "mc", "(060726)"),
+        (course_row(), "on_course", "(SIG COURSE: 060726)"),
+        (status_row(StatusType.OTHER, in_camp=False, remarks="HL"), "others",
+         "(HL: 060726)"),
     ],
 )
-def test_absent_kind_maps_to_cos_category(row, category):
+def test_absent_kind_maps_to_cos_category(row, category, suffix):
     p = person("3SG Test Person", id=1)
     # Route the row to the right resolve() argument by its enum family.
     kwargs = {LeaveType: "leaves", StatusType: "statuses",
               CourseAbsenceType: "courses"}[type(row.type)]
     doc = parade.compute_cos_message(DAY, COS, [pair(p, **{kwargs: [row]})])
-    assert getattr(doc, category) == ("3SG TEST PERSON",)
+    assert getattr(doc, category) == (f"3SG TEST PERSON {suffix}",)
+
+
+def test_cos_stay_out_lines_stay_bare():
+    # STAY OUT is the engine's default for a regular, not an absence: there is
+    # no backing row, so the line must carry no date range.
+    p = person("CPT Oscar Ong", service=Service.REGULAR, id=1)
+    doc = parade.compute_cos_message(DAY, COS, [pair(p)])
+    assert doc.stay_out == ("CPT OSCAR ONG",)
 
 
 # --- guards -----------------------------------------------------------------

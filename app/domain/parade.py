@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Mapping
 
-from app.domain.dates import format_ddmmyy
+from app.domain.dates import format_ddmmyy, format_ddmmyy_range
 from app.domain.presence import PresenceState
 from app.domain.types import (
     ALLOWED_OVERRIDE_TARGETS,
@@ -250,6 +250,24 @@ def _in_camp_reason(row) -> str:
     return (row.remarks or row.type.label).upper()
 
 
+def _absence_suffix(row) -> str:
+    """The parenthesized suffix every ABSENT line carries (owner 2026-07-27).
+
+    Discriminated on the winning row's kind exactly as `_absent_category` is:
+    LEAVE / OFF-OIL / MC say only when ("(DDMMYY - DDMMYY)"), because the
+    category itself already names the reason; ON COURSE and OTHERS lead with a
+    reason ("(SIG COURSE: …)", "(HL: …)") since the category alone does not say
+    which course or which excuse. The reason falls back to the type's label the
+    same way `_in_camp_reason` does — a course cover always carries the TP event
+    title as its remarks.
+    """
+    dates = format_ddmmyy_range(row.start_date, row.end_date)
+    kind = row.type
+    if isinstance(kind, LeaveType) or kind is StatusType.MC:
+        return f"({dates})"
+    return f"({(row.remarks or kind.label).upper()}: {dates})"
+
+
 def categorize(day, pairs, variant: str) -> ParadeDoc:
     """Bucket parade-sorted `(person, resolution)` pairs into a ParadeDoc for
     `variant` ∈ {"morning", "roll_call"}. Order within a category follows the
@@ -276,7 +294,7 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
             raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
-            line = parade_line(person)
+            line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"
         elif variant == "morning" and resolution.in_camp_rows:
             reason = _in_camp_reason(resolution.in_camp_rows[0])
             bucket = "others_in_camp"
@@ -546,12 +564,15 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
             raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
+            line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"
         elif state is PresenceState.STAY_OUT:
+            # STAY OUT is not an absence: there is no backing row, so no suffix.
             bucket = "stay_out"
+            line = parade_line(person)
         else:
             # PRESENT / DUTY: omitted — this text requests statuses, not attendance.
             continue
-        lines[bucket].append(parade_line(person))
+        lines[bucket].append(line)
         people[bucket].append(person)
 
     doc = CosDoc(
@@ -617,9 +638,11 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
     validates the target against ALLOWED_OVERRIDE_TARGETS before it ever stores
     one) — raise ValueError. A person no longer in the doc is a stale override
     that self-heals — silently skipped. A person already in the target bucket is
-    a no-op. The moved line is the BARE parade_line (any OTHERS IN CAMP reason
-    suffix is dropped, and never added on the way in), inserted at its
-    parade_sort_key position so the category stays in parade order. The result
+    a no-op. The moved line is the BARE parade_line (any parenthesized suffix —
+    an OTHERS IN CAMP reason or an absence date range — is dropped, and never
+    added on the way in: a dragged person has no truthful backing row to quote),
+    inserted at its parade_sort_key position so the category stays in parade
+    order. The result
     is validated: a move that unbalanced the doc is refused like any other.
 
     CURRENT_STRENGTH on a CosDoc REMOVES the person (decision D4): Message 1 has

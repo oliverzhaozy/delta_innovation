@@ -37,38 +37,49 @@
 <section class="card">
   <div class="month-grid-wrap">
     <div class="month-grid">
-      {% for label in weekday_labels %}
-      <div class="month-grid-head">{{ label }}</div>
-      {% endfor %}
+      <div class="month-weekdays">
+        {% for label in weekday_labels %}
+        <div class="month-grid-head">{{ label }}</div>
+        {% endfor %}
+      </div>
       {% for week in weeks %}
-        {% for cell in week %}
-        <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}">
-          {% if cell.in_month %}
+      <div class="month-week" style="--lanes: {{ week.lane_count }}">
+        {# Day cells come first and span every lane row: they are the week's
+           background, so the bars that follow paint on top of them. #}
+        {% for cell in week.cells %}
+        <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}" style="grid-column: {{ loop.index }}">
           <div class="cell-head">
             {# Plain text, no link: parade documents are today-fixed and there is
                no archive to walk back to (P9.2). #}
+            {% if cell.in_month %}
             <span class="day-num">{{ cell.date.day }}</span>
             {% if can_add %}
             <a class="day-add" href="{{ url_for('calendar.new', date=cell.date.isoformat()) }}" title="New event on {{ cell.date.isoformat() }}" aria-label="New event on {{ cell.date.isoformat() }}">+</a>
             {% endif %}
+            {% else %}
+            <span class="day-num muted">{{ cell.date.day }}</span>
+            {% endif %}
           </div>
-          {% for event in cell.events %}
-          {# cal-* class drives the on/off filter; ev-<slug> still colours the
-             chip by label (UI-9), but the label TEXT is omitted in the grid —
-             the month view shows titles only; the label stays on the list/detail. #}
-          <a class="chip cal-{{ 'arctic' if event.calendar.value == 'ARCTIC' else 'tp' }}{% if event.label_enum %} ev-{{ event.label_enum.slug }}{% endif %}" href="{{ url_for('calendar.detail', event_id=event.id) }}">{{ event.title }}</a>
-          {% endfor %}
-          {% for row in cell.off_leave[:off_leave_limit] %}
-          <span class="chip cal-off">{{ row.person.rank.value }} {{ row.person.display_name }} {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span>
-          {% endfor %}
-          {% if cell.off_leave | length > off_leave_limit %}
-          <span class="chip cal-off more">+{{ cell.off_leave | length - off_leave_limit }} more</span>
-          {% endif %}
-          {% else %}
-          <span class="day-num muted">{{ cell.date.day }}</span>
-          {% endif %}
         </div>
         {% endfor %}
+        {# One bar per event and per contiguous OFF/LEAVE run per week, spanning
+           its columns. A squared-off end (clip-l/clip-r) is the cue that the bar
+           continues on the neighbouring week row. #}
+        {% for seg in week.segments %}
+        {%- set clip = (" clip-l" if seg.clip_left else "") ~ (" clip-r" if seg.clip_right else "") -%}
+        {%- set place = "grid-column: " ~ seg.col ~ " / span " ~ seg.span ~ "; grid-row: " ~ seg.row -%}
+        {% if seg.kind == "event" %}
+        {# cal-* class drives the on/off filter; ev-<slug> still colours the bar
+           by label (UI-9), but the label TEXT is omitted in the grid — the month
+           view shows titles only; the label stays on the list/detail. #}
+        <a class="chip cal-{{ 'arctic' if seg.obj.calendar.value == 'ARCTIC' else 'tp' }}{% if seg.obj.label_enum %} ev-{{ seg.obj.label_enum.slug }}{% endif %}{{ clip }}" style="{{ place }}" href="{{ url_for('calendar.detail', event_id=seg.obj.id) }}">{{ seg.obj.title }}</a>
+        {% elif seg.kind == "off" %}
+        <span class="chip cal-off{{ clip }}" style="{{ place }}">{{ seg.obj.person.rank.value }} {{ seg.obj.person.display_name }} {{ seg.obj.label }}{% if seg.obj.day_part.value != 'FULL' %} ({{ seg.obj.day_part.value }}){% endif %}</span>
+        {% else %}
+        <span class="chip cal-off more" style="{{ place }}">+{{ seg.count }} more</span>
+        {% endif %}
+        {% endfor %}
+      </div>
       {% endfor %}
     </div>
   </div>

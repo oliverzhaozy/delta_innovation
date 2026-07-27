@@ -34,7 +34,12 @@ def person(display_name, id):
 
 
 def absent(type_):
-    return Resolution(state=PresenceState.ABSENT, row=SimpleNamespace(type=type_))
+    # Dates and remarks ride on every absent row: the ABSENT line quotes them
+    # as its "(… : DDMMYY - DDMMYY)" suffix.
+    return Resolution(
+        state=PresenceState.ABSENT,
+        row=SimpleNamespace(type=type_, start_date=DAY, end_date=DAY, remarks=None),
+    )
 
 
 def present(remarks=None):

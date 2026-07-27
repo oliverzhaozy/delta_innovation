@@ -25,21 +25,23 @@ def event_id_for(app, title):
         return db.session.query(Event.id).filter_by(title=title).scalar()
 
 
-def plant_leave(app, username, day, status=RequestStatus.APPROVED):
+def plant_leave(app, username, day, status=RequestStatus.APPROVED, end=None):
     with app.app_context():
         pid = db.session.query(Person.id).filter_by(username=username).scalar()
         db.session.add(
             LeaveRequest(
-                person_id=pid, type=LeaveType.OFF, start_date=day, end_date=day,
+                person_id=pid, type=LeaveType.OFF, start_date=day, end_date=end or day,
                 day_part=DayPart.FULL, status=status,
             )
         )
         db.session.commit()
 
 
-# ---------- Criterion 1: a 3-day TP event appears in exactly its 3 cells ----------
+# ---------- Criterion 1: a 3-day TP event is ONE bar spanning its 3 cells ----------
 
-def test_three_day_event_appears_in_exactly_three_cells_and_links_to_detail(app, client, make_person):
+def test_three_day_event_is_one_spanning_bar_and_links_to_detail(app, client, make_person):
+    # UI-23: Mon 6 - Wed 8 Jul 2026 all sit on the same week row, so the event
+    # is a single bar spanning 3 columns — not one chip per day.
     login(client, make_person(**make_pc()))
     create_event(client, "TP", "Field camp", "2026-07-06T08:00", "2026-07-08T17:00")
     event_id = event_id_for(app, "Field camp")
@@ -47,7 +49,21 @@ def test_three_day_event_appears_in_exactly_three_cells_and_links_to_detail(app,
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
     link = f'href="/calendar/{event_id}"'.encode()
-    assert resp.data.count(link) == 3
+    assert resp.data.count(link) == 1
+    assert b"grid-column: 1 / span 3" in resp.data
+
+
+def test_event_crossing_a_week_boundary_gets_one_bar_per_week(app, client, make_person):
+    # Mon 6 - Wed 15 Jul 2026 covers the 6-12 and 13-19 week rows: two bars, and
+    # each carries a continuation cue on the side that runs off its row.
+    login(client, make_person(**make_pc("mv_pc_span")))
+    create_event(client, "TP", "Long ops", "2026-07-06T08:00", "2026-07-15T17:00")
+    event_id = event_id_for(app, "Long ops")
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert resp.data.count(f'href="/calendar/{event_id}"'.encode()) == 2
+    assert b"clip-r" in resp.data and b"clip-l" in resp.data
 
 
 # ---------- Criterion 2: ARCTIC chips gated by can_view_arctic ----------
@@ -96,6 +112,34 @@ def test_two_overlapping_requests_for_same_person_show_one_chip(app, client, mak
     assert resp.data.count(b"chip cal-off") == 1
 
 
+def test_four_contiguous_off_days_are_one_spanning_bar(app, client, make_person):
+    # UI-23: consecutive days with the same person + label + day-part merge into
+    # ONE run, so Mon 6 - Thu 9 Jul 2026 draws a single 4-column bar.
+    make_person(username="mv_run_guy", platoon=1)
+    login(client, make_person(username="mv_run_viewer"))
+    plant_leave(app, "mv_run_guy", date(2026, 7, 6), end=date(2026, 7, 9))
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert resp.data.count(b"chip cal-off") == 1
+    assert b"grid-column: 1 / span 4" in resp.data
+
+
+def test_a_fourth_concurrent_off_run_collapses_into_a_per_day_more_chip(app, client, make_person):
+    # The OFF/LEAVE band is capped at 3 lanes per week; the fourth run is dropped
+    # from the bars and counted into that day's "+N more" chip instead.
+    for n in range(4):
+        make_person(username=f"mv_cap_{n}", platoon=1)
+        plant_leave(app, f"mv_cap_{n}", date(2026, 7, 8))
+    login(client, make_person(username="mv_cap_viewer"))
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert b"+1 more" in resp.data
+    # 3 name bars + the "+1 more" chip, which carries the same cal-off class.
+    assert resp.data.count(b"chip cal-off") == 4
+
+
 def test_regular_leave_is_not_in_the_nsf_off_leave_layer(app, client, make_person):
     from app.domain.types import Service
 
@@ -129,11 +173,13 @@ def test_event_spanning_month_boundary_appears_in_both_months(app, client, make_
     event_id = event_id_for(app, "Boundary op")
     link = f'href="/calendar/{event_id}"'.encode()
 
+    # Each month draws its own bar, clipped at the month edge: July shows one
+    # spanning Thu 30 - Fri 31, August one spanning Sat 1 - Sun 2 (same week row).
     july_resp = client.get("/calendar/month?ym=2026-07")
-    assert july_resp.data.count(link) == 2  # Jul 30, 31
+    assert july_resp.data.count(link) == 1
 
     august_resp = client.get("/calendar/month?ym=2026-08")
-    assert august_resp.data.count(link) == 2  # Aug 1, 2
+    assert august_resp.data.count(link) == 1
 
 
 # ---------- Criterion 6: default month, ?ym= nav, malformed ?ym=, prev/next/Today ----------

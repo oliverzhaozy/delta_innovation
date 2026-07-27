@@ -252,7 +252,10 @@ def test_parade_invariants_hold_for_a_random_roster(seed):
     listed = set()
     for _title, (_count, body) in cos_blocks.items():
         for line in body:
-            listed.add(line.split(". ", 1)[1])
+            # Strip the numbering, then the parenthesized suffix an absent line
+            # carries: identity is the bare parade_line head, the same
+            # equality-or-" (" convention _occurrences uses.
+            listed.add(line.split(". ", 1)[1].split(" (", 1)[0])
     assert listed <= reportable
     assert not (listed & present_lines)
 
