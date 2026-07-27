@@ -1,21 +1,22 @@
-"""P4.4 — services/duty_service.py: availability shaping, generation, confirm.
+"""P4.4 — services/duty_service.py: availability shaping, generation, the
+weekday/holiday/blocked day rule, and blocked-day writes.
 
 The pure modules (eligibility.py, roster.py) are already pinned by their own
 suites; these tests exercise the glue — one shared absence fetch, overnight-TP
-resolution, CONFIRMED preservation, and the confirm fingerprint (A4).
+resolution, and manual-row preservation across regeneration.
 """
 import pytest
 from datetime import date, datetime
 
 from app.domain import roster
-from app.domain.dates import iter_days
 from app.domain.types import (
-    Appointment, Calendar, DayPart, Duty, DutyState, LeaveType,
+    Appointment, Calendar, DayPart, Duty, LeaveType,
     ParticipantCategory, Rank, RequestStatus, StatusType,
 )
 from app.extensions import db
 from app.models import (
-    DutyAssignment, Event, EventParticipant, LeaveRequest, Person, StatusEntry,
+    DutyAssignment, DutyBlockedDay, Event, EventParticipant, LeaveRequest,
+    Person, PublicHoliday, StatusEntry,
 )
 from app.services import duty_service
 
@@ -68,15 +69,27 @@ def plant_event(app, owner_id, start_dt, end_dt, *, calendar=Calendar.TP,
         db.session.commit()
 
 
-def plant_assignment(app, person_id, day, duty, *, state=DutyState.CONFIRMED):
+def plant_assignment(app, person_id, day, duty, *, is_manual=True):
     with app.app_context():
         row = DutyAssignment(
-            date=day, duty=duty, person_id=person_id, state=state,
+            date=day, duty=duty, person_id=person_id, is_manual=is_manual,
             created_by_id=person_id,
         )
         db.session.add(row)
         db.session.commit()
         return row.id
+
+
+def plant_holiday(app, day, name="Test Holiday"):
+    with app.app_context():
+        db.session.add(PublicHoliday(date=day, name=name))
+        db.session.commit()
+
+
+def plant_block(app, day, person_id):
+    with app.app_context():
+        db.session.add(DutyBlockedDay(date=day, created_by_id=person_id))
+        db.session.commit()
 
 
 # --- month_bounds --------------------------------------------------------------
@@ -99,7 +112,7 @@ def test_availability_pm_half_day_blocks(app, make_person):
     plant_leave(app, opr, date(2026, 7, 15), day_part=DayPart.PM)
 
     with app.app_context():
-        _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
+        _pools, availability, _manual = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
         # Decision (d): ANY day_part blocks auto-pick, even though the parade
         # engine counts a PM as present — the two deliberately disagree.
@@ -113,7 +126,7 @@ def test_availability_pending_leave_does_not_block(app, make_person):
     plant_leave(app, opr, date(2026, 7, 15), status=RequestStatus.PENDING_PC)
 
     with app.app_context():
-        _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
+        _pools, availability, _manual = duty_service.availability_for_month(JULY)
         assert availability(get_person("cos_opr"), date(2026, 7, 15)) is True
 
 
@@ -125,7 +138,7 @@ def test_availability_in_camp_status_does_not_block(app, make_person):
                  type_=StatusType.OTHER)
 
     with app.app_context():
-        _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
+        _pools, availability, _manual = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
         # In camp is not away — an in-camp status can hold a duty.
         assert availability(person, date(2026, 7, 11)) is True
@@ -145,7 +158,7 @@ def test_availability_overnight_tp_event_blocks_day_event_does_not(app, make_per
                 calendar=Calendar.ARCTIC)
 
     with app.app_context():
-        _pools, availability, _confirmed = duty_service.availability_for_month(JULY)
+        _pools, availability, _manual = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
         assert availability(person, date(2026, 7, 20)) is False
         assert availability(person, date(2026, 7, 21)) is False
@@ -154,22 +167,21 @@ def test_availability_overnight_tp_event_blocks_day_event_does_not(app, make_per
         assert availability(person, date(2026, 7, 24)) is True
 
 
-def test_availability_confirmed_assignment_blocks_same_date(app, make_person):
+def test_availability_manual_assignment_blocks_same_date(app, make_person):
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS)
     ps = pid(app, "ps2")
-    plant_assignment(app, ps, date(2026, 7, 10), Duty.CDOS, state=DutyState.CONFIRMED)
-    plant_assignment(app, ps, date(2026, 7, 12), Duty.CDOS, state=DutyState.PROPOSED)
+    plant_assignment(app, ps, date(2026, 7, 10), Duty.CDOS, is_manual=True)
+    plant_assignment(app, ps, date(2026, 7, 13), Duty.CDOS, is_manual=False)
 
     with app.app_context():
-        _pools, availability, confirmed = duty_service.availability_for_month(JULY)
+        _pools, availability, manual = duty_service.availability_for_month(JULY)
         person = get_person("ps2")
         assert availability(person, date(2026, 7, 10)) is False
-        # A PROPOSED draft never blocks — only the roster of record does.
-        assert availability(person, date(2026, 7, 12)) is True
-        assert [r.id for r in confirmed] == [
-            r.id for r in db.session.query(DutyAssignment).filter_by(
-                state=DutyState.CONFIRMED
-            ).all()
+        # An auto row is deleted and re-planned in the same transaction, so it
+        # must NOT make its own holder unavailable for that slot.
+        assert availability(person, date(2026, 7, 13)) is True
+        assert [r.id for r in manual] == [
+            r.id for r in db.session.query(DutyAssignment).filter_by(is_manual=True).all()
         ]
 
 
@@ -187,20 +199,20 @@ def make_duty_cast(make_person):
     return ["det1", "opr1", "ps2", "p2ic3"]
 
 
-def proposed_map(first, last):
+def auto_map(first, last):
     rows = (
         db.session.query(DutyAssignment)
         .filter(
             DutyAssignment.date >= first,
             DutyAssignment.date <= last,
-            DutyAssignment.state == DutyState.PROPOSED,
+            DutyAssignment.is_manual.is_(False),
         )
         .all()
     )
     return {(r.date, r.duty): r.person_id for r in rows}
 
 
-def test_generate_writes_proposed_and_matches_pure_module(app, make_person):
+def test_generate_writes_rows_and_matches_pure_module(app, make_person):
     make_duty_cast(make_person)
 
     with app.app_context():
@@ -210,39 +222,54 @@ def test_generate_writes_proposed_and_matches_pure_module(app, make_person):
         first, last = duty_service.month_bounds(AUG)
         # Rebuild the same inputs by hand and run the pure generator directly:
         # the service's rows must equal the pure module's output exactly.
-        pools, availability, _confirmed = duty_service.availability_for_month(AUG)
-        days = list(iter_days(first, last))
+        pools, availability, _manual = duty_service.availability_for_month(AUG)
+        days = duty_service.duty_days(first, last).active
         expected = {}
         for duty in Duty:
             expected.update(roster.generate(days, {duty: pools[duty]}, availability))
         expected = {k: v for k, v in expected.items() if v is not None}
 
-        assert proposed_map(first, last) == expected
+        assert auto_map(first, last) == expected
         rows = db.session.query(DutyAssignment).all()
-        assert rows and all(r.state is DutyState.PROPOSED for r in rows)
+        assert rows and all(r.is_manual is False for r in rows)
         assert all(r.created_by_id == actor.id for r in rows)
 
 
-def test_regenerate_preserves_confirmed_and_replans_rest(app, make_person):
+def test_generate_plans_duty_days_only(app, make_person):
+    # Weekends never appear; a public holiday and a blocked weekday are cut
+    # from the same one list the grid draws.
+    make_duty_cast(make_person)
+    plant_holiday(app, date(2026, 8, 17), "Test Holiday")  # a Monday
+    plant_block(app, date(2026, 8, 18), pid(app, "det1"))  # the Tuesday after
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        dates = {r.date for r in db.session.query(DutyAssignment).all()}
+        assert all(d.weekday() < 5 for d in dates)
+        assert date(2026, 8, 17) not in dates
+        assert date(2026, 8, 18) not in dates
+        assert dates == set(duty_service.duty_days(*duty_service.month_bounds(AUG)).active)
+
+
+def test_regenerate_preserves_manual_and_replans_the_rest(app, make_person):
     make_duty_cast(make_person)
     x = pid(app, "det1")
-    confirmed_id = plant_assignment(app, x, date(2026, 8, 10), Duty.COS,
-                                    state=DutyState.CONFIRMED)
+    manual_id = plant_assignment(app, x, date(2026, 8, 10), Duty.COS, is_manual=True)
 
     with app.app_context():
         duty_service.generate_month(AUG, get_person("ps2"))
 
-        row = db.session.get(DutyAssignment, confirmed_id)
-        assert row.state is DutyState.CONFIRMED
+        row = db.session.get(DutyAssignment, manual_id)
+        assert row.is_manual is True
         assert row.person_id == x
         assert row.date == date(2026, 8, 10)
         first, last = duty_service.month_bounds(AUG)
-        proposed = proposed_map(first, last)
-        # The confirmed slot was NOT re-planned...
-        assert (date(2026, 8, 10), Duty.COS) not in proposed
+        auto = auto_map(first, last)
+        # The manual slot was NOT re-planned...
+        assert (date(2026, 8, 10), Duty.COS) not in auto
         # ...but the rest of the month was (both duties have candidates).
-        assert (date(2026, 8, 11), Duty.COS) in proposed
-        assert (date(2026, 8, 10), Duty.CDOS) in proposed
+        assert (date(2026, 8, 11), Duty.COS) in auto
+        assert (date(2026, 8, 10), Duty.CDOS) in auto
 
 
 def test_generate_blank_days_have_no_row(app, make_person):
@@ -255,118 +282,119 @@ def test_generate_blank_days_have_no_row(app, make_person):
         cdos_rows = db.session.query(DutyAssignment).filter_by(duty=Duty.CDOS).count()
         assert cdos_rows == 0
         cos_rows = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).count()
-        assert cos_rows == 31  # every August day planned for the one candidate
+        assert cos_rows == 21  # every August WEEKDAY planned for the one candidate
 
 
-def test_generate_replaces_only_proposed(app, make_person):
+def test_generate_replaces_only_auto_rows(app, make_person):
     make_duty_cast(make_person)
 
     with app.app_context():
         first, last = duty_service.month_bounds(AUG)
         duty_service.generate_month(AUG, get_person("det1"))
-        first_run = proposed_map(first, last)
+        first_run = auto_map(first, last)
         duty_service.generate_month(AUG, get_person("det1"))
-        second_run = proposed_map(first, last)
+        second_run = auto_map(first, last)
 
         # Deterministic generator + identical inputs -> identical roster, and
-        # exactly one PROPOSED row per slot (no duplicate accumulation).
+        # exactly one row per slot (no duplicate accumulation).
         assert second_run == first_run
         total = db.session.query(DutyAssignment).count()
         assert total == len(second_run)
 
 
-# --- roster_fingerprint + confirm_month (A4) ------------------------------------
+# --- duty_days: the one owner of "which dates carry a duty" ---------------------
 
-def test_confirm_flips_proposed_and_stamps(app, make_person):
+SAT = date(2026, 8, 15)
+MON_HOLIDAY = date(2026, 8, 17)
+TUE_BLOCKED = date(2026, 8, 18)
+
+
+def test_duty_days_splits_weekdays_from_active_days(app, make_person):
     make_duty_cast(make_person)
+    plant_holiday(app, MON_HOLIDAY, "Test Holiday")
+    plant_block(app, TUE_BLOCKED, pid(app, "det1"))
 
     with app.app_context():
-        duty_service.generate_month(AUG, get_person("det1"))
+        first, last = duty_service.month_bounds(AUG)
+        days = duty_service.duty_days(first, last)
+        assert len(days.weekdays) == 21 and SAT not in days.weekdays
+        assert MON_HOLIDAY in days.weekdays and TUE_BLOCKED in days.weekdays
+        assert days.holidays == {MON_HOLIDAY: "Test Holiday"}
+        assert days.blocked == frozenset({TUE_BLOCKED})
+        assert days.active == [
+            d for d in days.weekdays if d not in (MON_HOLIDAY, TUE_BLOCKED)
+        ]
+
+
+# --- manual assignment on a non-duty day is LAW, not a warning ------------------
+
+def assign_on(day, username, duty=Duty.COS):
+    duty_service.assign(
+        day, duty, get_person(username),
+        actor=get_person(username), override_availability=True,
+    )
+
+
+def test_assign_on_weekend_holiday_or_blocked_day_hard_fails(app, make_person):
+    make_duty_cast(make_person)
+    plant_holiday(app, MON_HOLIDAY, "Test Holiday")
+    plant_block(app, TUE_BLOCKED, pid(app, "det1"))
+
+    with app.app_context():
+        for day in (SAT, MON_HOLIDAY, TUE_BLOCKED):
+            with pytest.raises(duty_service.IneligibleAssignment):
+                assign_on(day, "det1")
+        assert db.session.query(DutyAssignment).count() == 0
+        # ...and the working day beside them still takes the assignment.
+        assign_on(date(2026, 8, 19), "det1")
+        assert db.session.query(DutyAssignment).one().is_manual is True
+
+
+# --- blocking a day ------------------------------------------------------------
+
+def test_block_deletes_that_date_s_assignments_in_one_transaction(app, make_person):
+    make_duty_cast(make_person)
+    day = date(2026, 8, 19)  # a Wednesday
+    plant_assignment(app, pid(app, "det1"), day, Duty.COS)
+    plant_assignment(app, pid(app, "ps2"), day, Duty.CDOS)
+    plant_assignment(app, pid(app, "det1"), date(2026, 8, 20), Duty.COS)
+
+    with app.app_context():
+        removed = duty_service.block_day(day, get_person("ps2"))
+        # Stored-value order, the same one every duty query uses.
+        assert removed == ["CDO/S: 2SG Ps2", "COS: 3SG Det1"]
+        assert db.session.query(DutyBlockedDay).one().date == day
+        # Only that date's rows went; the next day's holder is untouched.
+        remaining = db.session.query(DutyAssignment).all()
+        assert [r.date for r in remaining] == [date(2026, 8, 20)]
+        assert day not in duty_service.duty_days(day, day).active
+
+
+def test_block_rejects_weekends_holidays_and_a_second_block(app, make_person):
+    make_duty_cast(make_person)
+    plant_holiday(app, MON_HOLIDAY, "Test Holiday")
+
+    with app.app_context():
         actor = get_person("ps2")
-        duty_service.confirm_month(AUG, actor, duty_service.roster_fingerprint(AUG))
+        with pytest.raises(duty_service.NotBlockable):
+            duty_service.block_day(SAT, actor)
+        with pytest.raises(duty_service.NotBlockable):
+            duty_service.block_day(MON_HOLIDAY, actor)
+        duty_service.block_day(TUE_BLOCKED, actor)
+        with pytest.raises(duty_service.NotBlockable):
+            duty_service.block_day(TUE_BLOCKED, actor)
+        assert db.session.query(DutyBlockedDay).count() == 1
 
-        rows = db.session.query(DutyAssignment).all()
-        assert rows and all(r.state is DutyState.CONFIRMED for r in rows)
-        assert all(r.confirmed_by_id == actor.id for r in rows)
-        assert all(r.confirmed_at is not None for r in rows)
 
-
-def test_confirm_stale_fingerprint_aborts(app, make_person):
+def test_unblock_reports_whether_anything_was_blocked(app, make_person):
     make_duty_cast(make_person)
 
     with app.app_context():
-        duty_service.generate_month(AUG, get_person("det1"))
-        stale = duty_service.roster_fingerprint(AUG)
-
-        # PS B edits one slot after PS A loaded the page: swap the holder to
-        # the other COS candidate (UNIQUE(date, duty) untouched).
-        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
-        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
-        row.person_id = other.id
-        db.session.commit()
-
-        with pytest.raises(duty_service.RosterChanged):
-            duty_service.confirm_month(AUG, get_person("ps2"), stale)
-        rows = db.session.query(DutyAssignment).all()
-        assert rows and all(r.state is DutyState.PROPOSED for r in rows)
-        assert all(r.confirmed_by_id is None for r in rows)
-
-
-def test_double_confirm_second_loses_cleanly(app, make_person):
-    make_duty_cast(make_person)
-
-    with app.app_context():
-        duty_service.generate_month(AUG, get_person("det1"))
-        fp = duty_service.roster_fingerprint(AUG)
-        duty_service.confirm_month(AUG, get_person("ps2"), fp)
-        stamped = {
-            r.id: (r.confirmed_by_id, r.confirmed_at)
-            for r in db.session.query(DutyAssignment).all()
-        }
-
-        # The same (now stale) fingerprint loses: nothing is PROPOSED anymore.
-        with pytest.raises(duty_service.RosterChanged):
-            duty_service.confirm_month(AUG, get_person("p2ic3"), fp)
-        after = {
-            r.id: (r.confirmed_by_id, r.confirmed_at)
-            for r in db.session.query(DutyAssignment).all()
-        }
-        assert after == stamped
-
-
-def test_confirm_does_not_touch_other_months(app, make_person):
-    make_duty_cast(make_person)
-    x = pid(app, "det1")
-    plant_assignment(app, x, date(2026, 9, 5), Duty.COS, state=DutyState.PROPOSED)
-
-    with app.app_context():
-        duty_service.generate_month(AUG, get_person("det1"))
-        duty_service.confirm_month(
-            AUG, get_person("ps2"), duty_service.roster_fingerprint(AUG)
-        )
-        sept = (
-            db.session.query(DutyAssignment)
-            .filter_by(date=date(2026, 9, 5), duty=Duty.COS)
-            .one()
-        )
-        assert sept.state is DutyState.PROPOSED
-        assert sept.confirmed_by_id is None
-
-
-def test_fingerprint_is_content_based(app, make_person):
-    make_duty_cast(make_person)
-
-    with app.app_context():
-        duty_service.generate_month(AUG, get_person("det1"))
-        before = duty_service.roster_fingerprint(AUG)
-        # Same content -> same print (stability)...
-        assert duty_service.roster_fingerprint(AUG) == before
-        # ...single manual edit -> different print (A4's exact requirement).
-        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
-        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
-        row.person_id = other.id
-        db.session.commit()
-        assert duty_service.roster_fingerprint(AUG) != before
+        duty_service.block_day(TUE_BLOCKED, get_person("ps2"))
+        assert duty_service.unblock_day(TUE_BLOCKED) is True
+        assert duty_service.unblock_day(TUE_BLOCKED) is False
+        assert db.session.query(DutyBlockedDay).count() == 0
+        assert TUE_BLOCKED in duty_service.duty_days(TUE_BLOCKED, TUE_BLOCKED).active
 
 
 def test_pools_shape(app, make_person):
@@ -375,7 +403,7 @@ def test_pools_shape(app, make_person):
     make_person(username="ps3", rank=Rank.THREE_SG, appointment=Appointment.PS, platoon=3)
 
     with app.app_context():
-        pools, _availability, _confirmed = duty_service.availability_for_month(JULY)
+        pools, _availability, _manual = duty_service.availability_for_month(JULY)
         assert set(pools) == set(Duty)
         assert [p.username for p in pools[Duty.COS]] == ["det1"]
         assert [p.username for p in pools[Duty.CDOS]] == ["ps2"]

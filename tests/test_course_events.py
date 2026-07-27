@@ -26,7 +26,6 @@ from app.domain.types import (
     CourseAbsenceType,
     DayPart,
     Duty,
-    DutyState,
     LeaveType,
     ParadeVariant,
     ParticipantCategory,
@@ -299,14 +298,14 @@ def test_duty_availability_is_false_while_on_course(app, make_person):
         assert availability(person, NEXT) is True
 
 
-def test_roster_flags_a_confirmed_holder_who_is_on_course(app, make_person):
+def test_roster_flags_a_duty_holder_who_is_on_course(app, make_person):
     make_person(username="crs_det2", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
                 display_name="Det Holder")
     plant_course(app, people=["crs_det2"])
     with app.app_context():
         pid = db.session.query(Person.id).filter_by(username="crs_det2").scalar()
         row = DutyAssignment(date=DAY, duty=Duty.COS, person_id=pid,
-                             state=DutyState.CONFIRMED, created_by_id=pid)
+                             created_by_id=pid)
         db.session.add(row)
         db.session.commit()
         assert row.id in duty_service.month_view("2026-08").absent_flags

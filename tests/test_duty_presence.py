@@ -1,7 +1,7 @@
-"""P4.7 — CONFIRMED duties feed presence, parades, and meals through the one
-build_doc pipeline. The A3 trap pinned here: the adapter row handed to the
-engine covers the RESOLUTION day (duty_day is only the fetch key), so the roll
-call labeled D really counts the duty of D−1 on day D.
+"""P4.7 — duties feed presence, parades, and meals through the one build_doc
+pipeline. The A3 trap pinned here: the adapter row handed to the engine covers
+the RESOLUTION day (duty_day is only the fetch key), so the roll call labeled D
+really counts the duty of D−1 on day D.
 """
 import re
 from datetime import date, timedelta
@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from app.domain.parade import parade_line
 from app.domain.presence import PresenceState
 from app.domain.types import (
-    Appointment, DayPart, Duty, DutyState, LeaveType, ParadeVariant, Rank,
+    Appointment, DayPart, Duty, LeaveType, ParadeVariant, Rank,
     RequestStatus, Service,
 )
 from app.extensions import db
@@ -34,13 +34,12 @@ def make_stay_out_opr(make_person, username="cos_guy"):
     )
 
 
-def plant_duty(app, username, day, *, duty=Duty.COS, state=DutyState.CONFIRMED):
+def plant_duty(app, username, day, *, duty=Duty.COS):
     with app.app_context():
         person_id = db.session.query(Person.id).filter_by(username=username).scalar()
         db.session.add(
             DutyAssignment(
-                date=day, duty=duty, person_id=person_id, state=state,
-                created_by_id=person_id,
+                date=day, duty=duty, person_id=person_id, created_by_id=person_id,
             )
         )
         db.session.commit()
@@ -62,7 +61,7 @@ def resolution_for(pairs, person_id):
     return next(p.resolution for p in pairs if p.person.id == person_id)
 
 
-def test_confirmed_duty_reaches_resolution(app, make_person):
+def test_duty_row_reaches_resolution(app, make_person):
     make_stay_out_opr(make_person)
     plant_duty(app, "cos_guy", D)
 
@@ -84,15 +83,6 @@ def test_duty_day_offset_fetches_other_date(app, make_person):
         # And without the offset, the 11th has no duty for him.
         pairs = presence_service.presence_inputs(date(2026, 8, 11))
         assert resolution_for(pairs, pid(app, "cos_guy")).state is PresenceState.STAY_OUT
-
-
-def test_proposed_changes_nothing(app, make_person):
-    make_stay_out_opr(make_person)
-    plant_duty(app, "cos_guy", D, state=DutyState.PROPOSED)
-
-    with app.app_context():
-        res = resolution_for(presence_service.presence_inputs(D), pid(app, "cos_guy"))
-        assert res.state is PresenceState.STAY_OUT  # drafts never move real counts
 
 
 def test_leave_beats_duty(app, make_person):
@@ -205,7 +195,7 @@ def test_meals_page_notice(app, client, make_person):
 
 def test_meals_notice_never_names_a_covered_duty(app, client, make_person):
     # The meals notice is derived chrome: once every duty for the night is
-    # CONFIRMED, it disappears entirely rather than rendering an empty shell.
+    # filled, it disappears entirely rather than rendering an empty shell.
     make_person(username="s4b", is_admin=True)
     make_stay_out_opr(make_person)
     login(client, "s4b")

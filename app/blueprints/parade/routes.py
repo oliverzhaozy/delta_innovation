@@ -355,7 +355,7 @@ def roll_call():
     conflicts = _conflict_lines(built.pairs)
     # The night this document covers is day−1 → day (A7 notice reads the same
     # duty date build_doc does).
-    night_rows = duty_service.confirmed_on(day - timedelta(days=1))
+    night_rows = duty_service.duties_on(day - timedelta(days=1))
     # Absent holders derive from built.pairs — those resolutions were computed
     # with the right duty_day; re-resolving here could disagree with the
     # document below the chrome.

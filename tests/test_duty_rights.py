@@ -11,7 +11,7 @@ import pytest
 
 from app.domain import policy
 from app.domain.dates import today_sgt
-from app.domain.types import Appointment, CompanyRole, Duty, DutyState, Rank
+from app.domain.types import Appointment, CompanyRole, Duty, Rank
 from app.extensions import db
 from app.models import DutyAssignment, Person
 from app.services import duty_service
@@ -65,19 +65,18 @@ def make_opr(make_person, username="opr1"):
     return make_person(username=username, rank=Rank.THREE_SG, appointment=Appointment.OPR)
 
 
-def plant_cos(app, username, day, *, state=DutyState.CONFIRMED, duty=Duty.COS):
+def plant_cos(app, username, day, *, duty=Duty.COS):
     with app.app_context():
         person_id = db.session.query(Person.id).filter_by(username=username).scalar()
         row = DutyAssignment(
-            date=day, duty=duty, person_id=person_id, state=state,
-            created_by_id=person_id,
+            date=day, duty=duty, person_id=person_id, created_by_id=person_id,
         )
         db.session.add(row)
         db.session.commit()
         return row.id
 
 
-def test_confirmed_cos_today_can_key(app, client, make_person):
+def test_cos_today_can_key(app, client, make_person):
     make_opr(make_person)
     plant_cos(app, "opr1", today_sgt())
     login(client, "opr1")
@@ -113,14 +112,7 @@ def test_deposed_or_expired_cos_loses_rights(app, client, make_person):
     assert client.get("/parade/statuses").status_code == 403
 
 
-def test_proposed_cos_grants_nothing(app, client, make_person):
-    make_opr(make_person)
-    plant_cos(app, "opr1", today_sgt(), state=DutyState.PROPOSED)
-    login(client, "opr1")
-    assert client.get("/parade/statuses").status_code == 403
-
-
-def test_confirmed_cdos_gets_no_parade_keying(app, client, make_person):
+def test_cdos_gets_no_parade_keying(app, client, make_person):
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.P2IC, platoon=2)
     plant_cos(app, "ps2", today_sgt(), duty=Duty.CDOS)
     login(client, "ps2")

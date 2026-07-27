@@ -1,13 +1,13 @@
 """P5.4 — ro_service: fetch-or-create, assembly over live rows, A9 rights.
 
-A9's two-day rule: editing the RO dated D requires CONFIRMED CDOS of D or
-D−1 (the compiling evening), fallback command team. Duty names come from
-CONFIRMED rows dated D only.
+A9's two-day rule: editing the RO dated D requires the CDOS of D or D−1 (the
+compiling evening), fallback command team. Duty names come from rows dated D
+only.
 """
 from datetime import date, datetime, time, timedelta
 
 from app.domain.types import (
-    Appointment, Calendar, Duty, DutyState, Rank, RoSection, Service,
+    Appointment, Calendar, Duty, Rank, RoSection, Service,
 )
 from app.extensions import db
 from app.models import (
@@ -27,13 +27,12 @@ def get_person(username):
     return db.session.query(Person).filter_by(username=username).one()
 
 
-def plant_duty(app, username, day, *, duty=Duty.CDOS, state=DutyState.CONFIRMED):
+def plant_duty(app, username, day, *, duty=Duty.CDOS):
     with app.app_context():
         person_id = db.session.query(Person.id).filter_by(username=username).scalar()
         db.session.add(
             DutyAssignment(
-                date=day, duty=duty, person_id=person_id, state=state,
-                created_by_id=person_id,
+                date=day, duty=duty, person_id=person_id, created_by_id=person_id,
             )
         )
         db.session.commit()
@@ -50,7 +49,7 @@ def test_fetch_or_create_is_idempotent(app):
 def test_can_edit_ro_wide_fallback(app, make_person):
     # Decision (p): any command-team appointment edits any day's RO; the A9
     # duty window is subsumed (every CDO/S-eligible appointment is command
-    # team) but its plumbing must not crash when a CONFIRMED CDOS row exists.
+    # team) but its plumbing must not crash when a CDOS row exists.
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.P2IC, platoon=2)
     make_person(username="opr1", rank=Rank.CPL, appointment=Appointment.OPR)
     make_person(username="oc", rank=Rank.CPT, appointment=Appointment.OC,
@@ -73,9 +72,6 @@ def test_build_assembles_duties_tp_and_derived_key_events(app, make_person):
                 display_name="Ang Cheng Ze")
     plant_duty(app, "cdos_guy", FRI, duty=Duty.CDOS)
     plant_duty(app, "cos_guy", FRI, duty=Duty.COS)
-    # A PROPOSED row on the next day must not leak into any document.
-    plant_duty(app, "cos_guy", FRI + timedelta(days=1), duty=Duty.COS,
-               state=DutyState.PROPOSED)
 
     with app.app_context():
         db.session.add(RoBoilerplate(section=RoSection.SAFETY, content="- Stay safe."))
@@ -105,8 +101,7 @@ def test_build_assembles_duties_tp_and_derived_key_events(app, make_person):
         assert "Wed - Hari Raya Haji" in doc.text
         assert "Mon - Garage Maintenance" in doc.text
 
-        # The next day has no CONFIRMED duty: placeholder + report, and the
-        # PROPOSED draft stayed invisible.
+        # The next day has no duty at all: placeholder + report.
         doc = ro_service.build(FRI + timedelta(days=1))
         assert "COS: [NO CONFIRMED DUTY]" in doc.text
         assert set(doc.missing_duties) == {"CDO/CDS", "COS"}

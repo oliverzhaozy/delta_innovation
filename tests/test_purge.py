@@ -11,7 +11,6 @@ from app.domain.types import (
     BalanceKind,
     Calendar,
     Duty,
-    DutyState,
     LeaveType,
     LedgerSource,
     ManningSlotType,
@@ -242,7 +241,7 @@ def _seed_spread(actor, person_id):
         OverseasDeclaration(person_id=person_id, start_date=date(2026, 1, 1),
                             end_date=date(2026, 1, 2), destination="KL"),
         DutyAssignment(date=date(2026, 1, 1), duty=Duty.COS, person_id=person_id,
-                       state=DutyState.CONFIRMED, created_by_id=actor),
+                       created_by_id=actor),
         MealAdjustment(date=date(2026, 1, 1), meal=Meal.LUNCH, delta=1, reason="x", created_by_id=actor),
         PersonAudit(person_id=person_id, field="rank", old="PTE", new="CPL", actor_id=actor, at=OLD),
     ])

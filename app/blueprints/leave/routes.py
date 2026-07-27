@@ -11,7 +11,6 @@ from app.domain.dates import iter_days
 from app.domain.types import (
     BalanceKind,
     DayPart,
-    DutyState,
     LeaveType,
     PENDING_STATUSES,
     RequestStatus,
@@ -177,14 +176,13 @@ def detail(request_id):
                 "projected": len(already | {request_row.person_id}),
             }
         )
-    # Warn-only clash surface (P4.9): the requester's CONFIRMED duties in the
-    # requested range, shown to every viewer — approval is never blocked and
-    # nothing is reassigned; the PS resolves on the duty roster.
+    # Warn-only clash surface (P4.9): the requester's duties in the requested
+    # range, shown to every viewer — approval is never blocked and nothing is
+    # reassigned; the PS resolves on the duty roster.
     duty_rows = (
         db.session.query(DutyAssignment)
         .filter(
             DutyAssignment.person_id == request_row.person_id,
-            DutyAssignment.state == DutyState.CONFIRMED,
             DutyAssignment.date >= request_row.start_date,
             DutyAssignment.date <= request_row.end_date,
         )

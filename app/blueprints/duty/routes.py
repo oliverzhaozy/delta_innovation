@@ -1,8 +1,10 @@
 """Duty roster page + mutations (P4.5/P4.6). Views are thin wires:
 duty_service.month_view assembles everything the page renders; the service
 functions own the transactions and raise typed exceptions these routes
-translate to 4xx (rule violations) or flash-and-redirect (judgment warnings).
+translate to 4xx (rule violations) or a re-rendered page / flash-and-redirect
+(judgment warnings).
 """
+from collections import namedtuple
 from datetime import date, timedelta
 
 from flask import abort, flash, redirect, render_template, request, url_for
@@ -17,6 +19,8 @@ from app.domain.types import Duty
 from app.extensions import db
 from app.models import Person
 from app.services import duty_service
+
+PendingAssign = namedtuple("PendingAssign", "day duty person reasons")
 
 
 def _parse_month(raw: str) -> str:
@@ -40,10 +44,10 @@ def _flag_order(person, person_id):
     return (0, parade_sort_key(person))
 
 
-@bp.route("/roster")
-@login_required
-def roster():
-    month = _parse_month(request.args.get("month", ""))
+def _render_roster(month, *, pending_assign=None):
+    """The roster page, from the GET and from an assign that hit a warning —
+    one builder, so the conflict card renders over the very page the user was
+    looking at."""
     view = duty_service.month_view(month)
     people_by_id = {p.id: p for duty in Duty for p in view.pools[duty]}
     adjacency_marks = {
@@ -64,9 +68,16 @@ def roster():
         people_by_id=people_by_id,
         adjacency_marks=adjacency_marks,
         adjacency_rows=adjacency_rows,
+        pending_assign=pending_assign,
         prev_month=(view.first - timedelta(days=1)).strftime("%Y-%m"),
         next_month=(view.last + timedelta(days=1)).strftime("%Y-%m"),
     )
+
+
+@bp.route("/roster")
+@login_required
+def roster():
+    return _render_roster(_parse_month(request.args.get("month", "")))
 
 
 @bp.route("/roster/generate", methods=["POST"])
@@ -74,20 +85,7 @@ def roster():
 def generate():
     month = _parse_month(request.form.get("month", ""))
     duty_service.generate_month(month, current_user)
-    flash("Draft roster generated — review, then confirm.", "success")
-    return redirect(url_for("duty.roster", month=month))
-
-
-@bp.route("/roster/confirm", methods=["POST"])
-@require(policy.can_manage_roster)
-def confirm():
-    month = _parse_month(request.form.get("month", ""))
-    try:
-        duty_service.confirm_month(month, current_user, request.form.get("fingerprint", ""))
-    except duty_service.RosterChanged as exc:
-        flash(str(exc), "error")
-    else:
-        flash("Month confirmed — parades and meals now read these duties.", "success")
+    flash("Roster generated.", "success")
     return redirect(url_for("duty.roster", month=month))
 
 
@@ -111,20 +109,47 @@ def assign():
     except duty_service.IneligibleAssignment as exc:
         abort(400, description=str(exc))
     except duty_service.NeedsAvailabilityConfirm as exc:
-        flash(f"Not assigned — {exc}. Tick “assign anyway” to override.", "error")
-        return redirect(url_for("duty.roster", month=month))
+        # The override decision belongs AFTER the user knows the conflict, so
+        # the warning re-renders the page with a confirm card instead of
+        # redirecting to a flash.
+        return _render_roster(
+            month,
+            pending_assign=PendingAssign(
+                day=day, duty=duty, person=person, reasons=exc.reasons
+            ),
+        )
     flash("Assigned.", "success")
     return redirect(url_for("duty.roster", month=month))
 
 
-@bp.route("/roster/clear", methods=["POST"])
+@bp.route("/roster/block", methods=["POST"])
 @require(policy.can_manage_roster)
-def clear():
+def block():
     month = _parse_month(request.form.get("month", ""))
     try:
         day = date.fromisoformat(request.form.get("date", ""))
-        duty = Duty(request.form.get("duty", ""))
     except ValueError:
         abort(400)
-    flash("Cleared." if duty_service.clear(day, duty) else "Nothing to clear.", "success")
+    try:
+        removed = duty_service.block_day(day, current_user)
+    except duty_service.NotBlockable as exc:
+        flash(str(exc), "error")
+    else:
+        tail = f" — removed {', '.join(removed)}." if removed else "."
+        flash(f"Blocked {day.strftime('%d/%m')}{tail}", "success")
+    return redirect(url_for("duty.roster", month=month))
+
+
+@bp.route("/roster/unblock", methods=["POST"])
+@require(policy.can_manage_roster)
+def unblock():
+    month = _parse_month(request.form.get("month", ""))
+    try:
+        day = date.fromisoformat(request.form.get("date", ""))
+    except ValueError:
+        abort(400)
+    if duty_service.unblock_day(day):
+        flash(f"Unblocked {day.strftime('%d/%m')}.", "success")
+    else:
+        flash(f"{day.strftime('%d/%m')} was not blocked.", "error")
     return redirect(url_for("duty.roster", month=month))

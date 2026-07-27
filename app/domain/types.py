@@ -356,14 +356,6 @@ class Duty(str, enum.Enum):
         return {"COS": "COS", "CDOS": "CDO/S"}[self.value]
 
 
-class DutyState(str, enum.Enum):
-    """PROPOSED = generator/PS draft, invisible to parades and meals;
-    CONFIRMED = the roster of record (drafts must never move real counts)."""
-
-    PROPOSED = "PROPOSED"
-    CONFIRMED = "CONFIRMED"
-
-
 class ManningSlotType(str, enum.Enum):
     """TU manning slots (P6.2). THE TRAP, enum-level: TU_DET_COMD is filled
     by appointment P2IC/PS and is DELIBERATELY distinct from

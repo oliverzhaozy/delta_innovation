@@ -28,7 +28,7 @@ def index():
     counts, imbalance = meal_service.compute_for(day)
     # Day D's overnight counter covers the night D → D+1 (one day LATER than
     # roll_call(D)'s night), so the notice reads the duty dated D.
-    night_duties = {row.duty for row in duty_service.confirmed_on(day)}
+    night_duties = {row.duty for row in duty_service.duties_on(day)}
     missing_duties = [duty for duty in Duty if duty not in night_duties]
     return render_template(
         "meals/index.html",

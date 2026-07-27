@@ -8,14 +8,15 @@ import re
 from datetime import date
 
 from app.domain.types import (
-    Appointment, DayPart, Duty, DutyState, LeaveType, Rank, RequestStatus,
+    Appointment, DayPart, Duty, LeaveType, Rank, RequestStatus,
 )
 from app.extensions import db
-from app.models import DutyAssignment, LeaveRequest, Person
+from app.models import DutyAssignment, DutyBlockedDay, LeaveRequest, Person, PublicHoliday
 from app.services import duty_service
 from tests.conftest import login
 
 AUG = "2026-08"
+AUG_WEEKDAYS = 21
 
 
 def pid(app, username):
@@ -40,10 +41,10 @@ def test_month_view_blanks_derived_from_missing_rows(app, make_person):
 
     with app.app_context():
         duty_service.generate_month(AUG, get_person("det1"))
-        hole = date(2026, 8, 15)
+        hole = date(2026, 8, 12)  # a Wednesday — a planned duty day
         (
             db.session.query(DutyAssignment)
-            .filter_by(date=hole, duty=Duty.COS, state=DutyState.PROPOSED)
+            .filter_by(date=hole, duty=Duty.COS)
             .delete()
         )
         db.session.commit()
@@ -55,7 +56,29 @@ def test_month_view_blanks_derived_from_missing_rows(app, make_person):
         assert (hole, Duty.COS) not in view.by_slot
         assert view.first == date(2026, 8, 1)
         assert view.last == date(2026, 8, 31)
-        assert len(view.days) == 31
+        # The grid is weekdays only; weekends are not planned and not shown.
+        assert len(view.days) == AUG_WEEKDAYS
+        assert all(row.date.weekday() < 5 for row in view.days)
+
+
+def test_month_view_tags_holidays_and_blocked_days(app, make_person):
+    make_cos_pair(make_person)
+    holiday, blocked = date(2026, 8, 17), date(2026, 8, 18)
+    with app.app_context():
+        db.session.add(PublicHoliday(date=holiday, name="Test Holiday"))
+        db.session.add(DutyBlockedDay(
+            date=blocked, created_by_id=get_person("det1").id))
+        db.session.commit()
+
+        view = duty_service.month_view(AUG)
+        tagged = {row.date: row for row in view.days}
+        assert tagged[holiday].holiday_name == "Test Holiday"
+        assert tagged[blocked].blocked is True
+        assert tagged[date(2026, 8, 19)].holiday_name is None
+        assert tagged[date(2026, 8, 19)].blocked is False
+        # Neither day is planned, so neither can be blank-flagged.
+        assert holiday not in {d for d, _duty in view.violations.blanks}
+        assert blocked not in {d for d, _duty in view.violations.blanks}
 
 
 def test_month_view_empty_pool_all_blank(app, make_person):
@@ -65,7 +88,8 @@ def test_month_view_empty_pool_all_blank(app, make_person):
         duty_service.generate_month(AUG, get_person("det1"))
         view = duty_service.month_view(AUG)
         assert view.pools[Duty.CDOS] == []
-        for d in view.days:
+        assert len(view.active) == AUG_WEEKDAYS
+        for d in view.active:
             assert (d, Duty.CDOS) in view.violations.blanks
 
 
@@ -77,12 +101,6 @@ def make_full_cast(make_person):
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
 
 
-def rendered_fingerprint(html):
-    match = re.search(r'name="fingerprint" value="([0-9a-f]{64})"', html)
-    assert match, "confirm form must render the fingerprint"
-    return match.group(1)
-
-
 def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")
@@ -91,9 +109,8 @@ def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert "COS pool" in html and "CDO/S pool" in html
-    assert 'name="fingerprint"' not in html
     assert "/duty/roster/generate" not in html
-    assert "/duty/roster/confirm" not in html
+    assert "/duty/roster/block" not in html
 
 
 def test_manual_assign_select_is_parade_ordered(app, client, make_person):
@@ -131,7 +148,7 @@ def test_roster_mutations_403_for_opr(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")
 
-    for endpoint in ("generate", "confirm", "assign", "clear"):
+    for endpoint in ("generate", "assign", "block", "unblock"):
         resp = client.post(f"/duty/roster/{endpoint}", data={"month": AUG})
         assert resp.status_code == 403, endpoint
 
@@ -152,28 +169,38 @@ def test_bad_month_query_falls_back_to_current_month(app, client, make_person):
     assert client.get("/duty/roster?month=garbage").status_code == 200
 
 
-def test_generate_then_confirm_flips_badges(app, client, make_person):
+def test_generate_writes_live_rows_with_no_state_badge(app, client, make_person):
     make_full_cast(make_person)
     login(client, "ps2")
-
-    proposed_badge = '<span class="badge pending">PROPOSED</span>'
-    confirmed_badge = '<span class="badge approved">CONFIRMED</span>'
 
     resp = client.post("/duty/roster/generate", data={"month": AUG}, follow_redirects=True)
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert proposed_badge in html and confirmed_badge not in html
-
-    resp = client.post(
-        "/duty/roster/confirm",
-        data={"month": AUG, "fingerprint": rendered_fingerprint(html)},
-        follow_redirects=True,
-    )
-    html = resp.get_data(as_text=True)
-    assert confirmed_badge in html and proposed_badge not in html
+    assert "Roster generated." in html
+    assert "PROPOSED" not in html and "CONFIRMED" not in html
+    assert "Sat 01 Aug" not in html  # weekends are not rows on this page
+    with app.app_context():
+        # Live on write (owner 2026-07-27): nothing stands between generation
+        # and the documents that read these rows.
+        assert duty_service.duties_on(date(2026, 8, 3))
 
 
-# --- manual assign / clear (P4.6 part 1) ------------------------------------------
+def test_grid_shows_holiday_and_blocked_rows(app, client, make_person):
+    make_full_cast(make_person)
+    with app.app_context():
+        db.session.add(PublicHoliday(date=date(2026, 8, 17), name="Test Holiday"))
+        db.session.commit()
+    login(client, "ps2")
+
+    client.post("/duty/roster/block", data={"month": AUG, "date": "2026-08-18"},
+                follow_redirects=True)
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "Test Holiday — public holiday" in html
+    assert "Blocked — no duty" in html
+    assert "Unblock" in html
+
+
+# --- manual assign / block (P4.6 part 1) ------------------------------------------
 
 def plant_leave(app, username, day, *, day_part=DayPart.FULL):
     with app.app_context():
@@ -187,11 +214,11 @@ def plant_leave(app, username, day, *, day_part=DayPart.FULL):
         db.session.commit()
 
 
-def plant_assignment(app, username, day, duty, *, state=DutyState.CONFIRMED):
+def plant_assignment(app, username, day, duty, *, is_manual=False):
     with app.app_context():
         person_id = db.session.query(Person.id).filter_by(username=username).scalar()
         row = DutyAssignment(
-            date=day, duty=duty, person_id=person_id, state=state,
+            date=day, duty=duty, person_id=person_id, is_manual=is_manual,
             created_by_id=person_id,
         )
         db.session.add(row)
@@ -243,7 +270,9 @@ def test_duty_exempt_person_out_of_pool_and_assign_is_400(app, client, make_pers
         assert db.session.query(DutyAssignment).count() == 0
 
 
-def test_assign_unavailable_requires_confirm(app, client, make_person):
+def test_assign_unavailable_asks_to_confirm_on_the_page(app, client, make_person):
+    # The override decision comes AFTER the conflict is known: the first POST
+    # names the reason on the page instead of redirecting to a flash.
     make_full_cast(make_person)
     plant_leave(app, "det1", date(2026, 8, 5))
     login(client, "ps2")
@@ -251,9 +280,11 @@ def test_assign_unavailable_requires_confirm(app, client, make_person):
     resp = client.post(
         "/duty/roster/assign",
         data=assign_form("det1", app, date(2026, 8, 5)),
-        follow_redirects=True,
     )
-    assert "Not assigned" in resp.get_data(as_text=True)
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "covering absence, overnight TP event, or duty that day" in html
+    assert "Confirm and assign" in html
     with app.app_context():
         assert db.session.query(DutyAssignment).count() == 0
 
@@ -266,10 +297,10 @@ def test_assign_unavailable_requires_confirm(app, client, make_person):
     with app.app_context():
         row = db.session.query(DutyAssignment).one()
         assert row.person_id == pid(app, "det1")
-        assert row.state is DutyState.PROPOSED
+        assert row.is_manual is True
 
 
-def test_assign_replaces_confirmed_keeping_confirmed(app, client, make_person):
+def test_assign_over_a_generated_row_marks_it_manual(app, client, make_person):
     make_full_cast(make_person)
     row_id = plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
     login(client, "ps2")
@@ -282,68 +313,45 @@ def test_assign_replaces_confirmed_keeping_confirmed(app, client, make_person):
     assert "Assigned." in resp.get_data(as_text=True)
     with app.app_context():
         row = db.session.get(DutyAssignment, row_id)
-        # Manual replace is how the PS resolves a post-approval clash: the slot
-        # stays CONFIRMED (tonight's roll call must not lose its duty) with a
-        # fresh stamp saying who changed it.
+        # Assigning over a slot is how the PS resolves a clash: the row keeps
+        # its identity, takes the new holder, and regeneration must leave it be.
         assert row.person_id == pid(app, "opr1")
-        assert row.state is DutyState.CONFIRMED
-        assert row.confirmed_by_id == pid(app, "ps2")
+        assert row.is_manual is True
         assert db.session.query(DutyAssignment).count() == 1
 
 
-def test_new_row_on_empty_slot_is_proposed_not_confirmed(app, client, make_person):
+def test_assign_on_a_weekend_is_400(app, client, make_person):
     make_full_cast(make_person)
     login(client, "ps2")
 
-    client.post(
-        "/duty/roster/assign",
-        data=assign_form("det1", app, date(2026, 8, 5)),
-        follow_redirects=True,
+    resp = client.post(
+        "/duty/roster/assign", data=assign_form("det1", app, date(2026, 8, 15))
     )
+    assert resp.status_code == 400  # a Saturday carries no duty — not confirmable
     with app.app_context():
-        row = db.session.query(DutyAssignment).one()
-        assert row.state is DutyState.PROPOSED
-        assert row.confirmed_by_id is None
+        assert db.session.query(DutyAssignment).count() == 0
 
 
-def test_clear_removes_row(app, client, make_person):
+def test_block_removes_the_day_s_holders_and_unblock_restores_the_slots(
+    app, client, make_person
+):
     make_full_cast(make_person)
     plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS)
     login(client, "ps2")
 
-    data = {"month": AUG, "date": "2026-08-05", "duty": Duty.COS.value}
-    resp = client.post("/duty/roster/clear", data=data, follow_redirects=True)
-    assert "Cleared." in resp.get_data(as_text=True)
+    data = {"month": AUG, "date": "2026-08-05"}
+    resp = client.post("/duty/roster/block", data=data, follow_redirects=True)
+    assert "Blocked 05/08 — removed COS: 3SG Det1." in resp.get_data(as_text=True)
     with app.app_context():
         assert db.session.query(DutyAssignment).count() == 0
+        assert db.session.query(DutyBlockedDay).count() == 1
 
-    resp = client.post("/duty/roster/clear", data=data, follow_redirects=True)
-    assert "Nothing to clear." in resp.get_data(as_text=True)
+    resp = client.post("/duty/roster/block", data=data, follow_redirects=True)
+    assert "05/08 is already blocked." in resp.get_data(as_text=True)
 
-
-def test_confirm_stale_fingerprint_flashes_rereview(app, client, make_person):
-    make_full_cast(make_person)
-    login(client, "ps2")
-
-    html = client.post(
-        "/duty/roster/generate", data={"month": AUG}, follow_redirects=True
-    ).get_data(as_text=True)
-    stale = rendered_fingerprint(html)
-
-    # Another PS edits one slot after this page was loaded.
+    resp = client.post("/duty/roster/unblock", data=data, follow_redirects=True)
+    assert "Unblocked 05/08." in resp.get_data(as_text=True)
     with app.app_context():
-        row = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).first()
-        other = get_person("det1" if row.person_id == pid(app, "opr1") else "opr1")
-        row.person_id = other.id
-        db.session.commit()
-
-    resp = client.post(
-        "/duty/roster/confirm",
-        data={"month": AUG, "fingerprint": stale},
-        follow_redirects=True,
-    )
-    html = resp.get_data(as_text=True)
-    assert "re-review" in html
-    with app.app_context():
-        rows = db.session.query(DutyAssignment).all()
-        assert rows and all(r.state is DutyState.PROPOSED for r in rows)
+        assert db.session.query(DutyBlockedDay).count() == 0
+    resp = client.post("/duty/roster/unblock", data=data, follow_redirects=True)
+    assert "05/08 was not blocked." in resp.get_data(as_text=True)

@@ -14,29 +14,57 @@
   </div>
 </section>
 
+{# Weekday-only grid (owner 2026-07-27): COS and CDO/S are working-day duties,
+   so weekends are absent from the table entirely; public holidays and blocked
+   days stay visible as greyed rows so the gap is explained, not silently
+   missing. #}
 <section class="card table-wrap">
   <h2>Month grid</h2>
   <table class="list">
     <thead>
-      <tr><th>Date</th>{% for duty in Duty %}<th>{{ duty.label }}</th>{% endfor %}</tr>
+      <tr><th>Date</th>{% for duty in Duty %}<th>{{ duty.label }}</th>{% endfor %}{% if policy.can_manage_roster(current_user) %}<th></th>{% endif %}</tr>
     </thead>
     <tbody>
       {% for d in view.days %}
       <tr>
-        <td>{{ d.strftime("%a %d %b") }}</td>
-        {% for duty in Duty %}
-          {% set row = view.by_slot.get((d, duty)) %}
-          <td>
-            {% if row %}
-              {{ row.person.rank.value }} {{ row.person.display_name }}
-              <span class="badge {{ 'approved' if row.state.value == 'CONFIRMED' else 'pending' }}">{{ row.state.value }}</span>
-              {% if row.id in view.absent_flags %}<span class="badge rejected">&#9888; holder absent</span>{% endif %}
-              {% if (row.person_id, d) in adjacency_marks %}<span class="chip">&#9888; adjacent</span>{% endif %}
-            {% else %}
-              — <strong>blank</strong> &#9888;
-            {% endif %}
-          </td>
-        {% endfor %}
+        <td>{{ d.date.strftime("%a %d %b") }}</td>
+        {% if d.holiday_name %}
+          <td colspan="{{ Duty|length }}" class="muted">{{ d.holiday_name }} — public holiday</td>
+        {% elif d.blocked %}
+          <td colspan="{{ Duty|length }}" class="muted">Blocked — no duty</td>
+        {% else %}
+          {% for duty in Duty %}
+            {% set row = view.by_slot.get((d.date, duty)) %}
+            <td>
+              {% if row %}
+                {{ row.person.rank.value }} {{ row.person.display_name }}
+                {% if row.id in view.absent_flags %}<span class="badge rejected">&#9888; holder absent</span>{% endif %}
+                {% if (row.person_id, d.date) in adjacency_marks %}<span class="chip">&#9888; adjacent</span>{% endif %}
+              {% else %}
+                — <strong>blank</strong> &#9888;
+              {% endif %}
+            </td>
+          {% endfor %}
+        {% endif %}
+        {% if policy.can_manage_roster(current_user) %}
+        <td>
+          {% if d.blocked %}
+            <form method="post" action="{{ url_for('duty.unblock') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="month" value="{{ month }}">
+              <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
+              <button type="submit" class="btn secondary">Unblock</button>
+            </form>
+          {% elif not d.holiday_name %}
+            <form method="post" action="{{ url_for('duty.block') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="month" value="{{ month }}">
+              <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
+              <button type="submit" class="btn secondary">Block</button>
+            </form>
+          {% endif %}
+        </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -66,13 +94,7 @@
     <form method="post" action="{{ url_for('duty.generate') }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="month" value="{{ month }}">
-      <button type="submit" class="btn secondary">Generate (replaces draft)</button>
-    </form>
-    <form method="post" action="{{ url_for('duty.confirm') }}" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="month" value="{{ month }}">
-      <input type="hidden" name="fingerprint" value="{{ view.fingerprint }}">
-      <button type="submit" class="btn">Confirm month</button>
+      <button type="submit" class="btn">Generate (keeps manual picks)</button>
     </form>
   </div>
 </section>
@@ -93,20 +115,35 @@
         {% for p in roster_people %}<option value="{{ p.id }}">{{ p.rank.value }} {{ p.display_name }}</option>{% endfor %}
       </select>
     </label>
-    <label><input type="checkbox" name="confirm" value="1"> assign anyway (override availability warning)</label>
     <button type="submit" class="btn">Assign</button>
   </form>
-  <form method="post" action="{{ url_for('duty.clear') }}" style="margin-top:0.8rem">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="month" value="{{ month }}">
-    <label>Date <input type="date" name="date" required min="{{ view.first.isoformat() }}" max="{{ view.last.isoformat() }}"></label>
-    <label>Duty
-      <select name="duty">
-        {% for duty in Duty %}<option value="{{ duty.value }}">{{ duty.label }}</option>{% endfor %}
-      </select>
-    </label>
-    <button type="submit" class="btn secondary">Clear slot</button>
-  </form>
+  <p class="muted">To empty a day, block it in the grid; to change a holder,
+     assign over the slot.</p>
+
+  {# The override decision comes AFTER the conflict is known: the assign POST
+     comes back here with the reasons rather than redirecting to a flash. #}
+  {% if pending_assign %}
+  <div class="flash flash-error" style="margin-top:1rem">
+    <p><strong>{{ pending_assign.person.rank.value }} {{ pending_assign.person.display_name }}</strong>
+       on {{ pending_assign.duty.label }}, {{ pending_assign.day.strftime("%a %d %b") }} —
+       not assigned yet:</p>
+    <ul>
+      {% for reason in pending_assign.reasons %}<li>{{ reason }}</li>{% endfor %}
+    </ul>
+    <div style="display:flex; gap:1rem; align-items:center">
+      <form method="post" action="{{ url_for('duty.assign') }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="date" value="{{ pending_assign.day.isoformat() }}">
+        <input type="hidden" name="duty" value="{{ pending_assign.duty.value }}">
+        <input type="hidden" name="person_id" value="{{ pending_assign.person.id }}">
+        <input type="hidden" name="confirm" value="1">
+        <button type="submit" class="btn">Confirm and assign</button>
+      </form>
+      <a href="{{ url_for('duty.roster', month=month) }}">Cancel</a>
+    </div>
+  </div>
+  {% endif %}
 </section>
 {% endif %}
 

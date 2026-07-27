@@ -1,4 +1,4 @@
-from app.models.duty import DutyAssignment
+from app.models.duty import DutyAssignment, DutyBlockedDay
 from app.models.event import Event, EventParticipant
 from app.models.holiday import PublicHoliday
 from app.models.ledger import LedgerEntry
@@ -14,6 +14,7 @@ from app.models.status import StatusEntry
 
 __all__ = [
     "DutyAssignment",
+    "DutyBlockedDay",
     "Event",
     "EventParticipant",
     "LeaveRequest",

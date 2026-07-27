@@ -1,7 +1,7 @@
 """P4.9 — warn-only, derived-at-render clash surfaces for leave-vs-duty.
 
 Nothing is stored and nothing is blocked: the leave detail page lists the
-requester's CONFIRMED duties in range, the roster page flags absent holders
+requester's duties in range, the roster page flags absent holders
 (A8: the predicate is presence.resolve, NOT a leave-table join — an MC flags
 exactly like leave), and roll call names the absent holder in chrome. The PS resolves via manual replace; approval is never
 blocked and nobody is auto-reassigned.
@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 from app.domain.dates import today_sgt
 from app.domain.types import (
-    Appointment, BalanceKind, DayPart, Duty, DutyState,
+    Appointment, BalanceKind, DayPart, Duty,
     LeaveType, LedgerSource, Rank, RequestStatus, Service, StatusType,
 )
 from app.extensions import db
@@ -49,12 +49,11 @@ def plant_request(app, username, start=WED, end=THU, *,
         return row.id
 
 
-def plant_duty(app, username, day, *, duty=Duty.COS, state=DutyState.CONFIRMED):
+def plant_duty(app, username, day, *, duty=Duty.COS):
     with app.app_context():
         person_id = db.session.query(Person.id).filter_by(username=username).scalar()
         row = DutyAssignment(
-            date=day, duty=duty, person_id=person_id, state=state,
-            created_by_id=person_id,
+            date=day, duty=duty, person_id=person_id, created_by_id=person_id,
         )
         db.session.add(row)
         db.session.commit()
@@ -63,19 +62,20 @@ def plant_duty(app, username, day, *, duty=Duty.COS, state=DutyState.CONFIRMED):
 
 # --- leave-detail duty panel (Task 1, B1) --------------------------------------------
 
-def test_leave_detail_shows_confirmed_duties_in_range(app, client, make_person):
+def test_leave_detail_shows_duties_in_range(app, client, make_person):
     make_cast(make_person)
     req_id = plant_request(app, "opr1")
     plant_duty(app, "opr1", WED)
-    plant_duty(app, "opr1", THU, duty=Duty.CDOS, state=DutyState.PROPOSED)
+    plant_duty(app, "opr1", THU, duty=Duty.CDOS)
+    # A duty OUTSIDE the requested range is another month's problem.
+    plant_duty(app, "opr1", THU + timedelta(days=1), duty=Duty.CDOS)
 
     for viewer in ("opr1", "pc1", "oc"):
         login(client, viewer)
         html = client.get(f"/leave/{req_id}").get_data(as_text=True)
         assert "Confirmed duties on these dates" in html, viewer
         assert "COS — confirmed" in html, viewer
-        # The PROPOSED CDO/S draft is not real and must not appear.
-        assert html.count("— confirmed") == 1, viewer
+        assert html.count("— confirmed") == 2, viewer
         client.post("/logout")
 
 
@@ -120,7 +120,7 @@ def flags(app):
         return duty_service.month_view(AUG).absent_flags
 
 
-def test_roster_flags_absent_confirmed_holder_mc(app, client, make_person):
+def test_roster_flags_absent_holder_mc(app, client, make_person):
     # THE A8 PIN: an MC is a StatusEntry, not leave — a leave-table join
     # misses the most common real conflict.
     make_cast(make_person)
@@ -187,7 +187,7 @@ def test_roll_call_chrome_names_absent_holder(app, client, make_person):
     assert "3SG Opr1 is absent (MC) tonight — resolve on the duty roster." in normalized
 
 
-def test_approval_not_blocked_by_confirmed_duty(app, make_person):
+def test_approval_not_blocked_by_a_duty(app, make_person):
     # WARN-ONLY PIN: the OC saw the panel; approving still succeeds, the ledger
     # debits once, and the assignment names the same person (nothing reassigned).
     make_cast(make_person)
@@ -213,5 +213,5 @@ def test_approval_not_blocked_by_confirmed_duty(app, make_person):
         )
         assert len(debits) == 1  # exactly one deduction, no double-debit
         row = db.session.get(DutyAssignment, aid)
-        assert row.person_id == opr_id and row.state is DutyState.CONFIRMED
+        assert row.person_id == opr_id
     assert aid in flags(app)  # ...and the roster page now flags the clash

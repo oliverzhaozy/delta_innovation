@@ -22,7 +22,6 @@ from app.domain.types import (
     Calendar,
     CourseAbsenceType,
     DayPart,
-    DutyState,
     RequestStatus,
     Service,
     TpLabel,
@@ -250,7 +249,7 @@ def presence_inputs(day, *, duty_day=None):
     rendering reads model fields (`.type`, `.remarks`, `.person`). Deactivated
     people are off the roster entirely, matching the away board.
 
-    `duty_day` (keyword-only): which date's CONFIRMED duty_assignment rows feed
+    `duty_day` (keyword-only): which date's duty_assignment rows feed
     the DUTY state — the fetch key ONLY. The adapter row handed to the engine
     covers start=end=`day` (the resolution day), because `covers()` compares
     against the day being resolved (A3): roll call labeled D covers the night
@@ -260,10 +259,7 @@ def presence_inputs(day, *, duty_day=None):
     leaves, statuses, courses = fetch_absence_rows(day, day)
     duty_rows = (
         db.session.query(DutyAssignment)
-        .filter(
-            DutyAssignment.date == (duty_day if duty_day is not None else day),
-            DutyAssignment.state == DutyState.CONFIRMED,
-        )
+        .filter(DutyAssignment.date == (duty_day if duty_day is not None else day))
         .all()
     )
     by_duty = defaultdict(list)

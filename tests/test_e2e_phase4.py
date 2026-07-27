@@ -1,19 +1,18 @@
 """P4.10 — the Phase 4 end-to-end walk, via the test client only.
 
 One PS runs a real month: generate over a forced blank -> manual assign over a
-warning -> confirm behind the scraped fingerprint -> a requester's leave over
-a confirmed duty is endorsed and approved (the OC saw the duty panel; nothing
-was blocked, nothing reassigned, the roster flags it) -> the stay-out duty
-holder lands in the night's CURRENT STRENGTH and the meal counter counts him
--> the COS selector pre-fills the confirmed COS -> and a deposed COS loses
-keying rights with the assignment.
+warning, confirmed on the page that names it -> a requester's leave over a
+live duty is endorsed and approved (the OC saw the duty panel; nothing was
+blocked, nothing reassigned, the roster flags it) -> the stay-out duty holder
+lands in the night's CURRENT STRENGTH and the meal counter counts him ->
+cos_of_day resolves the holder -> and blocking a day takes the duty, and its
+keying rights, away with it.
 """
-import re
 from datetime import timedelta
 
 from app.domain.dates import iter_days, today_sgt
 from app.domain.types import (
-    Appointment, BalanceKind, DayPart, Duty, DutyState, LeaveType, LedgerSource,
+    Appointment, BalanceKind, DayPart, Duty, LeaveType, LedgerSource,
     Rank, RequestStatus, Service,
 )
 from app.extensions import db
@@ -25,12 +24,6 @@ from tests.conftest import login
 def _pid(app, username):
     with app.app_context():
         return db.session.query(Person.id).filter_by(username=username).scalar()
-
-
-def _fingerprint(html):
-    match = re.search(r'name="fingerprint" value="([0-9a-f]{64})"', html)
-    assert match, "the confirm form must carry the fingerprint (A4's mechanism)"
-    return match.group(1)
 
 
 def _switch(client, username):
@@ -55,11 +48,16 @@ def test_phase4_end_to_end(app, client, make_person):
     today = today_sgt()
     month = today.strftime("%Y-%m")
     first, last = duty_service.month_bounds(month)
-    blank_day = first + timedelta(days=2)
 
     # Every COS candidate is on APPROVED leave on blank_day BEFORE generating:
     # the generator must leave that slot empty (decision d — never rule-broken).
     with app.app_context():
+        # The forced hole has to be a day the roster actually plans: weekends
+        # and holidays are not slots at all since 2026-07-27.
+        blank_day = next(
+            d for d in duty_service.duty_days(first, last).active
+            if d >= first + timedelta(days=2)
+        )
         for username in ("opr_a", "opr_b"):
             person_id = db.session.query(Person.id).filter_by(username=username).scalar()
             db.session.add(
@@ -71,23 +69,25 @@ def test_phase4_end_to_end(app, client, make_person):
             )
         db.session.commit()
 
-    # --- 2./3. PS generates: pools panel, PROPOSED badges, the blank flagged --
+    # --- 2./3. PS generates: pools panel, live rows, the blank flagged -------
     login(client, "ps_boss")
     resp = client.post("/duty/roster/generate", data={"month": month},
                        follow_redirects=True)
     html = resp.get_data(as_text=True)
     # CDO/S pool = the PS + the PC (an LTA PC satisfies rank>=2SG + PC).
     assert "COS pool (2)" in html and "CDO/S pool (2)" in html
-    assert '<span class="badge pending">PROPOSED</span>' in html
+    assert "Roster generated." in html
     assert "blank" in html  # the forced hole is flagged, not silently filled
 
-    # --- 4. Manual assign over the availability warning ----------------------
+    # --- 4. Manual assign: the warning is answered ON the page ---------------
     assign_data = {
         "month": month, "date": blank_day.isoformat(), "duty": Duty.COS.value,
         "person_id": str(_pid(app, "opr_a")),
     }
-    resp = client.post("/duty/roster/assign", data=assign_data, follow_redirects=True)
-    assert "Not assigned" in resp.get_data(as_text=True)  # warn first...
+    resp = client.post("/duty/roster/assign", data=assign_data)
+    html = resp.get_data(as_text=True)
+    assert "covering absence" in html                      # the reason, named...
+    assert "Confirm and assign" in html                    # ...then the choice
     resp = client.post("/duty/roster/assign", data={**assign_data, "confirm": "1"},
                        follow_redirects=True)
     assert "Assigned." in resp.get_data(as_text=True)     # ...assign on confirm
@@ -98,26 +98,16 @@ def test_phase4_end_to_end(app, client, make_person):
             .one()
         )
         assert row.person_id == _pid(app, "opr_a")
+        assert row.is_manual is True  # regeneration must not undo the PS
 
-    # --- 5. Confirm with the fingerprint scraped from the rendered page ------
-    html = client.get(f"/duty/roster?month={month}").get_data(as_text=True)
-    resp = client.post(
-        "/duty/roster/confirm",
-        data={"month": month, "fingerprint": _fingerprint(html)},
-        follow_redirects=True,
-    )
-    html = resp.get_data(as_text=True)
-    assert '<span class="badge approved">CONFIRMED</span>' in html
-    assert '<span class="badge pending">PROPOSED</span>' not in html
-
-    # --- 6. Leave over a confirmed duty: endorsed, panel seen, approved, warned
+    # --- 5. Leave over a live duty: endorsed, panel seen, approved, warned ---
     with app.app_context():
         opr_a_id = _pid(app, "opr_a")
         clash_row = next(
             r for r in db.session.query(DutyAssignment)
-            .filter_by(duty=Duty.COS, state=DutyState.CONFIRMED, person_id=opr_a_id)
+            .filter_by(duty=Duty.COS, person_id=opr_a_id)
             .order_by(DutyAssignment.date)
-            if r.date.weekday() < 5 and r.date != blank_day
+            if r.date != blank_day
         )
         clash_day, clash_id = clash_row.date, clash_row.id
         ledger_service.post_entry(
@@ -153,16 +143,14 @@ def test_phase4_end_to_end(app, client, make_person):
         row = db.session.get(DutyAssignment, clash_id)
         # ...and approving blocked nothing and reassigned nobody (warn-only).
         assert row.person_id == _pid(app, "opr_a")
-        assert row.state is DutyState.CONFIRMED
         assert clash_id in duty_service.month_view(month).absent_flags
 
-    # --- 7. The stay-out CDO/S holder is counted present for his night -------
+    # --- 6. The stay-out CDO/S holder is counted present for his night -------
     with app.app_context():
         excluded = {blank_day, clash_day}
         ps_nights = {
             r.date for r in db.session.query(DutyAssignment).filter_by(
-                duty=Duty.CDOS, state=DutyState.CONFIRMED,
-                person_id=_pid(app, "ps_boss"),
+                duty=Duty.CDOS, person_id=_pid(app, "ps_boss"),
             )
         }
         pd = next(
@@ -176,12 +164,12 @@ def test_phase4_end_to_end(app, client, make_person):
         # (DUTY overrides stay-out) — without the duty pipe this would be 2.
         assert counts.overnight == 3
 
-    # --- 8. cos_of_day resolves the confirmed COS of any date ----------------
+    # --- 7. cos_of_day resolves the COS of any date --------------------------
     _switch(client, "ps_boss")
     with app.app_context():
         cos_holder_id = (
             db.session.query(DutyAssignment.person_id)
-            .filter_by(date=pd, duty=Duty.COS, state=DutyState.CONFIRMED)
+            .filter_by(date=pd, duty=Duty.COS)
             .scalar()
         )
         # The COS page no longer autofills from the roster (P10.1: free text,
@@ -189,26 +177,47 @@ def test_phase4_end_to_end(app, client, make_person):
         # the RO's COS line — pinned here for an arbitrary phase date.
         assert duty_service.cos_of_day(pd).id == cos_holder_id
 
-    # --- 9. Deposed COS: the rights disappear with the assignment ------------
+    # --- 8. Blocking a day removes its duty, and the keying rights with it ---
+    # The rights window is today/tomorrow, and only a duty day inside THIS
+    # month can carry a COS at all now that rosters are weekday-only — a
+    # Saturday window has none, which is the same rule seen from the other side.
+    tomorrow = today + timedelta(days=1)
     with app.app_context():
-        holder_today = (
-            db.session.query(Person)
-            .join(DutyAssignment, DutyAssignment.person_id == Person.id)
-            .filter(
-                DutyAssignment.date == today,
+        active = set(duty_service.duty_days(first, last).active)
+        window = [d for d in (today, tomorrow) if d in active]
+        holders = {
+            row.date: row.person.username
+            for row in db.session.query(DutyAssignment).filter(
+                DutyAssignment.date.in_((today, tomorrow)),
                 DutyAssignment.duty == Duty.COS,
-                DutyAssignment.state == DutyState.CONFIRMED,
             )
-            .one()
-        )
-        holder_username = holder_today.username
-    _switch(client, holder_username)
-    assert client.get("/parade/statuses").status_code == 200
+        }
+    assert set(holders) == set(window)
 
-    _switch(client, "ps_boss")
-    for day in (today, today + timedelta(days=1)):  # the whole two-day window
-        client.post("/duty/roster/clear", data={
-            "month": month, "date": day.isoformat(), "duty": Duty.COS.value,
-        }, follow_redirects=True)
-    _switch(client, holder_username)
-    assert client.get("/parade/statuses").status_code == 403
+    if window:
+        holder_username = holders[window[0]]
+        _switch(client, holder_username)
+        assert client.get("/parade/statuses").status_code == 200
+
+        _switch(client, "ps_boss")
+        for day in window:  # the whole two-day window
+            resp = client.post("/duty/roster/block", data={
+                "month": month, "date": day.isoformat(),
+            }, follow_redirects=True)
+            assert "Blocked" in resp.get_data(as_text=True)
+        _switch(client, holder_username)
+        assert client.get("/parade/statuses").status_code == 403
+
+        # Unblocking gives the day back as an EMPTY slot — the removed holder
+        # is gone for good, so the rights stay gone until someone is assigned.
+        _switch(client, "ps_boss")
+        html = client.post("/duty/roster/unblock", data={
+            "month": month, "date": window[0].isoformat(),
+        }, follow_redirects=True).get_data(as_text=True)
+        assert "Unblocked" in html and "blank" in html
+        _switch(client, holder_username)
+        assert client.get("/parade/statuses").status_code == 403
+    else:
+        # A weekend window: nobody holds a COS, so no NSF can key.
+        _switch(client, "opr_a")
+        assert client.get("/parade/statuses").status_code == 403

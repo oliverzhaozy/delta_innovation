@@ -1,30 +1,28 @@
 """Duty roster orchestration (P4.4): shape DB rows into the pure P4.2/P4.3
-inputs, write PROPOSED rosters, confirm behind a content fingerprint.
+inputs and write the month's roster in one transaction.
 
 The pure modules are the law (eligibility.py is frozen per addendum B4;
 roster.py is deterministic and solver-free); this module only fetches and
 shapes. Availability reads the SAME shared absence fetch as the away board and
 every parade document (presence_service.fetch_absence_rows) — a third fetch
 path is the drift bug this app exists to kill.
+
+Owner directive 2026-07-27: a written row is live immediately (no draft
+state), COS and CDO/S run on working days only, and a blocked day is an
+explicit "no duty needed". `duty_days` below owns that day rule for everyone.
 """
-import hashlib
 from calendar import monthrange
 from collections import defaultdict, namedtuple
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 
 from app.domain import eligibility, policy, presence, roster
-from app.domain.dates import iter_days, now_sgt, today_sgt
-from app.domain.types import Calendar, Duty, DutyState
+from app.domain.dates import is_working_day, iter_days, today_sgt
+from app.domain.types import Calendar, Duty
 from app.extensions import db
-from app.models import DutyAssignment, Event
+from app.models import DutyAssignment, DutyBlockedDay, Event, PublicHoliday
 from app.services import event_service, presence_service
-
-
-class RosterChanged(Exception):
-    """The month's PROPOSED roster changed between page load and confirm (A4);
-    message is user-facing."""
 
 
 def month_bounds(month: str):
@@ -34,23 +32,55 @@ def month_bounds(month: str):
     return date(year, mon, 1), date(year, mon, monthrange(year, mon)[1])
 
 
-def _assignments_between(first, last, *, state=None):
-    query = db.session.query(DutyAssignment).filter(
-        DutyAssignment.date >= first, DutyAssignment.date <= last
+DutyDays = namedtuple("DutyDays", "weekdays active holidays blocked")
+
+
+def duty_days(first, last) -> DutyDays:
+    """The ONE owner of "which dates carry a duty" (owner 2026-07-27).
+
+    `weekdays` = every Mon-Fri date in range (the grid's rows — weekends are
+    not planned and are not shown); `active` = those minus public holidays and
+    blocked days (the dates the generator plans and manual assignment accepts);
+    `holidays` = {date: name} for the chrome; `blocked` = the blocked dates.
+    Generation, the roster page, and manual assignment all call this rather
+    than re-deriving the rule.
+    """
+    holidays = PublicHoliday.names_between(first, last)
+    blocked = frozenset(
+        row.date
+        for row in db.session.query(DutyBlockedDay.date)
+        .filter(DutyBlockedDay.date >= first, DutyBlockedDay.date <= last)
+        .all()
     )
-    if state is not None:
-        query = query.filter(DutyAssignment.state == state)
-    return query.order_by(DutyAssignment.date, DutyAssignment.duty).all()
+    holiday_dates = frozenset(holidays)
+    weekdays = [d for d in iter_days(first, last) if d.weekday() < 5]
+    active = [
+        d for d in weekdays if is_working_day(d, holiday_dates) and d not in blocked
+    ]
+    return DutyDays(weekdays=weekdays, active=active, holidays=holidays, blocked=blocked)
+
+
+def _assignments_between(first, last):
+    return (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.date >= first, DutyAssignment.date <= last)
+        .order_by(DutyAssignment.date, DutyAssignment.duty)
+        .all()
+    )
 
 
 def availability_for_month(month: str):
-    """(pools, availability, confirmed_rows) for the month — the shaped inputs
+    """(pools, availability, manual_rows) for the month — the shaped inputs
     the generator and the manual-assign checks (P4.6) both consume.
 
     One shared absence fetch for the whole month; in-camp statuses do NOT
-    block (in camp is not away — an in-camp status eats meals and can hold a duty).
-    Only OVERNIGHT TP events block (P4.2's stated v1 definition); ARCTIC rows
-    are contingency plans, not scheduled conducts, and never block.
+    block (in camp is not away — an in-camp status eats meals and can hold a
+    duty). Only OVERNIGHT TP events block (P4.2's stated v1 definition);
+    ARCTIC rows are contingency plans, not scheduled conducts, and never block.
+
+    Held-duty dates come from MANUAL rows only: the generator's own rows are
+    deleted and re-planned in the same transaction, so counting them would
+    make a person look unavailable for the very slot being re-planned.
     """
     first, last = month_bounds(month)
     people = event_service.active_roster()
@@ -85,9 +115,9 @@ def availability_for_month(month: str):
             for p in event_service.resolve_participants(ev):
                 overnight[p.id].append(ev)
 
-    confirmed = _assignments_between(first, last, state=DutyState.CONFIRMED)
+    manual = [r for r in _assignments_between(first, last) if r.is_manual]
     held_dates = defaultdict(set)
-    for row in confirmed:
+    for row in manual:
         held_dates[row.person_id].add(row.date)
 
     def availability(person, day):
@@ -99,17 +129,18 @@ def availability_for_month(month: str):
             other_duty_dates=held_dates.get(person.id, frozenset()),
         )
 
-    return pools, availability, confirmed
+    return pools, availability, manual
 
 
 def _prior_month_inputs(first):
-    """CONFIRMED-only history for the generator (A7): counts = the whole
+    """Previous-month history for the generator (A7): counts = the whole
     previous month; tail = its last 3 calendar days (Fri->Mon adjacency can
-    reach 3 days back). Both empty when no previous month exists — an empty
-    tail means no adjacency constraint from the past, defined, not crashed."""
+    reach 3 days back). Every row counts — there are no drafts. Both empty when
+    no previous month exists — an empty tail means no adjacency constraint from
+    the past, defined, not crashed."""
     prev_last = first - timedelta(days=1)
     prev_first = prev_last.replace(day=1)
-    rows = _assignments_between(prev_first, prev_last, state=DutyState.CONFIRMED)
+    rows = _assignments_between(prev_first, prev_last)
     prior_counts = {duty: defaultdict(int) for duty in Duty}
     for row in rows:
         prior_counts[row.duty][row.person_id] += 1
@@ -119,29 +150,29 @@ def _prior_month_inputs(first):
 
 
 def generate_month(month: str, actor):
-    """Generate the month's PROPOSED roster in one transaction, replacing only
-    PROPOSED rows — CONFIRMED rows are never touched by regeneration.
+    """Generate the month's roster in one transaction over its DUTY DAYS,
+    replacing only auto-generated rows — a manual pick is never re-planned.
 
-    One generate() call PER DUTY over that duty's open (non-CONFIRMED) days:
-    the appointment pools are disjoint, so per-duty runs cannot double-book a
-    person, and skipping confirmed slots this way keeps the pure module's
-    internal counts honest (no discarded picks). In-month CONFIRMED rows join
-    the tail (adjacency must see them) and the prior counts (evenness bias).
+    One generate() call PER DUTY over that duty's open (non-manual) days: the
+    appointment pools are disjoint, so per-duty runs cannot double-book a
+    person, and skipping manual slots this way keeps the pure module's internal
+    counts honest (no discarded picks). In-month manual rows join the tail
+    (adjacency must see them) and the prior counts (evenness bias).
     """
     first, last = month_bounds(month)
-    pools, availability, confirmed = availability_for_month(month)
+    pools, availability, manual = availability_for_month(month)
     prior_counts, prior_tail = _prior_month_inputs(first)
 
-    confirmed_slots = {(r.date, r.duty) for r in confirmed}
-    tail = list(prior_tail) + [(r.date, r.duty, r.person_id) for r in confirmed]
+    manual_slots = {(r.date, r.duty) for r in manual}
+    tail = list(prior_tail) + [(r.date, r.duty, r.person_id) for r in manual]
     counts = {duty: dict(prior_counts[duty]) for duty in Duty}
-    for r in confirmed:
+    for r in manual:
         counts[r.duty][r.person_id] = counts[r.duty].get(r.person_id, 0) + 1
 
-    all_days = list(iter_days(first, last))
+    days = duty_days(first, last).active
     picks = {}
     for duty in Duty:
-        open_days = [d for d in all_days if (d, duty) not in confirmed_slots]
+        open_days = [d for d in days if (d, duty) not in manual_slots]
         picks.update(
             roster.generate(
                 open_days, {duty: pools[duty]}, availability,
@@ -152,7 +183,7 @@ def generate_month(month: str, actor):
     db.session.query(DutyAssignment).filter(
         DutyAssignment.date >= first,
         DutyAssignment.date <= last,
-        DutyAssignment.state == DutyState.PROPOSED,
+        DutyAssignment.is_manual.is_(False),
     ).delete()
     for (day, duty), person_id in picks.items():
         if person_id is None:
@@ -160,14 +191,15 @@ def generate_month(month: str, actor):
         db.session.add(
             DutyAssignment(
                 date=day, duty=duty, person_id=person_id,
-                state=DutyState.PROPOSED, created_by_id=actor.id,
+                is_manual=False, created_by_id=actor.id,
             )
         )
     db.session.commit()
 
 
 class IneligibleAssignment(Exception):
-    """Rule violation (a PC can never hold COS) — hard block, 4xx, never a warning."""
+    """Rule violation — a PC can never hold COS, and a weekend/holiday/blocked
+    date carries no duty at all. Hard block, 4xx, never a warning."""
 
 
 class NeedsAvailabilityConfirm(Exception):
@@ -179,12 +211,17 @@ class NeedsAvailabilityConfirm(Exception):
         self.reasons = reasons
 
 
+class NotBlockable(Exception):
+    """A date that cannot take a block (already a non-duty day, or already
+    blocked); the message is user-facing."""
+
+
 def _availability_reasons(person, day, duty):
     """Soft-warning reasons for putting `person` on (day, duty): covering
     absence/overnight event, adjacency (incl. cross-month tail), spread breach.
     """
     month = day.strftime("%Y-%m")
-    pools, availability, _confirmed = availability_for_month(month)
+    pools, availability, _manual = availability_for_month(month)
     reasons = []
     if not availability(person, day):
         reasons.append("covering absence, overnight TP event, or duty that day")
@@ -207,11 +244,16 @@ def _availability_reasons(person, day, duty):
 
 
 def assign(day, duty, person, *, actor, override_availability):
-    """Assign/replace one (date, duty). Eligibility is LAW (hard block);
-    availability/adjacency/spread are judgment (warn-then-confirm). Replacing a
-    CONFIRMED row keeps it CONFIRMED with a fresh confirm stamp — manual replace
-    is exactly how the PS resolves a post-approval clash; a new row on an empty
-    slot is PROPOSED (it becomes real only when the month is confirmed)."""
+    """Assign/replace one (date, duty). The duty day and eligibility are LAW
+    (hard block); availability/adjacency/spread are judgment (warn-then-confirm).
+    Every manual assign marks the row `is_manual` — replacing the generator's
+    pick is exactly how the PS resolves a clash, and regeneration must not undo
+    it."""
+    if day not in duty_days(day, day).active:
+        raise IneligibleAssignment(
+            f"{day.strftime('%d %b %Y')} is not a duty day — weekends, public "
+            "holidays, and blocked days carry no COS or CDO/S."
+        )
     rule = eligibility.eligible_cos if duty is Duty.COS else eligibility.eligible_cdos
     if not (person.is_active and rule(person)):
         raise IneligibleAssignment(
@@ -233,24 +275,55 @@ def assign(day, duty, person, *, actor, override_availability):
     if row is None:
         row = DutyAssignment(
             date=day, duty=duty, person_id=person.id,
-            state=DutyState.PROPOSED, created_by_id=actor.id,
+            is_manual=True, created_by_id=actor.id,
         )
         db.session.add(row)
     else:
         row.person_id = person.id
-        if row.state is DutyState.CONFIRMED:
-            row.confirmed_by_id = actor.id
-            row.confirmed_at = now_sgt()
+        row.is_manual = True
     db.session.commit()
     return row
 
 
-def clear(day, duty) -> bool:
-    row = (
-        db.session.query(DutyAssignment)
-        .filter(DutyAssignment.date == day, DutyAssignment.duty == duty)
-        .first()
-    )
+def _holder_line(row):
+    return f"{row.duty.label}: {row.person.rank.value} {row.person.display_name}"
+
+
+def block_day(day, actor):
+    """Mark `day` as needing no duty AND delete that date's assignments in ONE
+    transaction — a block that left holders behind would show the grid one
+    thing and the parade documents another. Returns the removed holders'
+    descriptions so the caller can say who lost a duty.
+
+    The duplicate-block guard is the UNIQUE date plus a caught IntegrityError,
+    never a pre-check SELECT."""
+    stamp = day.strftime("%d/%m")
+    if day.weekday() >= 5:
+        raise NotBlockable(f"{stamp} is a weekend — no duty is planned then anyway.")
+    days = duty_days(day, day)
+    if day in days.holidays:
+        raise NotBlockable(
+            f"{stamp} is a public holiday ({days.holidays[day]}) — no duty is "
+            "planned then anyway."
+        )
+    # Read the holders BEFORE the pending insert exists: a later query would
+    # autoflush it and raise the duplicate-block IntegrityError outside the
+    # try below.
+    holders = _assignments_between(day, day)
+    removed = [_holder_line(row) for row in holders]
+    db.session.add(DutyBlockedDay(date=day, created_by_id=actor.id))
+    for row in holders:
+        db.session.delete(row)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise NotBlockable(f"{stamp} is already blocked.")
+    return removed
+
+
+def unblock_day(day) -> bool:
+    row = db.session.query(DutyBlockedDay).filter_by(date=day).first()
     if row is None:
         return False
     db.session.delete(row)
@@ -258,55 +331,50 @@ def clear(day, duty) -> bool:
     return True
 
 
-def confirmed_on(day):
-    """CONFIRMED assignments dated `day` — the consumers' notice helper (A7):
-    when a night has no confirmed duty (rollout ramp, month boundary), pages
-    say so in chrome; the document text never changes."""
+def duties_on(day):
+    """Assignments dated `day` — the consumers' notice helper (A7): when a
+    night has no duty (rollout ramp, month boundary, blocked day), pages say so
+    in chrome; the document text never changes."""
     return (
         db.session.query(DutyAssignment)
-        .filter(DutyAssignment.date == day, DutyAssignment.state == DutyState.CONFIRMED)
+        .filter(DutyAssignment.date == day)
         .order_by(DutyAssignment.duty)
         .all()
     )
 
 
-def _confirmed_holder(day, duty):
+def _holder(day, duty):
     row = (
         db.session.query(DutyAssignment)
-        .filter(
-            DutyAssignment.date == day,
-            DutyAssignment.duty == duty,
-            DutyAssignment.state == DutyState.CONFIRMED,
-        )
+        .filter(DutyAssignment.date == day, DutyAssignment.duty == duty)
         .first()
     )
     return row.person if row is not None else None
 
 
 def cos_of_day(day):
-    """CONFIRMED COS holder for `day`, or None (autofills the greeting)."""
-    return _confirmed_holder(day, Duty.COS)
+    """COS holder for `day`, or None (feeds the RO's COS line)."""
+    return _holder(day, Duty.COS)
 
 
 def cdos_of_day(day):
-    """CONFIRMED CDO/S holder for `day`, or None — P5's RO-rights input."""
-    return _confirmed_holder(day, Duty.CDOS)
+    """CDO/S holder for `day`, or None — P5's RO-rights input."""
+    return _holder(day, Duty.CDOS)
 
 
 def can_key_parade_today(person) -> bool:
     """The DB-aware wrapper every route and template calls: PS/S3/admin
-    fallback OR CONFIRMED COS for today or tomorrow (tomorrow's COS compiles
-    day-D's message on the evening of D−1 — assumption 4 makes the two-day
-    window the honest one). One duty query per page render — accepted at 40
-    users (A5); do not add caching. Rights are date-independent: the window
-    decides WHO can key, not WHICH dates they may key."""
+    fallback OR COS for today or tomorrow (tomorrow's COS compiles day-D's
+    message on the evening of D−1 — assumption 4 makes the two-day window the
+    honest one). One duty query per page render — accepted at 40 users (A5); do
+    not add caching. Rights are date-independent: the window decides WHO can
+    key, not WHICH dates they may key."""
     today = today_sgt()
     is_cos = (
         db.session.query(DutyAssignment.id)
         .filter(
             DutyAssignment.person_id == person.id,
             DutyAssignment.duty == Duty.COS,
-            DutyAssignment.state == DutyState.CONFIRMED,
             DutyAssignment.date.in_((today, today + timedelta(days=1))),
         )
         .first()
@@ -316,12 +384,11 @@ def can_key_parade_today(person) -> bool:
 
 
 def _absent_assignment_ids(rows, first, last):
-    """Assignment ids whose CONFIRMED holder resolves ABSENT on the duty date,
-    derived from the shared fetch (A8): an MC, a course, and approved leave all
-    flag the same way, because the predicate IS presence, not a leave-table join.
+    """Assignment ids whose holder resolves ABSENT on the duty date, derived
+    from the shared fetch (A8): an MC, a course, and approved leave all flag the
+    same way, because the predicate IS presence, not a leave-table join.
     Never stored — recomputed at render."""
-    confirmed = [r for r in rows if r.state is DutyState.CONFIRMED]
-    if not confirmed:
+    if not rows:
         return frozenset()
     leaves, statuses, courses = presence_service.fetch_absence_rows(first, last)
     by_person = defaultdict(lambda: ([], [], []))
@@ -332,7 +399,7 @@ def _absent_assignment_ids(rows, first, last):
     for row in courses:
         by_person[row.person_id][2].append(row)
     flagged = set()
-    for r in confirmed:
+    for r in rows:
         p_leaves, p_statuses, p_courses = by_person.get(r.person_id, ((), (), ()))
         resolution = presence.resolve(
             r.person, r.date, leaves=p_leaves, statuses=p_statuses, courses=p_courses,
@@ -342,73 +409,41 @@ def _absent_assignment_ids(rows, first, last):
     return frozenset(flagged)
 
 
+DayRow = namedtuple("DayRow", "date holiday_name blocked")
+
 MonthView = namedtuple(
-    "MonthView", "first last days rows by_slot pools violations fingerprint absent_flags"
+    "MonthView", "first last days active rows by_slot pools violations absent_flags"
 )
 
 
 def month_view(month: str) -> MonthView:
-    """Everything the roster page renders, assembled once. `violations` and
-    `absent_flags` are re-derived from the CURRENT rows on every call (the pure
-    module's contract: re-flag after manual edits, not only after generation).
-    Blanks are slots with NO row — the DB never stores a None assignment."""
+    """Everything the roster page renders, assembled once. `days` is one row per
+    WEEKDAY of the month, each tagged with its public-holiday name or its block;
+    `active` is the subset that carries duties, and blanks/violations are
+    derived over those alone. `violations` and `absent_flags` are re-derived
+    from the CURRENT rows on every call (the pure module's contract: re-flag
+    after manual edits, not only after generation). Blanks are slots with NO
+    row — the DB never stores a None assignment."""
     first, last = month_bounds(month)
-    days = list(iter_days(first, last))
+    dd = duty_days(first, last)
     rows = _assignments_between(first, last)
     by_slot = {(r.date, r.duty): r for r in rows}
     people = event_service.active_roster()
     pools = {duty: eligibility.pool(duty, people) for duty in Duty}
     assignments = {
         (d, duty): (by_slot[(d, duty)].person_id if (d, duty) in by_slot else None)
-        for d in days
+        for d in dd.active
         for duty in Duty
     }
     _counts, prior_tail = _prior_month_inputs(first)
     return MonthView(
-        first=first, last=last, days=days, rows=rows, by_slot=by_slot,
-        pools=pools,
+        first=first, last=last,
+        days=[
+            DayRow(date=d, holiday_name=dd.holidays.get(d), blocked=d in dd.blocked)
+            for d in dd.weekdays
+        ],
+        active=dd.active,
+        rows=rows, by_slot=by_slot, pools=pools,
         violations=roster.violations(assignments, pools, prior_tail=prior_tail),
-        fingerprint=roster_fingerprint(month),
         absent_flags=_absent_assignment_ids(rows, first, last),
     )
-
-
-def roster_fingerprint(month: str) -> str:
-    """sha256 over the sorted (date, duty, person_id) CONTENT of the month's
-    PROPOSED rows (A4). Content-based on purpose: an UPDATE-in-place regenerate
-    and a single manual edit both change it; count+max(id) would not."""
-    first, last = month_bounds(month)
-    rows = _assignments_between(first, last, state=DutyState.PROPOSED)
-    canon = "|".join(
-        f"{r.date.isoformat()},{r.duty.value},{r.person_id}"
-        for r in sorted(rows, key=lambda r: (r.date, r.duty.value, r.person_id))
-    )
-    return hashlib.sha256(canon.encode()).hexdigest()
-
-
-def confirm_month(month: str, actor, fingerprint: str):
-    """Confirm the month's PROPOSED rows — but only the roster the actor
-    actually reviewed: the posted fingerprint is recomputed inside this
-    transaction and a mismatch aborts (A4 — the plain WHERE state='PROPOSED'
-    claim would confirm whatever PS B regenerated after PS A loaded the page).
-    """
-    first, last = month_bounds(month)
-    if roster_fingerprint(month) != fingerprint:
-        db.session.rollback()
-        raise RosterChanged(
-            "Roster changed since you loaded this page — re-review before confirming."
-        )
-    db.session.execute(
-        update(DutyAssignment)
-        .where(
-            DutyAssignment.date >= first,
-            DutyAssignment.date <= last,
-            DutyAssignment.state == DutyState.PROPOSED,
-        )
-        .values(
-            state=DutyState.CONFIRMED,
-            confirmed_by_id=actor.id,
-            confirmed_at=now_sgt(),
-        )
-    )
-    db.session.commit()

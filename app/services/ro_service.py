@@ -13,7 +13,7 @@ from datetime import datetime, time, timedelta
 from sqlalchemy.exc import IntegrityError
 
 from app.domain import policy, ro
-from app.domain.types import Calendar, Duty, DutyState
+from app.domain.types import Calendar, Duty
 from app.extensions import db
 from app.models import (
     DutyAssignment,
@@ -49,7 +49,7 @@ def fetch_or_create(day) -> RoDocument:
 
 
 def can_edit_ro_for(person, day) -> bool:
-    """A9: editing the RO dated D requires CONFIRMED CDOS of D or D−1 (the
+    """A9: editing the RO dated D requires the CDOS of D or D−1 (the
     compiling evening — same reasoning as P4.8's two-day COS window), with
     the command team as fallback. policy.can_edit_ro stays pure; the duty
     fact is resolved here.
@@ -62,7 +62,6 @@ def can_edit_ro_for(person, day) -> bool:
         .filter(
             DutyAssignment.person_id == person.id,
             DutyAssignment.duty == Duty.CDOS,
-            DutyAssignment.state == DutyState.CONFIRMED,
             DutyAssignment.date.in_((day, day - timedelta(days=1))),
         )
         .first()

@@ -1,6 +1,6 @@
 """P5.6 — the Phase 5 end-to-end walk, via the test client only.
 
-The whole stack reproduces the owner's normalized sample: S3 confirms the
+The whole stack reproduces the owner's normalized sample: S3 assigns the
 duty roster for 19 Jun 2026, keys the boilerplate, and plots the week's TP
 conducts (the key-events source since the 2026-07-24 revision); the CDO/CDS
 of the date pastes the messages blob and keys the day's timeline items; any
@@ -55,7 +55,9 @@ def test_phase5_end_to_end(app, client, make_person):
     make_person(username="ang", rank=Rank.CPL, appointment=Appointment.OPR,
                 platoon=1, display_name="Ang Cheng Ze")
 
-    # --- S3 assigns and confirms the date's duties through the roster UI ------
+    # --- S3 assigns the date's duties through the roster UI -------------------
+    # An assigned row is live immediately (owner 2026-07-27) — the RO reads it
+    # with no confirm step in between.
     login(client, "s3")
     for duty, username in ((Duty.COS, "ang"), (Duty.CDOS, "quek")):
         resp = client.post("/duty/roster/assign", data={
@@ -63,12 +65,6 @@ def test_phase5_end_to_end(app, client, make_person):
             "person_id": str(_pid(app, username)),
         }, follow_redirects=True)
         assert "Assigned." in resp.get_data(as_text=True)
-    page = client.get(f"/duty/roster?month={MONTH}").get_data(as_text=True)
-    fingerprint = re.search(r'name="fingerprint" value="([0-9a-f]{64})"', page).group(1)
-    resp = client.post("/duty/roster/confirm",
-                       data={"month": MONTH, "fingerprint": fingerprint},
-                       follow_redirects=True)
-    assert "Month confirmed" in resp.get_data(as_text=True)
 
     # --- S3 keys the boilerplate and plots the week's TP conducts --------------
     for section in RoSection:
