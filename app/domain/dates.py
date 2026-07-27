@@ -36,3 +36,11 @@ def working_days(start: date, end: date, holidays: frozenset = frozenset()) -> i
 def format_ddmmyy(d: date) -> str:
     # DDMMYY is the one date format every generated parade document uses (PARADE_FORMATS.md).
     return d.strftime("%d%m%y")
+
+
+def format_ddmmyy_range(start: date, end: date) -> str:
+    # Parade-line suffix rule (owner 2026-07-27): a one-day range collapses to the
+    # single date; the " - " separator matches the manning header's.
+    if start == end:
+        return format_ddmmyy(start)
+    return f"{format_ddmmyy(start)} - {format_ddmmyy(end)}"

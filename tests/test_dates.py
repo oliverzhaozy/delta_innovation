@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.domain.dates import is_working_day, working_days
+from app.domain.dates import format_ddmmyy_range, is_working_day, working_days
 
 
 def test_weekend_days_do_not_count():
@@ -25,3 +25,15 @@ def test_is_working_day():
     assert is_working_day(date(2026, 7, 8))
     assert not is_working_day(date(2026, 7, 4))  # Saturday
     assert not is_working_day(date(2026, 7, 8), frozenset({date(2026, 7, 8)}))
+
+
+def test_ddmmyy_range_spans_two_dates():
+    assert format_ddmmyy_range(date(2026, 7, 27), date(2026, 7, 28)) == "270726 - 280726"
+
+
+def test_ddmmyy_range_collapses_to_one_date():
+    assert format_ddmmyy_range(date(2026, 7, 27), date(2026, 7, 27)) == "270726"
+
+
+def test_ddmmyy_range_crosses_the_year():
+    assert format_ddmmyy_range(date(2026, 12, 31), date(2027, 1, 1)) == "311226 - 010127"
