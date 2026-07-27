@@ -5,7 +5,7 @@ from app.authz import require
 from app.blueprints.ledger import bp
 from app.blueprints.ledger.forms import AdjustmentForm
 from app.domain import policy
-from app.domain.types import BalanceKind, LedgerSource
+from app.domain.types import BalanceKind, LedgerSource, Service
 from app.extensions import db
 from app.models import Person
 from app.services import event_service, ledger_service
@@ -16,7 +16,9 @@ from app.services import event_service, ledger_service
 def index():
     # The shared active-roster fetch, so this table reads the same people in the
     # same parade order (appointment → rank) as every other list in the app.
-    people = event_service.active_roster()
+    # NSFs only: regulars' off/leave lives in ARCTIC FOE (owner directive
+    # 2026-07-26), so they have no balances here.
+    people = [p for p in event_service.active_roster() if p.service is Service.NSF]
     return render_template(
         "ledger/index.html", people=people, all_balances=ledger_service.balances_for_everyone()
     )

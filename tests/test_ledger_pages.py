@@ -6,6 +6,7 @@ from app.domain.types import (
     LedgerSource,
     Rank,
     RequestStatus,
+    Service,
 )
 from app.extensions import db
 from app.models import LedgerEntry, LeaveRequest, Person
@@ -55,6 +56,19 @@ def test_ledger_index_is_parade_ordered_not_platoon_or_alphabetical(client, make
 
     body = client.get("/ledger/").get_data(as_text=True)
     assert body.index("Zed Ps") < body.index("Ann Opr")
+
+
+def test_ledger_index_lists_nsfs_only(client, make_person):
+    # Regulars' off/leave lives in ARCTIC FOE (owner directive 2026-07-26), so
+    # the balances table never lists them.
+    make_person(username="led_nsf", display_name="Nsf Guy")
+    make_person(username="led_reg", display_name="Reg Guy", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None, service=Service.REGULAR)
+    login(client, make_s3(make_person))
+
+    body = client.get("/ledger/").get_data(as_text=True)
+    assert "Nsf Guy" in body
+    assert "Reg Guy" not in body
 
 
 def test_manual_adjustment_appears_in_history_and_balance(app, client, make_person):
