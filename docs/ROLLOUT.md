@@ -83,9 +83,9 @@ worse than none, so this cutover is judged on exact output, not vibes.
 ## Phase 4 cutover — duty roster
 
 Phase 4 replaces the PS's hand-built COS/CDO-S roster. The app proposes and a
-human decides: the generator drafts, the PS confirms, and only CONFIRMED
-duties reach parades, meals, and keying rights — so the cutover risk is a
-wrong draft nobody reviewed, not a silent reassignment.
+human decides: the generator plans working days only and the PS edits what it
+got wrong — every row is live the moment it is written (owner 2026-07-27), so
+the cutover risk is a roster nobody reviewed, not a silent reassignment.
 
 - **Parallel month:** the PSs generate one month alongside the manual roster.
   First thing to check is the **pools panel** against reality: the eligibility
@@ -93,19 +93,20 @@ wrong draft nobody reviewed, not a silent reassignment.
   3SG PS legitimately appears in NEITHER pool. If a pool is near-empty, the
   rule — not the app — is the problem; raise it before trusting a roster.
 - **During the parallel month:** exercise manual assigns (including one over
-  an availability warning), so the confirm/fingerprint and warning flows have
-  all been driven with real names. Blanks and ⚠ flags on the page are
-  findings, not bugs: a blank means no one eligible was available; a "holder
-  absent" flag means leave/MC landed after confirmation and the PS resolves
-  it by manual replace.
-- **Confirm is the record:** a month's roster only counts once a PS presses
-  Confirm — drafts move nothing. Regenerate freely before confirming; after
-  confirming, changes go through manual replace.
+  an availability warning, which asks to confirm on the page that names the
+  clash) and block one day, so both flows have been driven with real names.
+  Blanks and ⚠ flags on the page are findings, not bugs: a blank means no one
+  eligible was available; a "holder absent" flag means leave/MC landed after
+  the assignment and the PS resolves it by assigning over the slot.
+- **Generation is safe to repeat:** regenerating replaces the generator's own
+  picks and leaves every manual assignment alone. To empty a day, block it
+  (that also removes any holders on it); to change a person, assign over the
+  slot.
 - **Hard cutover:** the following month, the manual roster stops. From day
-  one of that month the app's CONFIRMED roster drives roll-call CURRENT
-  STRENGTH, the NSF overnight meal counter, the COS-message pre-fill, and the
-  rotating COS's parade-keying rights (today's and tomorrow's confirmed COS
-  can key statuses; the rights disappear with the assignment).
+  one of that month the app's roster drives roll-call CURRENT STRENGTH, the
+  NSF overnight meal counter, the RO's duty lines, and the rotating COS's
+  parade-keying rights (today's and tomorrow's COS can key statuses; the
+  rights disappear with the assignment).
 
 ## Phase 5 cutover — Routine Orders
 
