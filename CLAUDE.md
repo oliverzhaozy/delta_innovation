@@ -21,6 +21,15 @@ Every model executing tasks in this repo follows the cognitive profile below (pr
 - Trivial one-liners (typo fixes, single obvious edits) may be done inline by whichever model is in the main loop — don't spawn an agent to change one word.
 - This is a standing directive: do not ask for re-confirmation each session.
 
+## Parallel agents (owner directive, 2026-07-28)
+
+Default to fanning out subagents whenever a task has independent parts — separate files, separate research questions, separate P-tasks, review dimensions. Launch them concurrently (one message, multiple Agent calls), don't work the parts sequentially in the main loop.
+
+- **Workflow tool is pre-authorized.** Treat this directive as the owner's standing "use a workflow" opt-in: for substantive multi-part tasks (audits, reviews, migrations, broad research), reach for Workflow orchestration without asking first. Respect the session's workflow size guideline unless the prompt raises it.
+- Decompose first, then dispatch: a quick inline scout to build the work-list is fine; the fan-out itself runs on subagents per the model roles above (execution on Opus 5, planning on Fable 5).
+- Do NOT parallelize what is genuinely sequential (dependent edits, migration chains) or trivial (one-file fixes) — more agents on dependent work is waste, not speed.
+- This is a standing directive: do not ask for re-confirmation each session.
+
 ## What this is
 
 A Flask web app replacing TimeTree as the single source of truth for a ~36-person Singapore army company's manpower admin (leave, parade states, duty rosters, RO, TU manning, meal counts). The two governing ideas:
