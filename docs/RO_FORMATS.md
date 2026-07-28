@@ -181,3 +181,16 @@ Owner decision, superseding parts of (n) and (o); spec in
   backdrop last on every line. A weekday with no overlapping TP event shows
   the public holiday's name if it is one, else **"Garage Maintenance"**. A
   holiday that has TP events shows just the events.
+
+## Revision 2026-07-28 — which TP events reach the document
+
+Owner decisions refining the 2026-07-24 revision's TP feed.
+
+- **Course-labelled TP events never enter the RO.** An event carrying
+  `TpLabel.ON_COURSE` (value `Course`) is excluded from the whole document —
+  not the timeline, not the key-events block. A course conduct's effect on
+  the company is its participants' absence, surfaced by the parade/presence
+  pipeline, not a company activity to publish. Every other TP event (any
+  other label, or none) is unaffected. The exclusion lives in the ONE
+  `ro_service.build` TP query, so both consumers inherit it; `domain/ro`
+  stays ignorant of calendars and labels.

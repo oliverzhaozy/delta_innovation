@@ -14,7 +14,7 @@ import html as html_lib
 import re
 from datetime import date, datetime
 
-from app.domain.types import Appointment, Calendar, Duty, Rank, RoSection
+from app.domain.types import Appointment, Calendar, Duty, Rank, RoSection, TpLabel
 from app.extensions import db
 from app.models import Event, Person
 from tests.conftest import login
@@ -126,11 +126,17 @@ def test_phase5_end_to_end(app, client, make_person):
             start_dt=datetime(2026, 6, 19, 9, 30), end_dt=datetime(2026, 6, 19, 11, 0),
             created_by_id=_pid(app, "s3"),
         ))
+        db.session.add(Event(
+            calendar=Calendar.TP, title="Signal Course", label=TpLabel.ON_COURSE.value,
+            start_dt=datetime(2026, 6, 19, 9, 45), end_dt=datetime(2026, 6, 19, 17, 0),
+            created_by_id=_pid(app, "s3"),
+        ))
         db.session.commit()
     text = _pre_text(client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True))
     assert "0900H\n- IPPT" in text
     assert "Fri - IPPT, Site Testing" in text
     assert "Contingency X" not in text
+    assert "Signal Course" not in text  # Course-labelled TP never enters the RO
 
     # --- The CDO/CDS removes an item: derived document, zero stored text -------
     _switch(client, "quek")

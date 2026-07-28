@@ -10,10 +10,11 @@ snapshot by design (the pasted WhatsApp message is the archival record).
 """
 from datetime import datetime, time, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from app.domain import policy, ro
-from app.domain.types import Calendar, Duty
+from app.domain.types import Calendar, Duty, TpLabel
 from app.extensions import db
 from app.models import (
     DutyAssignment,
@@ -87,11 +88,17 @@ def build(day) -> ro.RoDoc:
     # One fetch covers both consumers: the timeline keeps only events STARTING
     # on `day`, the key-events block any event overlapping a Mon–Fri weekday.
     # The Mon–Sun span contains `day` by construction (monday = week_start(day)).
+    # Filtering here is therefore the single site that keeps a rule out of the
+    # WHOLE document — domain/ro knows nothing of calendars or labels.
     monday_dt = datetime.combine(monday, time.min)
     tp_events = (
         db.session.query(Event)
         .filter(
             Event.calendar == Calendar.TP,
+            # Course conducts never enter the RO (owner, 2026-07-28) — their
+            # effect is the participants' absence (presence pipeline), not a
+            # company activity. NULL-safe: bare `!=` would drop unlabeled events.
+            or_(Event.label.is_(None), Event.label != TpLabel.ON_COURSE.value),
             Event.start_dt < monday_dt + timedelta(days=7),
             Event.end_dt >= monday_dt,
         )

@@ -7,7 +7,7 @@ only.
 from datetime import date, datetime, time, timedelta
 
 from app.domain.types import (
-    Appointment, Calendar, Duty, Rank, RoSection, Service,
+    Appointment, Calendar, Duty, Rank, RoSection, Service, TpLabel,
 )
 from app.extensions import db
 from app.models import (
@@ -105,6 +105,46 @@ def test_build_assembles_duties_tp_and_derived_key_events(app, make_person):
         doc = ro_service.build(FRI + timedelta(days=1))
         assert "COS: [NO CONFIRMED DUTY]" in doc.text
         assert set(doc.missing_duties) == {"CDO/CDS", "COS"}
+
+
+def test_course_events_excluded_from_timeline_and_key_events(app, make_person):
+    # Owner 2026-07-28: a TP event labelled Course never enters the RO — not
+    # the timeline, not the key events. The conduct spans Wed–Fri, so without
+    # the filter it would surface in the built day's timeline AND on three
+    # key-event lines.
+    make_person(username="s3_guy", rank=Rank.TWO_SG, appointment=Appointment.PS,
+                platoon=2, display_name="Quek Jing Yu")
+    wed = date(2026, 6, 17)
+
+    with app.app_context():
+        author_id = pid(app, "s3_guy")
+        db.session.add(Event(
+            calendar=Calendar.TP, title="Signal Course",
+            label=TpLabel.ON_COURSE.value,
+            start_dt=datetime(2026, 6, 17, 8, 0), end_dt=datetime(2026, 6, 19, 17, 0),
+            created_by_id=author_id,
+        ))
+        db.session.add(Event(
+            calendar=Calendar.TP, title="Coy IPPT", label=TpLabel.IPPT.value,
+            start_dt=datetime(2026, 6, 17, 9, 0), end_dt=datetime(2026, 6, 17, 12, 0),
+            created_by_id=author_id,
+        ))
+        # NULL-label guard: SQL three-valued logic drops unlabeled rows from a
+        # bare `!=` filter, so an unlabeled event is asserted present too.
+        db.session.add(Event(
+            calendar=Calendar.TP, title="Site Testing", label=None,
+            start_dt=datetime(2026, 6, 17, 13, 0), end_dt=datetime(2026, 6, 17, 17, 0),
+            created_by_id=author_id,
+        ))
+        db.session.commit()
+
+        text = ro_service.build(wed).text
+        assert "Signal Course" not in text
+        assert "0900H\n- Coy IPPT" in text
+        assert "1300H\n- Site Testing" in text
+        assert "Wed - Coy IPPT, Site Testing" in text
+        # The Course's remaining days fall back to the empty-day filler.
+        assert "Thurs - Garage Maintenance" in text
 
 
 def test_extra_item_add_and_remove(app):
