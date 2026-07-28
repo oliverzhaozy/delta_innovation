@@ -4,7 +4,6 @@
 {% block content %}
 <div class="page-head">
   <h1>TU manning — {{ period.start_date.strftime("%d %b") }} – {{ period.end_date.strftime("%d %b %Y") }}</h1>
-  {% if period.name %}<p class="muted">{{ period.name }}</p>{% endif %}
 </div>
 
 {% if doc.unfilled %}

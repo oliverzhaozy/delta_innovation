@@ -11,9 +11,11 @@ Owner directive 2026-07-27: a written row is live immediately (no draft
 state), COS and CDO/S run on working days only, and a blocked day is an
 explicit "no duty needed". `duty_days` below owns that day rule for everyone.
 
-Decision (z) 2026-07-28: TP events never block availability. This module
-fetches no calendar events at all and passes none to `eligibility.available`,
-whose frozen B4 event parameter then keeps its empty default for P6.3's use.
+Decision (z) 2026-07-28: TP events never block AS EVENTS — this module runs no
+event query of its own and passes nothing to `eligibility.available`'s frozen
+B4 event parameter, which keeps its empty default for P6.3's use. A
+Course-labelled TP event still blocks, but only as a course cover reaching this
+module through the shared absence fetch above.
 """
 from calendar import monthrange
 from collections import defaultdict, namedtuple
@@ -81,9 +83,11 @@ def availability_for_month(month: str):
     block (in camp is not away — an in-camp status eats meals and can hold a
     duty). Only a covering absence (approved leave/OFF/OIL, an out-of-camp
     status, a course) or already holding the other duty that date skips a
-    person: calendar events NEVER block (decision z — a whole-company multi-day
-    TP conduct left the month ungenerable, and its participants are in camp).
-    ARCTIC rows never blocked and still don't.
+    person. No event query runs here: a TP event blocks nothing AS AN EVENT
+    (decision z — a whole-company multi-day conduct left the month ungenerable,
+    and its participants are in camp), and the one TP event that still counts,
+    an ON COURSE label, arrives above as a course cover. ARCTIC rows never
+    blocked and still don't.
 
     Held-duty dates come from MANUAL rows only: the generator's own rows are
     deleted and re-planned in the same transaction, so counting them would

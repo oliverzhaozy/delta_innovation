@@ -163,6 +163,11 @@ def test_availability_ignores_tp_events(app, make_person):
     with app.app_context():
         _pools, availability, _manual = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
+        # Not vacuous: he really is tagged in all three planted events.
+        assert [
+            [p.username for p in event_service.resolve_participants(ev)]
+            for ev in db.session.query(Event).all()
+        ] == [["cos_opr"]] * 3
         for day in range(20, 25):
             assert availability(person, date(2026, 7, day)) is True
 

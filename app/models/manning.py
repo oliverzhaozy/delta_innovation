@@ -13,14 +13,13 @@ def _values(enum_cls):
 
 
 class ManningPeriod(db.Model):
-    """One activation-standby window. Date-ranged in the document (usually
-    4–7 days, advisory — never validated); `name` is an optional handle for
-    the S3's period list and never renders."""
+    """One activation-standby window, identified by its dates alone (owner
+    2026-07-28). Date-ranged in the document (usually 4–7 days, advisory —
+    never validated)."""
 
     __tablename__ = "manning_period"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=True)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
@@ -43,7 +42,10 @@ class ManningPeriod(db.Model):
 class ManningSlot(db.Model):
     """One filled slot. det_number groups a TU Det Comd with their personnel
     (NULL for the HQ slots TU_COMD/TU_PLANNER — the CHECK pins that shape);
-    UNIQUE(period_id, person_id) is the one-slot-per-person backstop."""
+    UNIQUE(period_id, person_id) is the one-slot-per-person backstop.
+
+    `is_manual` marks the S3's own pick: regeneration replaces only the
+    generator's rows (`is_manual=False`) and leaves manual ones standing."""
 
     __tablename__ = "manning_slot"
 

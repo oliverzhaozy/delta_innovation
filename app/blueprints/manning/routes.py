@@ -48,7 +48,6 @@ def new():
         flash("End date is before start date.", "error")
         return redirect(url_for("manning.index"))
     period = ManningPeriod(
-        name=request.form.get("name", "").strip() or None,
         start_date=start, end_date=end, created_by_id=current_user.id,
     )
     db.session.add(period)
