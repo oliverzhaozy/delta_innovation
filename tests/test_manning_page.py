@@ -35,7 +35,7 @@ def make_cast(make_person):
 
 def create_period(client):
     return client.post("/manning/new", data={
-        "name": "", "start_date": START.isoformat(), "end_date": END.isoformat(),
+        "start_date": START.isoformat(), "end_date": END.isoformat(),
     }, follow_redirects=True)
 
 

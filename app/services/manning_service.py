@@ -113,6 +113,7 @@ def assign_slot(period, slot, person, *, det_number):
         )
     row = ManningSlot(
         period_id=period.id, slot=slot, person_id=person.id, det_number=det_number,
+        is_manual=True,
     )
     db.session.add(row)
     try:

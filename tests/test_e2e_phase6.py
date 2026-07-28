@@ -81,8 +81,7 @@ def test_phase6_end_to_end(app, client, make_person):
     # --- 2. S3 creates the period and fills every slot through the UI --------
     login(client, "s3")
     client.post("/manning/new", data={
-        "name": "Sample activation", "start_date": START.isoformat(),
-        "end_date": END.isoformat(),
+        "start_date": START.isoformat(), "end_date": END.isoformat(),
     }, follow_redirects=True)
     with app.app_context():
         period_id = db.session.query(ManningPeriod.id).scalar()

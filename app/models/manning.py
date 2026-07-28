@@ -59,6 +59,7 @@ class ManningSlot(db.Model):
     )
     person_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
     det_number = db.Column(db.Integer, nullable=True)
+    is_manual = db.Column(db.Boolean, nullable=False, default=False)
 
     period = db.relationship("ManningPeriod", back_populates="slots")
     person = db.relationship("Person", foreign_keys=[person_id])
