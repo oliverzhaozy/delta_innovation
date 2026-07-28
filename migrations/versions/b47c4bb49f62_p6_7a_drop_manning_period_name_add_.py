@@ -33,12 +33,21 @@ def upgrade():
     # SQLite drops a column by rebuilding the table, and DROP TABLE on the old
     # manning_period copy trips FK enforcement whenever manning_slot rows point
     # at it — so FKs are off for that rebuild only, per SQLite's documented
-    # ALTER TABLE procedure. The pragma is a silent no-op inside a transaction;
-    # DDL here is non-transactional, and a no-op would fail the DROP loudly.
-    op.execute("PRAGMA foreign_keys=OFF")
+    # ALTER TABLE procedure.
+    #
+    # Both pragmas run inside autocommit_block(): SQLite SILENTLY IGNORES
+    # PRAGMA foreign_keys inside a transaction, and the batch copy leaves one
+    # open. Without it the restore is a no-op and every later revision of the
+    # same `flask db upgrade` run — DEPLOY.md applies all pending revisions on
+    # ONE connection — would inherit FK enforcement disabled.
+    with op.get_context().autocommit_block():
+        op.execute("PRAGMA foreign_keys=OFF")
+
     with op.batch_alter_table('manning_period', schema=None) as batch_op:
         batch_op.drop_column('name')
-    op.execute("PRAGMA foreign_keys=ON")
+
+    with op.get_context().autocommit_block():
+        op.execute("PRAGMA foreign_keys=ON")
 
     with op.batch_alter_table('manning_slot', schema=None) as batch_op:
         batch_op.add_column(sa.Column(
@@ -49,6 +58,15 @@ def upgrade():
         batch_op.alter_column(
             'is_manual', existing_type=sa.Boolean(), existing_nullable=False,
             server_default=None,
+        )
+
+    # The rebuild above ran unguarded, so prove it left no dangling reference
+    # instead of trusting it: this is the only check that would catch a bad
+    # copy, and it must fail the migration rather than ship a broken database.
+    violations = op.get_bind().exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise RuntimeError(
+            f"manning_period rebuild left dangling references: {violations}"
         )
 
 
