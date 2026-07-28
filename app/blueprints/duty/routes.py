@@ -71,6 +71,7 @@ def _render_roster(month, *, pending_assign=None):
         pending_assign=pending_assign,
         prev_month=(view.first - timedelta(days=1)).strftime("%Y-%m"),
         next_month=(view.last + timedelta(days=1)).strftime("%Y-%m"),
+        today_month=today_sgt().strftime("%Y-%m"),
     )
 
 

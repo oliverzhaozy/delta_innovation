@@ -2,17 +2,14 @@
 {% block title %}Duty roster{% endblock %}
 
 {% block content %}
-<div class="page-head">
-  <h1>Duty roster — {{ month }}</h1>
-</div>
-
-<section class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
-    <a href="{{ url_for('duty.roster', month=prev_month) }}">&larr; {{ prev_month }}</a>
-    <strong>{{ view.first.strftime("%B %Y") }}</strong>
-    <a href="{{ url_for('duty.roster', month=next_month) }}">{{ next_month }} &rarr;</a>
+<div class="cal-toolbar">
+  <div class="cal-nav">
+    <a class="cal-today" href="{{ url_for('duty.roster', month=today_month) }}">Today</a>
+    <a class="cal-step" href="{{ url_for('duty.roster', month=prev_month) }}" aria-label="Previous month">&lsaquo;</a>
+    <a class="cal-step" href="{{ url_for('duty.roster', month=next_month) }}" aria-label="Next month">&rsaquo;</a>
+    <h1 class="cal-title">Duty roster &mdash; {{ view.first.strftime("%B %Y") }}</h1>
   </div>
-</section>
+</div>
 
 {# Weekday-only grid (owner 2026-07-27): COS and CDO/S are working-day duties,
    so weekends are absent from the table entirely; public holidays and blocked
@@ -94,9 +91,10 @@
     <form method="post" action="{{ url_for('duty.generate') }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="month" value="{{ month }}">
-      <button type="submit" class="btn">Generate (keeps manual picks)</button>
+      <button type="submit" class="btn">Generate</button>
     </form>
   </div>
+  <p class="muted">Generates the whole month. Manual picks are kept &mdash; only auto-planned slots are replanned.</p>
 </section>
 
 <section class="card">
@@ -117,8 +115,6 @@
     </label>
     <button type="submit" class="btn">Assign</button>
   </form>
-  <p class="muted">To empty a day, block it in the grid; to change a holder,
-     assign over the slot.</p>
 
   {# The override decision comes AFTER the conflict is known: the assign POST
      comes back here with the reasons rather than redirecting to a flash. #}
@@ -158,7 +154,7 @@
   {% endif %}
   <ul class="toollist">
     {% for p in view.pools[duty] %}
-      <li><span>{{ p.rank.value }} {{ p.display_name }} ({{ p.appointment.label }})</span></li>
+      <li><span>{{ p.rank.value }} {{ p.display_name }}</span></li>
     {% endfor %}
   </ul>
 </section>
