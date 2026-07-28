@@ -46,16 +46,19 @@
           <summary>Leave{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</summary>
           <div class="navmenu">
             {% if routing.can_request(current_user) %}
-              <a href="{{ url_for('leave.index') }}">My leave</a>
+              <a href="{{ url_for('leave.index') }}">My OFF/OIL</a>
             {% endif %}
             {% if policy.is_pc(current_user) %}
               <a href="{{ url_for('leave.pc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
             {% elif policy.can_final_approve(current_user) %}
               <a href="{{ url_for('leave.oc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
             {% endif %}
-            <a href="{{ url_for('overseas.mine') }}">Overseas declarations</a>
+            <a href="{{ url_for('overseas.mine') }}">Overseas declaration</a>
+            {% if policy.is_pc(current_user) %}
+              <a href="{{ url_for('overseas.queue') }}">Travel approvals</a>
+            {% endif %}
             {% if policy.can_manage_manning(current_user) %}
-              <a href="{{ url_for('overseas.upcoming') }}">Upcoming travel</a>
+              <a href="{{ url_for('overseas.upcoming') }}">View travels</a>
             {% endif %}
             {% if policy.can_manage_ledger(current_user) %}
               <a href="{{ url_for('ledger.index') }}">OFF/OIL ledger</a>
