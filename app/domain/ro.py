@@ -4,8 +4,9 @@ docs/RO_FORMATS.md is the byte-level authority; owner decisions (l)–(o) and
 the 2026-07-24 revision govern everything here: uniform 12-➖ separator and
 every emitted line rstripped (l); the CDO/CDS label exists in THIS document
 only (m); the timeline is TP events STARTING on the day + hand-keyed extras,
-timed blocks ascending then one TBC block last (n as revised — standing items
-are gone); the six Matters sections render '-' when empty, the messages blob
+timed blocks ascending then one TBC block last (n as revised — standing
+items are gone), into which the 2026-07-28 revision also puts all-day
+conducts; the six Matters sections render '-' when empty, the messages blob
 is free text, and key events cover the RO date's own week with the
 Mon/Tues/Wed/Thurs/Fri spellings, derived from the TP calendar (o as
 revised). A missing duty renders an explicit placeholder AND is reported — a
@@ -29,13 +30,17 @@ def timeline_items(day, *, tp_events=(), extra_items=()):
     (stable, so ties keep TP-start → keyed order), then one TBC block of
     extras in keyed order.
 
+    An all-day event has no keyed timing, so it joins the TBC block rather
+    than printing the 0000H its stored bounds would imply: all-day conducts
+    by `start_dt` first, then extras in keyed order.
+
     Only TP events STARTING on `day` insert — a continuing multi-day event
     has no meaningful time on its later days, and the key-events block
     already carries the week's conducts. Callers pass TP-calendar events
     only; this module does not know calendars exist.
     """
     items = [
-        (ev.start_dt.time(), ev.title)
+        (None if ev.all_day else ev.start_dt.time(), ev.title)
         for ev in sorted(tp_events, key=lambda e: e.start_dt)
         if ev.start_dt.date() == day
     ]

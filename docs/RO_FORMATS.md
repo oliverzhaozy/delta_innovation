@@ -194,3 +194,11 @@ Owner decisions refining the 2026-07-24 revision's TP feed.
   other label, or none) is unaffected. The exclusion lives in the ONE
   `ro_service.build` TP query, so both consumers inherit it; `domain/ro`
   stays ignorant of calendars and labels.
+- **An all-day TP conduct joins the TBC block, not `0000H`.** An event with
+  `all_day` set carries no keyed timing (its stored bounds are 00:00 →
+  23:59:59.999999 per `domain/events.all_day_bounds`), so publishing `0000H`
+  would announce a start time nobody keyed. Within the TBC block the order is
+  all-day conducts by start, then the hand-keyed extras in keyed order. The
+  starts-on-the-day rule is unchanged: a multi-day all-day conduct appears in
+  the timeline only on its start day — its later days are carried by the
+  key-events block.

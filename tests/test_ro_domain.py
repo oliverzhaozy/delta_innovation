@@ -19,8 +19,9 @@ def extra(hhmm, text):
     return SimpleNamespace(time=t, text=text)
 
 
-def event(start_dt, end_dt, title):
-    return SimpleNamespace(start_dt=start_dt, end_dt=end_dt, title=title)
+def event(start_dt, end_dt, title, *, all_day=False):
+    # The default mirrors the Event column's own schema default.
+    return SimpleNamespace(start_dt=start_dt, end_dt=end_dt, title=title, all_day=all_day)
 
 
 # The sample's whole timeline is keyed (2026-07-24 revision: no standing
@@ -192,6 +193,37 @@ def test_tp_event_starting_today_inserts_continuing_does_not():
     items = ro.timeline_items(day, tp_events=[starts_today, continuing])
     assert (time(8, 0), "Site Testing") in items
     assert all("WOLF" not in text for _t, text in items)
+
+
+def test_all_day_event_starting_today_joins_tbc_block():
+    # Owner 2026-07-28: an all-day conduct has no keyed timing, so it belongs
+    # in the TBC block — 0000H would publish a start time nobody keyed. The
+    # datetimes are the all-day convention (domain.events.all_day_bounds).
+    all_day = event(
+        datetime(2026, 6, 19, 0, 0),
+        datetime(2026, 6, 20, 23, 59, 59, 999999),
+        "Coy Admin Day",
+        all_day=True,
+    )
+    items = ro.timeline_items(FRI, tp_events=[all_day], extra_items=SAMPLE_EXTRAS)
+    text = render_sample_day(items=items).text
+    assert "TBC\n- Coy Admin Day" in text
+    assert "0000H" not in text
+    assert text.index("TBC") > text.index("1800H")
+
+
+def test_all_day_tbc_orders_before_keyed_extras():
+    all_day = event(
+        datetime(2026, 6, 19, 0, 0),
+        datetime(2026, 6, 19, 23, 59, 59, 999999),
+        "Coy Admin Day",
+        all_day=True,
+    )
+    items = ro.timeline_items(
+        FRI, tp_events=[all_day], extra_items=[extra(None, "SBA")]
+    )
+    # Within the TBC block: all-day conducts by start, then extras in keyed order.
+    assert "TBC\n- Coy Admin Day\n- SBA" in render_sample_day(items=items).text
 
 
 def test_timed_ascending_then_tbc_last():

@@ -6,6 +6,7 @@ only.
 """
 from datetime import date, datetime, time, timedelta
 
+from app.domain.events import all_day_bounds
 from app.domain.types import (
     Appointment, Calendar, Duty, Rank, RoSection, Service, TpLabel,
 )
@@ -145,6 +146,27 @@ def test_course_events_excluded_from_timeline_and_key_events(app, make_person):
         assert "Wed - Coy IPPT, Site Testing" in text
         # The Course's remaining days fall back to the empty-day filler.
         assert "Thurs - Garage Maintenance" in text
+
+
+def test_all_day_tp_event_renders_tbc_through_build(app, make_person):
+    # Owner 2026-07-28: an all-day conduct starting on the RO's day carries no
+    # keyed timing, so it prints under TBC — never the 0000H its stored bounds
+    # would otherwise imply.
+    make_person(username="s3_all_day", rank=Rank.TWO_SG, appointment=Appointment.PS,
+                platoon=2, display_name="Quek Jing Yu")
+
+    with app.app_context():
+        start_dt, end_dt = all_day_bounds(FRI, FRI)
+        db.session.add(Event(
+            calendar=Calendar.TP, title="Coy Admin Day", all_day=True,
+            start_dt=start_dt, end_dt=end_dt,
+            created_by_id=pid(app, "s3_all_day"),
+        ))
+        db.session.commit()
+
+        text = ro_service.build(FRI).text
+        assert "TBC\n- Coy Admin Day" in text
+        assert "0000H" not in text
 
 
 def test_extra_item_add_and_remove(app):
