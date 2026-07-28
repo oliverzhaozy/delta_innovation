@@ -283,7 +283,7 @@ def test_assign_unavailable_asks_to_confirm_on_the_page(app, client, make_person
     )
     html = resp.get_data(as_text=True)
     assert resp.status_code == 200
-    assert "covering absence, overnight TP event, or duty that day" in html
+    assert "covering absence or duty that day" in html
     assert "Confirm and assign" in html
     with app.app_context():
         assert db.session.query(DutyAssignment).count() == 0

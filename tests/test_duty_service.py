@@ -2,8 +2,9 @@
 weekday/holiday/blocked day rule, and blocked-day writes.
 
 The pure modules (eligibility.py, roster.py) are already pinned by their own
-suites; these tests exercise the glue — one shared absence fetch, overnight-TP
-resolution, and manual-row preservation across regeneration.
+suites; these tests exercise the glue — one shared absence fetch, the decision
+(z) rule that TP events never block, and manual-row preservation across
+regeneration.
 """
 import pytest
 from datetime import date, datetime
@@ -18,7 +19,7 @@ from app.models import (
     DutyAssignment, DutyBlockedDay, Event, EventParticipant, LeaveRequest,
     Person, PublicHoliday, StatusEntry,
 )
-from app.services import duty_service
+from app.services import duty_service, event_service
 
 JULY = "2026-07"
 
@@ -146,25 +147,24 @@ def test_availability_in_camp_status_does_not_block(app, make_person):
         assert availability(person, date(2026, 7, 20)) is False
 
 
-def test_availability_overnight_tp_event_blocks_day_event_does_not(app, make_person):
+def test_availability_ignores_tp_events(app, make_person):
+    # Decision (z) 2026-07-28: no calendar event of any shape blocks a duty —
+    # participants of a multi-day conduct are in camp and can still hold one.
     make_person(username="cos_opr", rank=Rank.THREE_SG, appointment=Appointment.OPR)
     opr = pid(app, "cos_opr")
-    # Overnight TP (2300 -> 0100 next day): blocks BOTH covered days.
+    # Multi-day TP (2300 -> 0100 next day): both covered days stay available.
     plant_event(app, opr, datetime(2026, 7, 20, 23, 0), datetime(2026, 7, 21, 1, 0))
-    # Same-day TP 0800-1700: never blocks (overnight = end date after start date).
+    # Same-day TP 0800-1700.
     plant_event(app, opr, datetime(2026, 7, 22, 8, 0), datetime(2026, 7, 22, 17, 0))
-    # Overnight ARCTIC: contingency plan, not a scheduled conduct — never blocks.
+    # Multi-day ARCTIC: a contingency plan, never a blocker either.
     plant_event(app, opr, datetime(2026, 7, 23, 23, 0), datetime(2026, 7, 24, 1, 0),
                 calendar=Calendar.ARCTIC)
 
     with app.app_context():
         _pools, availability, _manual = duty_service.availability_for_month(JULY)
         person = get_person("cos_opr")
-        assert availability(person, date(2026, 7, 20)) is False
-        assert availability(person, date(2026, 7, 21)) is False
-        assert availability(person, date(2026, 7, 22)) is True
-        assert availability(person, date(2026, 7, 23)) is True
-        assert availability(person, date(2026, 7, 24)) is True
+        for day in range(20, 25):
+            assert availability(person, date(2026, 7, day)) is True
 
 
 def test_availability_manual_assignment_blocks_same_date(app, make_person):
@@ -283,6 +283,28 @@ def test_generate_blank_days_have_no_row(app, make_person):
         assert cdos_rows == 0
         cos_rows = db.session.query(DutyAssignment).filter_by(duty=Duty.COS).count()
         assert cos_rows == 21  # every August WEEKDAY planned for the one candidate
+
+
+def test_generate_fills_every_duty_day_despite_a_month_long_tp_event(app, make_person):
+    # The symptom decision (z) fixed: a whole-company multi-day conduct (OSW
+    # Manning) made every participant unavailable, so only the days it left
+    # uncovered could be planned. Every active day must fill now.
+    make_duty_cast(make_person)
+    plant_event(app, pid(app, "det1"), datetime(2026, 8, 1, 8, 0),
+                datetime(2026, 8, 31, 18, 0), title="OSW Manning")
+
+    with app.app_context():
+        event = db.session.query(Event).one()
+        # The event really does cover the whole cast — without decision (z)
+        # this fixture would leave the month blank.
+        assert {p.username for p in event_service.resolve_participants(event)} == {
+            "det1", "opr1", "ps2", "p2ic3",
+        }
+
+        duty_service.generate_month(AUG, get_person("det1"))
+        first, last = duty_service.month_bounds(AUG)
+        active = duty_service.duty_days(first, last).active
+        assert set(auto_map(first, last)) == {(d, duty) for d in active for duty in Duty}
 
 
 def test_generate_replaces_only_auto_rows(app, make_person):

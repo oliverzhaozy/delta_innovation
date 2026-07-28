@@ -10,18 +10,22 @@ path is the drift bug this app exists to kill.
 Owner directive 2026-07-27: a written row is live immediately (no draft
 state), COS and CDO/S run on working days only, and a blocked day is an
 explicit "no duty needed". `duty_days` below owns that day rule for everyone.
+
+Decision (z) 2026-07-28: TP events never block availability. This module
+fetches no calendar events at all and passes none to `eligibility.available`,
+whose frozen B4 event parameter then keeps its empty default for P6.3's use.
 """
 from calendar import monthrange
 from collections import defaultdict, namedtuple
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.exc import IntegrityError
 
 from app.domain import eligibility, policy, presence, roster
 from app.domain.dates import is_working_day, iter_days, today_sgt
-from app.domain.types import Calendar, Duty
+from app.domain.types import Duty
 from app.extensions import db
-from app.models import DutyAssignment, DutyBlockedDay, Event, PublicHoliday
+from app.models import DutyAssignment, DutyBlockedDay, PublicHoliday
 from app.services import event_service, presence_service
 
 
@@ -75,8 +79,11 @@ def availability_for_month(month: str):
 
     One shared absence fetch for the whole month; in-camp statuses do NOT
     block (in camp is not away — an in-camp status eats meals and can hold a
-    duty). Only OVERNIGHT TP events block (P4.2's stated v1 definition);
-    ARCTIC rows are contingency plans, not scheduled conducts, and never block.
+    duty). Only a covering absence (approved leave/OFF/OIL, an out-of-camp
+    status, a course) or already holding the other duty that date skips a
+    person: calendar events NEVER block (decision z — a whole-company multi-day
+    TP conduct left the month ungenerable, and its participants are in camp).
+    ARCTIC rows never blocked and still don't.
 
     Held-duty dates come from MANUAL rows only: the generator's own rows are
     deleted and re-planned in the same transaction, so counting them would
@@ -98,23 +105,6 @@ def availability_for_month(month: str):
     for row in courses:
         absence_rows[row.person_id].append(row)
 
-    overnight = defaultdict(list)
-    window_start = datetime.combine(first, time.min)
-    window_end = datetime.combine(last + timedelta(days=1), time.min)
-    events = (
-        db.session.query(Event)
-        .filter(
-            Event.calendar == Calendar.TP,
-            Event.start_dt < window_end,
-            Event.end_dt > window_start,
-        )
-        .all()
-    )
-    for ev in events:
-        if ev.end_dt.date() > ev.start_dt.date():
-            for p in event_service.resolve_participants(ev):
-                overnight[p.id].append(ev)
-
     manual = [r for r in _assignments_between(first, last) if r.is_manual]
     held_dates = defaultdict(set)
     for row in manual:
@@ -125,7 +115,6 @@ def availability_for_month(month: str):
             person,
             day,
             absence_rows=absence_rows.get(person.id, ()),
-            overnight_events=overnight.get(person.id, ()),
             other_duty_dates=held_dates.get(person.id, frozenset()),
         )
 
@@ -218,13 +207,13 @@ class NotBlockable(Exception):
 
 def _availability_reasons(person, day, duty):
     """Soft-warning reasons for putting `person` on (day, duty): covering
-    absence/overnight event, adjacency (incl. cross-month tail), spread breach.
+    absence or held duty, adjacency (incl. cross-month tail), spread breach.
     """
     month = day.strftime("%Y-%m")
     pools, availability, _manual = availability_for_month(month)
     reasons = []
     if not availability(person, day):
-        reasons.append("covering absence, overnight TP event, or duty that day")
+        reasons.append("covering absence or duty that day")
     first, last = month_bounds(month)
     rows = _assignments_between(first, last)
     _counts, tail = _prior_month_inputs(first)
