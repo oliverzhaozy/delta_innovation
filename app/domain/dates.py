@@ -28,6 +28,24 @@ def is_working_day(d: date, holidays: frozenset = frozenset()) -> bool:
     return d.weekday() < 5 and d not in holidays
 
 
+def next_weekday(d: date) -> date:
+    """The first Mon-Fri date strictly after `d`. Weekend-only by design: the RO
+    exists for public holidays too, so no holidays parameter (unlike working_days).
+    """
+    d += timedelta(days=1)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
+def prev_weekday(d: date) -> date:
+    """The last Mon-Fri date strictly before `d`."""
+    d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def working_days(start: date, end: date, holidays: frozenset = frozenset()) -> int:
     """Working days in [start, end] — the only days that consume OFF/OIL balance."""
     return sum(1 for d in iter_days(start, end) if is_working_day(d, holidays))

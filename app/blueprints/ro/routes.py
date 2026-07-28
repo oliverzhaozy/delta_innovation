@@ -5,7 +5,7 @@ team member); the boilerplate surface is S3/admin staff work. Timeline
 standing items and hand-keyed weekly key events were removed 2026-07-24 —
 key events derive from the TP calendar.
 """
-from datetime import date, time, timedelta
+from datetime import date, time
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -13,7 +13,7 @@ from flask_login import current_user, login_required
 from app.authz import require
 from app.blueprints.ro import bp
 from app.domain import policy
-from app.domain.dates import today_sgt
+from app.domain.dates import next_weekday, prev_weekday, today_sgt
 from app.domain.types import RoSection
 from app.extensions import db
 from app.models import RoBoilerplate
@@ -21,12 +21,18 @@ from app.services import ro_service
 
 
 def _parse_day(raw: str) -> date:
-    # The RO is compiled the evening before, so the page defaults to TOMORROW
-    # (unlike the parade pages' today) — same never-400 posture otherwise.
+    # The RO exists for weekdays only (owner 2026-07-28) and is compiled the
+    # evening before, so the page defaults to the NEXT WEEKDAY — tomorrow, or
+    # Monday across a weekend. A weekend URL rolls forward to that Monday rather
+    # than 404ing: same never-400 posture as the parade pages. Every RO route
+    # parses through here, so weekend RO documents can no longer be created.
     try:
-        return date.fromisoformat(raw)
+        day = date.fromisoformat(raw)
     except ValueError:
-        return today_sgt() + timedelta(days=1)
+        return next_weekday(today_sgt())
+    if day.weekday() >= 5:
+        return next_weekday(day)
+    return day
 
 
 def _parse_time(raw: str):
@@ -53,9 +59,9 @@ def view():
     return render_template(
         "ro/view.html",
         day=day,
-        prev_day=day - timedelta(days=1),
-        next_day=day + timedelta(days=1),
-        tomorrow=today_sgt() + timedelta(days=1),
+        prev_day=prev_weekday(day),
+        next_day=next_weekday(day),
+        home_day=next_weekday(today_sgt()),
         built=built,
         doc=doc,
         can_edit=ro_service.can_edit_ro_for(current_user, day),

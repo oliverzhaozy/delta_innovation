@@ -202,3 +202,11 @@ Owner decisions refining the 2026-07-24 revision's TP feed.
   starts-on-the-day rule is unchanged: a multi-day all-day conduct appears in
   the timeline only on its start day — its later days are carried by the
   key-events block.
+- **The RO exists only for weekdays.** The page defaults to the next weekday
+  (tomorrow, or Monday across a weekend), the prev/next arrows step over
+  Sat/Sun, and a hand-keyed weekend URL rolls forward to that Monday — so no
+  weekend RO document can be created or edited. Public-holiday *weekdays* are
+  deliberately not skipped: they still carry an RO, whose key-events line names
+  the holiday and whose missing-duty warning covers a holiday duty gap. The
+  weekend step lives in `domain/dates.next_weekday`/`prev_weekday` (weekend-only
+  by design — no holidays parameter, unlike leave's `working_days`).
