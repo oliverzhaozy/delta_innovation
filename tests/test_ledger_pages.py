@@ -160,6 +160,114 @@ def test_requester_cannot_cancel_approved(app, client, make_person):
     assert b"ask S3" in resp.data
 
 
+def test_bulk_award_credits_ticked_people(app, client, make_person):
+    make_person(username="ba_a", display_name="Ba A")
+    make_person(username="ba_b", display_name="Ba B")
+    login(client, make_s3(make_person, username="s3_ba1"))
+    with app.app_context():
+        a_id = db.session.query(Person.id).filter_by(username="ba_a").scalar()
+        b_id = db.session.query(Person.id).filter_by(username="ba_b").scalar()
+    resp = client.post(
+        "/ledger/bulk-award",
+        data={"people": [a_id, b_id], "kind": "OFF", "days": "1", "reason": "Exercise support"},
+        follow_redirects=True,
+    )
+    assert b"Awarded" in resp.data
+    with app.app_context():
+        assert ledger_service.balance(a_id, BalanceKind.OFF) == 2
+        assert ledger_service.balance(b_id, BalanceKind.OFF) == 2
+        rows = db.session.query(LedgerEntry).filter(
+            LedgerEntry.person_id.in_([a_id, b_id])
+        ).all()
+        assert len(rows) == 2
+        assert {r.source for r in rows} == {LedgerSource.MANUAL}
+        assert {r.reason for r in rows} == {"Exercise support"}
+
+
+def test_bulk_award_platoon_category_expands(app, client, make_person):
+    make_person(username="ba_p2a", display_name="Ba P2a", platoon=2)
+    make_person(username="ba_p2b", display_name="Ba P2b", platoon=2)
+    make_person(username="ba_p1", display_name="Ba P1", platoon=1)
+    login(client, make_s3(make_person, username="s3_ba2"))
+    with app.app_context():
+        p2a = db.session.query(Person.id).filter_by(username="ba_p2a").scalar()
+        p2b = db.session.query(Person.id).filter_by(username="ba_p2b").scalar()
+        p1 = db.session.query(Person.id).filter_by(username="ba_p1").scalar()
+    client.post(
+        "/ledger/bulk-award",
+        data={"categories": ["PLATOON_2"], "kind": "OIL", "days": "1", "reason": "Pl 2 award"},
+    )
+    with app.app_context():
+        assert ledger_service.balance(p2a, BalanceKind.OIL) == 2
+        assert ledger_service.balance(p2b, BalanceKind.OIL) == 2
+        assert ledger_service.balance(p1, BalanceKind.OIL) == 0
+
+
+def test_bulk_award_overlap_yields_one_entry(app, client, make_person):
+    make_person(username="ba_ov", display_name="Ba Ov", platoon=2)
+    login(client, make_s3(make_person, username="s3_ba3"))
+    with app.app_context():
+        ov = db.session.query(Person.id).filter_by(username="ba_ov").scalar()
+    # Person is caught by the NSF category AND ticked individually — one entry.
+    client.post(
+        "/ledger/bulk-award",
+        data={"categories": ["NSF"], "people": [ov], "kind": "OFF", "days": "1", "reason": "x"},
+    )
+    with app.app_context():
+        assert db.session.query(LedgerEntry).filter_by(person_id=ov).count() == 1
+
+
+def test_bulk_award_ignores_regular_id(app, client, make_person):
+    make_person(username="ba_nsf", display_name="Ba Nsf")
+    make_person(username="ba_reg", display_name="Ba Reg", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None, service=Service.REGULAR)
+    login(client, make_s3(make_person, username="s3_ba4"))
+    with app.app_context():
+        reg_id = db.session.query(Person.id).filter_by(username="ba_reg").scalar()
+    # The NSF-only picker never lists regular names.
+    body = client.get("/ledger/bulk-award").get_data(as_text=True)
+    assert "Ba Reg" not in body
+    # A smuggled regular id never becomes an entry (choice validation + the
+    # route's NSF-roster intersection both reject it).
+    client.post(
+        "/ledger/bulk-award",
+        data={"people": [reg_id], "kind": "OFF", "days": "1", "reason": "x"},
+    )
+    with app.app_context():
+        assert db.session.query(LedgerEntry).filter_by(person_id=reg_id).count() == 0
+
+
+def test_bulk_award_forbidden_for_opr(client, make_person):
+    login(client, make_person(username="ba_opr"))
+    assert client.get("/ledger/bulk-award").status_code == 403
+
+
+def test_bulk_award_quarter_day_rejected(app, client, make_person):
+    make_person(username="ba_q", display_name="Ba Q")
+    login(client, make_s3(make_person, username="s3_ba6"))
+    with app.app_context():
+        q_id = db.session.query(Person.id).filter_by(username="ba_q").scalar()
+    resp = client.post(
+        "/ledger/bulk-award",
+        data={"people": [q_id], "kind": "OFF", "days": "0.7", "reason": "x"},
+    )
+    assert b"whole or half days" in resp.data
+    with app.app_context():
+        assert db.session.query(LedgerEntry).filter_by(person_id=q_id).count() == 0
+
+
+def test_bulk_award_empty_selection(app, client, make_person):
+    make_person(username="ba_e", display_name="Ba E")
+    login(client, make_s3(make_person, username="s3_ba7"))
+    resp = client.post(
+        "/ledger/bulk-award",
+        data={"kind": "OFF", "days": "1", "reason": "x"},
+    )
+    assert b"Select at least one person or group." in resp.data
+    with app.app_context():
+        assert db.session.query(LedgerEntry).count() == 0
+
+
 def test_person_edit_lists_open_leave_items(app, client, make_person):
     make_person(username="opr_open", platoon=1)
     login(client, "opr_open")

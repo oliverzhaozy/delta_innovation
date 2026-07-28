@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Bulk award{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Bulk award</h1>
+  <p class="muted">Credit the same OFF or OIL amount to everyone selected — one shared reason, one ledger line each with your name on it.</p>
+</div>
+
+{# One category+people picker (the same wire format as the calendar/FP forms);
+   the route expands categories to NSF ids at submit time. Keep exactly one
+   form[data-people-picker] on the page for the picker sync script. #}
+<form method="post" class="card" data-people-picker>
+  {{ form.hidden_tag() }}
+  {% include "_people_picker.html" %}
+  <p>{{ form.kind.label }}{{ form.kind() }}</p>
+  <p>{{ form.days.label }}{{ form.days(step="0.5", min="0.5", type="number") }}</p>
+  <p>{{ form.reason.label }}{{ form.reason(placeholder="e.g. Awarded for exercise support") }}</p>
+  {% for field in form if field.errors %}
+    {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
+  {% endfor %}
+  <button type="submit" class="btn">Award</button>
+</form>
+{% endblock %}
