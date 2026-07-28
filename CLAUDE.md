@@ -27,6 +27,7 @@ Default to fanning out subagents whenever a task has independent parts — separ
 
 - **Workflow tool is pre-authorized.** Treat this directive as the owner's standing "use a workflow" opt-in: for substantive multi-part tasks (audits, reviews, migrations, broad research), reach for Workflow orchestration without asking first. Respect the session's workflow size guideline unless the prompt raises it.
 - Decompose first, then dispatch: a quick inline scout to build the work-list is fine; the fan-out itself runs on subagents per the model roles above (execution on Opus 5, planning on Fable 5).
+- **Use the superpowers skills to structure the fan-out**: invoke `superpowers:dispatching-parallel-agents` when 2+ independent tasks are in hand, and `superpowers:subagent-driven-development` when executing a written plan's tasks via subagents.
 - Do NOT parallelize what is genuinely sequential (dependent edits, migration chains) or trivial (one-file fixes) — more agents on dependent work is waste, not speed.
 - This is a standing directive: do not ask for re-confirmation each session.
 
