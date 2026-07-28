@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}OFF/OIL history{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>OFF/OIL history</h1>
+  <div class="chips">
+    <span class="chip {% if balances[BalanceKind.OFF] < 0 %}plain{% endif %}">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
+    <span class="chip {% if balances[BalanceKind.OIL] < 0 %}plain{% endif %}">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
+  </div>
+</div>
+
+<p><a class="btn secondary" href="{{ url_for('leave.index') }}">Back to My OFF/OIL</a></p>
+
+<section class="card">
+  <h2>Concluded requests</h2>
+  {% if requests %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>When</th><th>Type</th><th>Status</th><th>Deduction</th></tr></thead>
+      <tbody>
+        {% for r in requests %}
+        <tr>
+          <td>{{ r.when_label }}</td>
+          <td>{{ r.type.value }}</td>
+          <td>
+            <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+            {% if r.remarks %}<div class="muted" style="font-size:0.85rem">{{ r.remarks }}</div>{% endif %}
+          </td>
+          <td class="muted" style="font-size:0.88rem">{{ deduction_note(r) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No past requests.</p>
+  {% endif %}
+</section>
+{% endblock %}

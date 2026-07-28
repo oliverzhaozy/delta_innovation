@@ -1,16 +1,19 @@
 {% extends "base.html" %}
-{% block title %}My leave{% endblock %}
+{% block title %}My OFF/OIL{% endblock %}
 
 {% block content %}
 <div class="page-head">
-  <h1>My leave</h1>
+  <h1>My OFF/OIL</h1>
   <div class="chips">
     <span class="chip {% if balances[BalanceKind.OFF] < 0 %}plain{% endif %}">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
     <span class="chip {% if balances[BalanceKind.OIL] < 0 %}plain{% endif %}">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
   </div>
 </div>
 
-<p><a class="btn" href="{{ url_for('leave.new') }}">Request time off</a></p>
+<p>
+  <a class="btn" href="{{ url_for('leave.new') }}">Request time off</a>
+  <a class="btn secondary" href="{{ url_for('leave.history') }}">History</a>
+</p>
 
 <section class="card">
   <h2>Requests</h2>
@@ -42,7 +45,7 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No requests yet.</p>
+  <p class="muted">No current requests.</p>
   {% endif %}
 </section>
 {% endblock %}

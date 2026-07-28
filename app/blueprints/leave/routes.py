@@ -32,15 +32,21 @@ def _require_requester():
 @login_required
 def index():
     _require_requester()
-    requests = (
-        db.session.query(LeaveRequest)
-        .filter_by(person_id=current_user.id)
-        .order_by(LeaveRequest.created_at.desc())
-        .all()
-    )
     return render_template(
         "leave/index.html",
-        requests=requests,
+        requests=leave_service.live_requests(current_user.id),
+        balances=ledger_service.balances(current_user.id),
+        deduction_note=leave_service.deduction_note,
+    )
+
+
+@bp.route("/history")
+@login_required
+def history():
+    _require_requester()
+    return render_template(
+        "leave/history.html",
+        requests=leave_service.concluded_requests(current_user.id),
         balances=ledger_service.balances(current_user.id),
         deduction_note=leave_service.deduction_note,
     )
@@ -118,7 +124,9 @@ def pc_queue():
     pending = (
         db.session.query(LeaveRequest)
         .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
-        .order_by(LeaveRequest.created_at)
+        # Most upcoming leave first (past-dated pending rows are the most
+        # overdue, so they lead); submission time only breaks ties.
+        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
         .all()
     )
     return render_template(
@@ -132,7 +140,7 @@ def oc_queue():
     pending = (
         db.session.query(LeaveRequest)
         .filter(LeaveRequest.status == RequestStatus.PENDING_OC)
-        .order_by(LeaveRequest.created_at)
+        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
         .all()
     )
     return render_template("leave/queue.html", pending=pending, title="Final approvals")
