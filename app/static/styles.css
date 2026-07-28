@@ -338,7 +338,7 @@ h2 {
 .pills a:hover:not(.active) { background: var(--accent-tint); }
 
 /* ---------- Day navigation (UI-17) ----------
-   Round arrow buttons flank a prominent centred date; the off-today chip is
+   Round arrow buttons flank a prominent centred date; the off-home-day chip is
    the only element that appears/disappears by state. */
 .day-nav {
   display: flex;

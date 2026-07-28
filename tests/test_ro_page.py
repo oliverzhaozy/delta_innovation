@@ -104,6 +104,30 @@ def test_removed_standing_surfaces_are_gone(app, client, make_person):
     assert "Weekly key events" not in html
 
 
+def test_warning_drops_the_tail_clause(app, client, make_person):
+    make_cast(make_person)
+    login(client, "opr1")
+    html = client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True)
+    assert "No confirmed duty for this date" in html
+    assert "confirm the roster" not in html
+
+
+def test_day_nav_and_tomorrow_chip(app, client, make_person):
+    make_cast(make_person)
+    login(client, "opr1")
+    tomorrow = today_sgt() + timedelta(days=1)
+
+    html = client.get("/ro").get_data(as_text=True)
+    assert "day-nav" in html
+    assert "Back to tomorrow" not in html  # the home day needs no way back
+
+    html = client.get(f"/ro?date={FRI.isoformat()}").get_data(as_text=True)
+    assert f'href="/ro?date={tomorrow.isoformat()}"' in html
+    assert "Back to tomorrow" in html
+    assert f'href="/ro?date={(FRI - timedelta(days=1)).isoformat()}"' in html
+    assert f'href="/ro?date={(FRI + timedelta(days=1)).isoformat()}"' in html
+
+
 def test_key_events_derive_from_tp_on_the_page(app, client, make_person):
     make_cast(make_person)
     login(client, "opr1")
