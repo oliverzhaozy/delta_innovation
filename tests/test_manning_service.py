@@ -1,10 +1,11 @@
-"""P6.4 — manning_service: candidates over the shared fetch, assignment with
-the eligibility hard block, the duplicate-person friendly error, and the
-document build."""
+"""P6.4/P6.7c — manning_service: candidates over the shared fetch, assignment
+with the eligibility hard block, the duplicate-person friendly error, the
+document build, and generation over the fixed structure."""
 from datetime import date, datetime
 
 import pytest
 
+from app.domain import manning
 from app.domain.manning import ManningConflict
 from app.domain.types import (
     Appointment, DayPart, DeclarationStatus, LeaveType, ManningSlotType, Rank,
@@ -153,3 +154,163 @@ def test_build_document_formats_names_and_phones(app, make_person):
         assert "TU COMD: CPT WONG LI XUAN\n(9190 9702)" in doc.text
         assert "DET PERSONNEL: CPL ANG CHENG ZE\n( )" in doc.text  # no phone keyed
         assert doc.unfilled == ["TU PLANNER"]
+
+
+# --- generation over the fixed structure (P6.7c) ------------------------------------
+
+STRUCTURE_TOTAL = 2 + len(manning.GENERATED_DETS) * (1 + manning.DET_PERSONNEL_PER_DET)
+
+
+def make_generation_cast(make_person):
+    """make_cast plus enough people to fill the whole structure: a second TU
+    Det Comd candidate and five more det personnel (seven for six slots)."""
+    make_cast(make_person)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS,
+                platoon=2, display_name="Raybriel Wong")
+    for n in range(2, 7):
+        make_person(username=f"opr{n}", rank=Rank.CPL, appointment=Appointment.OPR,
+                    display_name=f"Operator {n}")
+
+
+def slots_of(period_id):
+    return db.session.query(ManningSlot).filter_by(period_id=period_id).all()
+
+
+def test_generate_fills_the_structure_and_marks_every_row_generated(app, make_person):
+    make_generation_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        assert manning_service.generate_period(period) == (
+            STRUCTURE_TOTAL, STRUCTURE_TOTAL,
+        )
+
+        rows = slots_of(period_id)
+        assert len(rows) == STRUCTURE_TOTAL
+        # The flag split is what regeneration keys on: nothing here is manual.
+        assert all(row.is_manual is False for row in rows)
+        shape = {}
+        for row in rows:
+            shape[(row.slot, row.det_number)] = shape.get((row.slot, row.det_number), 0) + 1
+        assert shape == {
+            (ManningSlotType.TU_COMD, None): 1,
+            (ManningSlotType.TU_PLANNER, None): 1,
+            (ManningSlotType.TU_DET_COMD, 1): 1,
+            (ManningSlotType.TU_DET_COMD, 2): 1,
+            (ManningSlotType.DET_PERSONNEL, 1): manning.DET_PERSONNEL_PER_DET,
+            (ManningSlotType.DET_PERSONNEL, 2): manning.DET_PERSONNEL_PER_DET,
+        }
+
+
+def test_regenerate_preserves_manual_and_replaces_the_generated_rows(app, make_person):
+    make_generation_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manual = manning_service.assign_slot(
+            period, ManningSlotType.TU_DET_COMD, get_person("ps2"), det_number=1,
+        )
+        manual_id, manual_person_id = manual.id, manual.person_id
+
+        manning_service.generate_period(period)
+        dropped = next(
+            r.person_id for r in slots_of(period_id)
+            if not r.is_manual and r.slot is ManningSlotType.DET_PERSONNEL
+        )
+        # Keyed AFTER the first pass: the second must re-plan around it, which
+        # is only possible if the generated rows really were deleted.
+        db.session.add(LeaveRequest(
+            person_id=dropped, type=LeaveType.OFF,
+            start_date=date(2026, 7, 6), end_date=date(2026, 7, 8),
+            day_part=DayPart.FULL, status=RequestStatus.APPROVED,
+        ))
+        db.session.commit()
+        manning_service.generate_period(period)
+
+        row = db.session.get(ManningSlot, manual_id)
+        assert row.is_manual is True
+        assert row.person_id == manual_person_id
+        assert (row.slot, row.det_number) == (ManningSlotType.TU_DET_COMD, 1)
+        rows = slots_of(period_id)
+        assert dropped not in {r.person_id for r in rows}
+        assert len(rows) == STRUCTURE_TOTAL  # replaced, never stacked
+
+
+def test_a_covering_absence_or_declaration_is_never_generated(app, make_person):
+    # The pools-are-pre-filtered guarantee: the pure generator re-checks
+    # nothing, so this service filter is the only thing keeping a man on
+    # approved leave out of an activation det.
+    make_generation_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        db.session.add(LeaveRequest(
+            person_id=pid(app, "ps2"), type=LeaveType.OFF,
+            start_date=date(2026, 7, 6), end_date=date(2026, 7, 8),
+            day_part=DayPart.FULL, status=RequestStatus.APPROVED,
+        ))
+        db.session.add(OverseasDeclaration(
+            person_id=pid(app, "opr6"), start_date=date(2026, 7, 10),
+            end_date=date(2026, 7, 12), destination="Japan",
+            status=DeclarationStatus.PENDING,
+        ))
+        db.session.commit()
+
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.generate_period(period)
+        rows = slots_of(period_id)
+        picked = {row.person_id for row in rows}
+        assert pid(app, "ps2") not in picked
+        assert pid(app, "opr6") not in picked  # pending declarations flag too
+        # ps2 was one of only two TU Det Comd candidates: that det goes short...
+        assert sum(1 for r in rows if r.slot is ManningSlotType.TU_DET_COMD) == 1
+        # ...while six det personnel remain for six slots, so those still fill.
+        assert sum(1 for r in rows if r.slot is ManningSlotType.DET_PERSONNEL) == 6
+
+
+def test_manual_row_shrinks_its_det_and_its_person_is_not_duplicated(app, make_person):
+    make_generation_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.assign_slot(
+            period, ManningSlotType.DET_PERSONNEL, get_person("opr1"), det_number=1,
+        )
+        assert manning_service.generate_period(period) == (
+            STRUCTURE_TOTAL - 1, STRUCTURE_TOTAL - 1,
+        )
+
+        rows = slots_of(period_id)
+        det1 = [
+            r for r in rows
+            if r.slot is ManningSlotType.DET_PERSONNEL and r.det_number == 1
+        ]
+        assert len(det1) == manning.DET_PERSONNEL_PER_DET
+        assert sum(1 for r in det1 if not r.is_manual) == manning.DET_PERSONNEL_PER_DET - 1
+        assert [r.person_id for r in rows].count(pid(app, "opr1")) == 1
+
+
+def test_assign_slot_marks_the_row_manual(app, make_person):
+    # Six older fixtures build ManningSlot directly (default False); the
+    # service path must pin True or a regenerate would eat the S3's own pick.
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        row = manning_service.assign_slot(
+            period, ManningSlotType.TU_COMD, get_person("oc"), det_number=None,
+        )
+        assert db.session.get(ManningSlot, row.id).is_manual is True
+
+
+def test_thin_pools_report_the_shortfall_in_the_counts(app, make_person):
+    # make_cast has one candidate per HQ slot, ONE TU Det Comd and TWO det
+    # personnel — det-level shortfalls surface nowhere else, so the counts are
+    # the S3's only signal.
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        filled, open_before = manning_service.generate_period(period)
+        assert (filled, open_before) == (5, STRUCTURE_TOTAL)
+        assert filled < open_before
+        assert len(slots_of(period_id)) == 5

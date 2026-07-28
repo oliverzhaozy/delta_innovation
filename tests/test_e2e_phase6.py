@@ -13,7 +13,7 @@ from datetime import date
 
 from app.domain.types import Appointment, Rank, Service
 from app.extensions import db
-from app.models import ManningPeriod, OverseasDeclaration, Person
+from app.models import ManningPeriod, ManningSlot, OverseasDeclaration, Person
 from tests.conftest import login
 from tests.test_manning_domain import GOLDEN
 
@@ -141,3 +141,28 @@ def test_phase6_end_to_end(app, client, make_person):
     _switch(client, "s3")
     html = client.get(f"/manning/{period_id}").get_data(as_text=True)
     assert "Overseas (Japan)" not in html
+
+    # --- 7. A SECOND period, auto-generated: the fixed structure, no manual --
+    # Asserted on rows and flags, never on document bytes — the owner's sample
+    # above stays the only golden.
+    client.post("/manning/new", data={
+        "start_date": date(2026, 8, 3).isoformat(),
+        "end_date": date(2026, 8, 7).isoformat(),
+    }, follow_redirects=True)
+    with app.app_context():
+        second_id = db.session.query(ManningPeriod.id).filter(
+            ManningPeriod.id != period_id
+        ).scalar()
+    page = client.post(
+        f"/manning/{second_id}/generate", data={}, follow_redirects=True
+    ).get_data(as_text=True)
+    assert "Generated 10 of 10 open slots (keeps manual picks)." in page
+    assert "Unfilled" not in page
+    assert '<span class="chip plain">manual</span>' not in page
+    with app.app_context():
+        rows = db.session.query(ManningSlot).filter_by(period_id=second_id).all()
+        assert len(rows) == 10
+        assert all(row.is_manual is False for row in rows)
+
+    # Generation is per period: the sample's document is still the golden.
+    assert _pre_text(client.get(f"/manning/{period_id}").get_data(as_text=True)) == GOLDEN

@@ -102,6 +102,82 @@ def candidates(period):
     return result
 
 
+# The generated structure's per-pair sizes, rebuilt from domain/manning's
+# public constants. Used ONLY to count open slots for the S3's flash — the pure
+# generator stays the one owner of what actually gets filled, so a mismatch here
+# could misreport a message, never misfill a slot.
+_STRUCTURE_NEEDS = {
+    (ManningSlotType.TU_COMD, None): 1,
+    (ManningSlotType.TU_PLANNER, None): 1,
+    **{(ManningSlotType.TU_DET_COMD, det): 1 for det in manning.GENERATED_DETS},
+    **{
+        (ManningSlotType.DET_PERSONNEL, det): manning.DET_PERSONNEL_PER_DET
+        for det in manning.GENERATED_DETS
+    },
+}
+
+
+def _open_slots(existing) -> int:
+    """Structure vacancies before generation: the fixed shape's size minus the
+    surviving rows that already satisfy part of it. A row outside the generated
+    structure (a det-3 pick, a fourth man in det 1) satisfies nothing, exactly
+    as the pure generator treats it."""
+    filled = defaultdict(int)
+    for slot, det_number, _person_id in existing:
+        filled[(slot, det_number)] += 1
+    return sum(
+        max(0, needed - filled[pair]) for pair, needed in _STRUCTURE_NEEDS.items()
+    )
+
+
+def generate_period(period):
+    """Fill the period's fixed structure in ONE transaction, replacing only the
+    generator's own rows — a manual pick is never re-planned.
+
+    The `is_manual` split IS the regeneration contract: `True` rows survive and
+    constrain the plan (their people are off the table, their slots count as
+    satisfied), `False` rows are deleted and re-planned. The pools handed to the
+    pure generator are pre-filtered HERE to no-known-conflict candidates — the
+    generator re-checks nothing, so this filter is the only thing keeping a man
+    on approved leave out of an activation det.
+
+    Returns (filled, open_before): picks written, and the vacancies that existed
+    before the run. Det-level shortfalls surface nowhere else (`doc.unfilled`
+    reports HQ only), so those two numbers are the S3's signal that a thin pool
+    left the structure incomplete.
+    """
+    db.session.query(ManningSlot).filter(
+        ManningSlot.period_id == period.id,
+        ManningSlot.is_manual.is_(False),
+    ).delete()
+
+    pools = {
+        slot: [
+            c.person.id
+            for c in rows
+            if c.status is manning.ManningConflict.NO_KNOWN_CONFLICT
+        ]
+        for slot, rows in candidates(period).items()
+    }
+    existing = [
+        (row.slot, row.det_number, row.person_id)
+        for row in db.session.query(ManningSlot)
+        .filter(ManningSlot.period_id == period.id)
+        .all()
+    ]
+
+    picks = manning.generate(pools=pools, existing=existing)
+    for pick in picks:
+        db.session.add(
+            ManningSlot(
+                period_id=period.id, slot=pick.slot, person_id=pick.person_id,
+                det_number=pick.det_number, is_manual=False,
+            )
+        )
+    db.session.commit()
+    return len(picks), _open_slots(existing)
+
+
 def assign_slot(period, slot, person, *, det_number):
     """Fill one slot. Eligibility is LAW (hard block); conflicts are judgment
     (the flag rides the pick list — no confirm step, the S3 saw it). The

@@ -86,6 +86,18 @@ def builder(period_id):
     )
 
 
+@bp.route("/<int:period_id>/generate", methods=["POST"])
+@require(policy.can_manage_manning)
+def generate(period_id):
+    period = _get_period(period_id)
+    filled, open_before = manning_service.generate_period(period)
+    flash(
+        f"Generated {filled} of {open_before} open slots (keeps manual picks).",
+        "success",
+    )
+    return redirect(url_for("manning.builder", period_id=period.id))
+
+
 @bp.route("/<int:period_id>/assign", methods=["POST"])
 @require(policy.can_manage_manning)
 def assign(period_id):

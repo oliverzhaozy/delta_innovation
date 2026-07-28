@@ -50,6 +50,7 @@ def test_manning_is_s3_only(app, client, make_person):
     login(client, "ps2")
     assert client.get("/manning").status_code == 403
     assert client.post("/manning/new", data={}).status_code == 403
+    assert client.post("/manning/1/generate", data={}).status_code == 403
 
 
 def test_create_period_and_builder_renders_document(app, client, make_person):
@@ -117,6 +118,34 @@ def test_remove_slot(app, client, make_person):
     resp = client.post(f"/manning/{pid_}/remove", data={"slot_id": str(slot_id)},
                        follow_redirects=True)
     assert "ANG CHENG ZE" not in resp.get_data(as_text=True)
+
+
+def test_generate_writes_rows_and_the_flash_carries_the_counts(app, client, make_person):
+    make_cast(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    # One manual pick first: it must survive, and it takes one det-1 personnel
+    # slot off the open count.
+    client.post(f"/manning/{pid_}/assign", data={
+        "slot": "DET_PERSONNEL", "person_id": str(pid(app, "opr1")), "det_number": "1",
+    }, follow_redirects=True)
+
+    resp = client.post(f"/manning/{pid_}/generate", data={})
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(f"/manning/{pid_}")
+
+    # This cast has no PC at all and only two Det Personnel candidates, so the
+    # counts say so out loud: 4 of the 9 slots still open could be filled.
+    html = client.get(f"/manning/{pid_}").get_data(as_text=True)
+    assert "Generated 4 of 9 open slots (keeps manual picks)." in html
+    # The chip marks the S3's own pick, and ONLY that row.
+    assert html.count('<span class="chip plain">manual</span>') == 1
+    with app.app_context():
+        rows = db.session.query(ManningSlot).filter_by(period_id=pid_).all()
+        assert len(rows) == 5
+        manual = [r for r in rows if r.is_manual]
+        assert [r.person_id for r in manual] == [pid(app, "opr1")]
 
 
 # --- two-way flags (P6.6) -----------------------------------------------------------

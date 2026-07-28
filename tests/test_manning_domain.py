@@ -6,6 +6,8 @@ availability).
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from app.domain import manning
 from app.domain.manning import ManningConflict
 from app.domain.types import Appointment, DeclarationStatus, ManningSlotType
@@ -307,6 +309,33 @@ def test_manual_row_outside_the_generated_dets_satisfies_nothing():
     )
     assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == [11, 12, 13]
     assert picked(result, ManningSlotType.DET_PERSONNEL, 2) == [14, 15, 16]
+
+
+def test_generate_arguments_are_keyword_only_with_no_defaults():
+    # A silent default would let a stale caller run the OLD behaviour; both
+    # arguments must be named, and neither may be omitted.
+    with pytest.raises(TypeError):
+        manning.generate({}, [])
+    with pytest.raises(TypeError):
+        manning.generate(pools={})
+
+
+def test_over_filled_pair_generates_nothing_for_it_and_does_not_raise():
+    # Four manual det-1 personnel is more than the structure asks for: that
+    # pair simply generates nothing, and det 2 is untouched.
+    result = manning.generate(
+        pools=full_pools(),
+        existing=[
+            (ManningSlotType.DET_PERSONNEL, 1, person_id)
+            for person_id in (90, 91, 92, 93)
+        ],
+    )
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == []
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 2) == [10, 11, 12]
+
+
+def test_fully_empty_pools_generate_nothing():
+    assert manning.generate(pools={}, existing=[]) == []
 
 
 def test_person_in_two_pools_is_picked_once():

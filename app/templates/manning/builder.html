@@ -25,6 +25,7 @@
     {% for s in hq %}
     <li>
       <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
+        {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
         {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
       <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -37,6 +38,7 @@
       {% for s in rows %}
       <li>
         <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
+          {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
           {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
         <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -50,6 +52,20 @@
   {% else %}
   <p class="muted">Nothing assigned yet.</p>
   {% endif %}
+</section>
+
+<section class="card">
+  <h2>Manage</h2>
+  <form method="post" action="{{ url_for('manning.generate', period_id=period.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn">Auto-generate (keeps manual picks)</button>
+  </form>
+  <p class="muted">Fills the fixed structure &mdash; HQ plus dets 1 and 2 &mdash; from people with no known conflict. Manual picks are kept; only auto-planned slots are replaced.</p>
+</section>
+
+<section class="card">
+  <h2>Manual assignment</h2>
+  <p class="muted">One slot at a time, below. Anything assigned here is tagged &ldquo;manual&rdquo; in the list above and survives an auto-generate.</p>
 </section>
 
 {% for slot in ManningSlotType %}
