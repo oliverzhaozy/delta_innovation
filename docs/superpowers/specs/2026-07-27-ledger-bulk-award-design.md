@@ -95,3 +95,29 @@ adjustments on the person history page (shared reason, MANUAL source).
 
 Bulk deduct; awarding both kinds in one submit; any change to the
 per-person adjust flow or ledger history rendering.
+
+## Amendment (owner, 2026-07-28)
+
+Three picker/label tweaks scoped to the bulk-award page only — the
+calendar/FP pickers render exactly as before:
+
+- **No ALL / Command team rows.** `_people_picker.html` gains an optional
+  `picker_hide_top` knob (undefined → today's behavior); the bulk page sets
+  it truthy, so the two top checkboxes no longer render. "All NSFs" (the
+  relabelled NSF group) is the everyone-selector, making an ALL box
+  redundant. `BulkAwardForm.categories` choices are now exactly the four
+  picker groups (`BULK_AWARD_CATEGORIES` = NSF + Platoon 1–3), defined once
+  in `forms.py` and imported by the route (the old `"ALL"` pseudo-choice and
+  its route-side expansion are gone). A stale `ALL`/`COMMAND_TEAM` POST now
+  fails WTForms choice validation and re-renders with a field error.
+- **"All NSFs" label.** The include gains an optional `picker_group_labels`
+  ({category.value: label}) override; the bulk page passes
+  `{"NSF": "All NSFs"}`. The `ParticipantCategory.NSF` enum label is
+  unchanged, so other pages still read "NSF".
+- **No reason placeholder.** The bulk template's reason field drops the
+  `placeholder="e.g. Awarded for exercise support"` kwarg.
+
+`command_ids` is passed to the include as an empty set from the bulk route:
+the Command team row is hidden so no id needs a `data-command` marker, but
+the include still evaluates `p.id in command_ids`, so an empty set keeps that
+reference safe (app.js's `#cat_command` lookup is already null-guarded).

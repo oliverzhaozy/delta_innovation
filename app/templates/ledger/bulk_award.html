@@ -12,10 +12,14 @@
    form[data-people-picker] on the page for the picker sync script. #}
 <form method="post" class="card" data-people-picker>
   {{ form.hidden_tag() }}
+  {# Drop the ALL/Command team rows: here "All NSFs" (the relabelled NSF group)
+     is the everyone-selector, so a separate ALL box would be redundant. #}
+  {% set picker_hide_top = True %}
+  {% set picker_group_labels = {"NSF": "All NSFs"} %}
   {% include "_people_picker.html" %}
   <p>{{ form.kind.label }}{{ form.kind() }}</p>
   <p>{{ form.days.label }}{{ form.days(step="0.5", min="0.5", type="number") }}</p>
-  <p>{{ form.reason.label }}{{ form.reason(placeholder="e.g. Awarded for exercise support") }}</p>
+  <p>{{ form.reason.label }}{{ form.reason() }}</p>
   {% for field in form if field.errors %}
     {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
   {% endfor %}

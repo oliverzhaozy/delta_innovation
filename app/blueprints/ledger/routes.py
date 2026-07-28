@@ -3,23 +3,12 @@ from flask_login import current_user
 
 from app.authz import require
 from app.blueprints.ledger import bp
-from app.blueprints.ledger.forms import AdjustmentForm, BulkAwardForm
+from app.blueprints.ledger.forms import BULK_AWARD_CATEGORIES, AdjustmentForm, BulkAwardForm
 from app.domain import parade, participants, policy
 from app.domain.types import BalanceKind, LedgerSource, ParticipantCategory, Service
 from app.extensions import db
 from app.models import Person
 from app.services import event_service, ledger_service
-
-# The picker groups for the NSF-only bulk-award page: no Regulars group (their
-# off/leave lives in ARCTIC FOE), mirroring event_service.picker_groups minus
-# REGULAR. Command team is not a group here — it's the top-level checkbox the
-# picker template always renders, synced via command_ids.
-_BULK_AWARD_PICKER_CATEGORIES = (
-    ParticipantCategory.NSF,
-    ParticipantCategory.PLATOON_1,
-    ParticipantCategory.PLATOON_2,
-    ParticipantCategory.PLATOON_3,
-)
 
 
 @bp.route("/")
@@ -51,9 +40,6 @@ def bulk_award():
         # top of the form's choice validation.
         values = set(form.categories.data)
         selected = set(form.people.data) & {p.id for p in roster}
-        if "ALL" in values:
-            values.discard("ALL")
-            selected.update(p.id for p in roster)
         selected.update(
             p.id
             for p in roster
@@ -85,13 +71,13 @@ def bulk_award():
                 key=parade.parade_sort_key,
             ),
         )
-        for category in _BULK_AWARD_PICKER_CATEGORIES
+        for category in BULK_AWARD_CATEGORIES
     ]
-    command_ids = {
-        p.id for p in roster if participants.in_category(p, ParticipantCategory.COMMAND_TEAM)
-    }
+    # The picker's Command team row is hidden here (picker_hide_top), so no id
+    # needs a data-command marker; the include still evaluates `p.id in
+    # command_ids`, so pass an empty set to keep that reference safe.
     return render_template(
-        "ledger/bulk_award.html", form=form, picker_groups=picker_groups, command_ids=command_ids
+        "ledger/bulk_award.html", form=form, picker_groups=picker_groups, command_ids=set()
     )
 
 

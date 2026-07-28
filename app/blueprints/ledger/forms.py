@@ -6,6 +6,17 @@ from wtforms.validators import DataRequired, Length, NumberRange, ValidationErro
 
 from app.domain.types import BalanceKind, ParticipantCategory
 
+# The bulk-award picker's four groups: All NSFs + the three platoons. No
+# Regulars group (their off/leave lives in ARCTIC FOE) and no ALL/COMMAND_TEAM
+# pseudo-choices — "All NSFs" is the everyone-selector here, so the picker's
+# top rows are hidden. The route builds its picker_groups from this same tuple.
+BULK_AWARD_CATEGORIES = (
+    ParticipantCategory.NSF,
+    ParticipantCategory.PLATOON_1,
+    ParticipantCategory.PLATOON_2,
+    ParticipantCategory.PLATOON_3,
+)
+
 
 class AdjustmentForm(FlaskForm):
     kind = SelectField("Balance", choices=[(k.value, k.value) for k in BalanceKind])
@@ -28,12 +39,12 @@ class BulkAwardForm(FlaskForm):
     concrete ids at submit time (nothing category-shaped is ever stored).
     """
 
-    # "ALL" is a form-level pseudo-choice expanded in the route. COMMAND_TEAM
-    # rides along as a category value (the picker template renders its box);
-    # against the NSF roster it resolves to NSF command appointments only.
+    # Only the four picker groups are valid choices (no ALL/COMMAND_TEAM): a
+    # stale "ALL"/"COMMAND_TEAM" POST fails choice validation and re-renders
+    # with a field error, which is the intended behavior.
     categories = SelectMultipleField(
         "Who to award",
-        choices=[(c.value, c.label) for c in ParticipantCategory] + [("ALL", "All (everyone)")],
+        choices=[(c.value, c.label) for c in BULK_AWARD_CATEGORIES],
     )
     # Choices are the NSF active roster at request time (set in routes.py).
     people = SelectMultipleField("People", coerce=int)

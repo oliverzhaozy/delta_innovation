@@ -5,10 +5,15 @@
    dedupes, and app.js (hook: form[data-people-picker]) keeps the duplicate
    checkboxes in sync. Context: `form` (with .categories/.people fields),
    `picker_groups`, `command_ids`; the calendar form additionally passes
-   `legacy_excludes` (undefined elsewhere, which Jinja treats as falsy). #}
+   `legacy_excludes` (undefined elsewhere, which Jinja treats as falsy). Two
+   optional knobs (both undefined → today's behavior): `picker_hide_top`
+   truthy drops the ALL + Command team rows (the bulk-award page, where a
+   group IS the everyone-selector); `picker_group_labels` is an optional
+   {category.value: label} override for a group's summary text. #}
 <fieldset class="participants">
   <legend>{{ form.categories.label.text }}</legend>
 
+  {% if not picker_hide_top %}
   <p class="check">
     <input type="checkbox" name="categories" value="ALL" id="cat_all"
       {% if "ALL" in (form.categories.data or []) %}checked{% endif %}>
@@ -20,13 +25,14 @@
       {% if "COMMAND_TEAM" in (form.categories.data or []) %}checked{% endif %}>
     <label for="cat_command">Command team</label>
   </p>
+  {% endif %}
 
   {% for category, members in picker_groups %}
   <details class="picker">
     <summary>
       <input type="checkbox" name="categories" value="{{ category.value }}"
         {% if category.value in (form.categories.data or []) %}checked{% endif %}>
-      <span>{{ category.label }}</span>
+      <span>{{ picker_group_labels.get(category.value, category.label) if picker_group_labels is defined else category.label }}</span>
       <span class="muted" data-count></span>
     </summary>
     <ul class="picker-body">

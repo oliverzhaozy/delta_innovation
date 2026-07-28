@@ -237,6 +237,31 @@ def test_bulk_award_ignores_regular_id(app, client, make_person):
         assert db.session.query(LedgerEntry).filter_by(person_id=reg_id).count() == 0
 
 
+def test_bulk_award_picker_hides_top_rows_and_relabels_nsf(app, client, make_person):
+    # The bulk page drops the ALL/Command team rows ("All NSFs" is the
+    # everyone-selector) and relabels the NSF group; other pages keep the
+    # enum labels (calendar rendering is pinned in test_event_participants_ui).
+    make_person(username="ba_lbl", display_name="Ba Lbl")
+    login(client, make_s3(make_person, username="s3_ba_lbl"))
+    body = client.get("/ledger/bulk-award").get_data(as_text=True)
+    assert "All (everyone)" not in body
+    assert "Command team" not in body
+    assert "All NSFs" in body
+
+
+def test_bulk_award_all_pseudo_choice_writes_nothing(app, client, make_person):
+    # "ALL" is no longer a valid category choice: the POST fails WTForms choice
+    # validation, re-renders, and writes no ledger line.
+    make_person(username="ba_all", display_name="Ba All")
+    login(client, make_s3(make_person, username="s3_ba_all"))
+    client.post(
+        "/ledger/bulk-award",
+        data={"categories": ["ALL"], "kind": "OFF", "days": "1", "reason": "x"},
+    )
+    with app.app_context():
+        assert db.session.query(LedgerEntry).count() == 0
+
+
 def test_bulk_award_forbidden_for_opr(client, make_person):
     login(client, make_person(username="ba_opr"))
     assert client.get("/ledger/bulk-award").status_code == 403
