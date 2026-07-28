@@ -7,8 +7,8 @@ import pytest
 
 from app.domain.manning import ManningConflict
 from app.domain.types import (
-    Appointment, DayPart, LeaveType, ManningSlotType, Rank, RequestStatus,
-    Service, StatusType,
+    Appointment, DayPart, DeclarationStatus, LeaveType, ManningSlotType, Rank,
+    RequestStatus, Service, StatusType,
 )
 from app.extensions import db
 from app.models import (
@@ -95,6 +95,7 @@ def test_out_of_camp_status_and_declaration_flag_in_camp_status_does_not(app, ma
         db.session.add(OverseasDeclaration(
             person_id=pid(app, "pc1"), start_date=date(2026, 7, 10),
             end_date=date(2026, 7, 12), destination="Japan",
+            status=DeclarationStatus.APPROVED,
         ))
         db.session.commit()
 

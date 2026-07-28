@@ -1,12 +1,21 @@
 from app.domain.dates import now_sgt
+from app.domain.types import DeclarationStatus
 from app.extensions import db
+
+
+def _values(enum_cls):
+    return [member.value for member in enum_cls]
 
 
 class OverseasDeclaration(db.Model):
     """Self-declared travel window; everyone declares, no ledger involved.
 
-    Rows are never deleted — retract sets cancelled_at so the trace survives
-    for P6 manning, which reads these rows for activation-standby risk.
+    Rows ARE deleted (owner directive 2026-07-28, reversing P2.1): retracting
+    removes the row outright, and a row whose end_date has passed is deleted on
+    the next page load (`overseas_service.purge_expired`) — no travel history is
+    kept. Approval is PC-only: PS/Det Comd/Opr declarations start PENDING, a
+    PC's own and a regular's start APPROVED (domain.routing). Manning flags
+    every non-REJECTED row, pending ones included (domain.manning).
     """
 
     __tablename__ = "overseas_declaration"
@@ -17,9 +26,17 @@ class OverseasDeclaration(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     destination = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=now_sgt)
-    cancelled_at = db.Column(db.DateTime)
+    status = db.Column(
+        db.Enum(DeclarationStatus, values_callable=_values, name="declaration_status"),
+        nullable=False,
+        index=True,
+    )
+    pc_actor_id = db.Column(db.Integer, db.ForeignKey("person.id"))
+    pc_at = db.Column(db.DateTime)
+    remarks = db.Column(db.String(300))  # PC's remark, required when rejecting
 
     person = db.relationship("Person", foreign_keys=[person_id])
+    pc_actor = db.relationship("Person", foreign_keys=[pc_actor_id])
 
     __table_args__ = (
         db.CheckConstraint("start_date <= end_date", name="ck_overseas_date_order"),

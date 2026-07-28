@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Upcoming overseas travel{% endblock %}
+{% block title %}View travels{% endblock %}
 
 {% block content %}
 <div class="page-head">
-  <h1>Upcoming overseas travel</h1>
-  <p class="muted">Active declarations ending today or later — retracted and past entries are omitted.</p>
+  <h1>View travels</h1>
+  <p class="muted">Pending and approved declarations ending today or later — rejected and past entries are omitted.</p>
 </div>
 
 <section class="card">
   {% if declarations %}
   <div class="table-wrap">
     <table class="list">
-      <thead><tr><th>Name</th><th>Rank</th><th>Pl</th><th>Dates</th><th>Destination</th></tr></thead>
+      <thead><tr><th>Name</th><th>Rank</th><th>Pl</th><th>Dates</th><th>Destination</th><th>Status</th></tr></thead>
       <tbody>
         {% for d in declarations %}
         <tr>
@@ -20,6 +20,7 @@
           <td>{{ d.person.platoon or "—" }}</td>
           <td>{{ d.when_label }}</td>
           <td>{{ d.destination }}</td>
+          <td><span class="badge {{ d.status.badge }}">{{ d.status.label }}</span></td>
         </tr>
         {% endfor %}
       </tbody>

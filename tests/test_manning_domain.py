@@ -3,12 +3,12 @@ THE TU-Det-Comd trap regression, and the conflict tri-state (deliberately
 missing an AVAILABLE member — absence of data is not presence of
 availability).
 """
-from datetime import date, datetime
+from datetime import date
 from types import SimpleNamespace
 
 from app.domain import manning
 from app.domain.manning import ManningConflict
-from app.domain.types import Appointment, ManningSlotType
+from app.domain.types import Appointment, DeclarationStatus, ManningSlotType
 
 START, END = date(2026, 7, 5), date(2026, 7, 13)
 
@@ -21,10 +21,9 @@ def absence(start, end, label="OFF"):
     return SimpleNamespace(start_date=start, end_date=end, label=label)
 
 
-def declaration(start, end, destination="Japan", cancelled_at=None):
+def declaration(start, end, destination="Japan", status=DeclarationStatus.APPROVED):
     return SimpleNamespace(
-        start_date=start, end_date=end, destination=destination,
-        cancelled_at=cancelled_at,
+        start_date=start, end_date=end, destination=destination, status=status,
     )
 
 
@@ -93,7 +92,7 @@ def test_non_overlapping_rows_do_not_flag():
     assert reasons == ()
 
 
-def test_declaration_flags_and_retracted_does_not():
+def test_declaration_flags_and_rejected_does_not():
     status, reasons = manning.conflict_check(
         START, END, overseas_rows=[declaration(date(2026, 7, 10), date(2026, 7, 12))],
     )
@@ -103,9 +102,21 @@ def test_declaration_flags_and_retracted_does_not():
     status, _ = manning.conflict_check(
         START, END,
         overseas_rows=[declaration(date(2026, 7, 10), date(2026, 7, 12),
-                                   cancelled_at=datetime(2026, 7, 1, 9, 0))],
+                                   status=DeclarationStatus.REJECTED)],
     )
     assert status is ManningConflict.NO_KNOWN_CONFLICT
+
+
+def test_pending_declaration_flags():
+    # Owner 2026-07-28: a declaration a PC has not decided yet is still a risk
+    # the S3 must see — only REJECTED is nothing.
+    status, reasons = manning.conflict_check(
+        START, END,
+        overseas_rows=[declaration(date(2026, 7, 10), date(2026, 7, 12),
+                                   status=DeclarationStatus.PENDING)],
+    )
+    assert status is ManningConflict.CONFLICT
+    assert reasons == ("Overseas (Japan) 10 Jul – 12 Jul",)
 
 
 def test_single_day_reason_renders_one_date():

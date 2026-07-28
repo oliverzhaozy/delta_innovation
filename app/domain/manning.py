@@ -14,7 +14,7 @@ import enum
 from collections import namedtuple
 
 from app.domain.eligibility import TU_SLOT_APPOINTMENTS
-from app.domain.types import ManningSlotType
+from app.domain.types import DeclarationStatus, ManningSlotType
 
 
 class ManningConflict(str, enum.Enum):
@@ -42,8 +42,9 @@ def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
     `absence_rows`: pre-shaped rows with .label/.start_date/.end_date — any
     overlap is a reason (warn-only; even a half-day inside an activation
     window is worth a flag, and the S3 decides). `overseas_rows`: declarations
-    with .destination/.cancelled_at — retracted ones never flag (that pin
-    lives HERE so no caller can forget the filter).
+    with .destination/.status — rejected ones never flag, pending ones DO
+    (owner 2026-07-28: declared travel is a risk until a PC says otherwise);
+    that pin lives HERE so no caller can forget the filter.
     """
     reasons = []
     for row in absence_rows:
@@ -51,7 +52,7 @@ def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
             reasons.append(f"{row.label} {_range_label(row.start_date, row.end_date)}")
     for row in overseas_rows:
         if (
-            row.cancelled_at is None
+            row.status is not DeclarationStatus.REJECTED
             and row.start_date <= end_date
             and row.end_date >= start_date
         ):

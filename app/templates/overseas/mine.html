@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}My overseas declarations{% endblock %}
+{% block title %}Overseas declaration{% endblock %}
 
 {% block content %}
 <div class="page-head">
-  <h1>My overseas declarations</h1>
+  <h1>Overseas declaration</h1>
 </div>
 
 <p><a class="btn" href="{{ url_for('overseas.declare') }}">Declare travel</a></p>
@@ -20,20 +20,16 @@
           <td>{{ d.when_label }}</td>
           <td>{{ d.destination }}</td>
           <td>
-            {% if d.cancelled_at %}
-              <span class="badge cancelled">Retracted</span>
-              <div class="muted" style="font-size:0.85rem">{{ d.cancelled_at.strftime("%d %b %Y, %H:%M") }}</div>
-            {% else %}
-              <span class="badge approved">Active</span>
+            <span class="badge {{ d.status.badge }}">{{ d.status.label }}</span>
+            {% if d.remarks %}
+              <div class="muted" style="font-size:0.85rem">{{ d.remarks }}</div>
             {% endif %}
           </td>
           <td>
-            {% if not d.cancelled_at %}
             <form action="{{ url_for('overseas.retract', declaration_id=d.id) }}" method="post" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="linklike" style="color:var(--danger)">Retract</button>
             </form>
-            {% endif %}
           </td>
         </tr>
         {% endfor %}

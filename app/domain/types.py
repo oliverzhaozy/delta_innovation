@@ -128,6 +128,32 @@ OCCUPYING_STATUSES = frozenset(
 )
 
 
+class DeclarationStatus(str, enum.Enum):
+    """Overseas-declaration approval state (owner directive 2026-07-28). One
+    approval step only — any PC decides and the OC is never involved — so this
+    is deliberately NOT a subset of RequestStatus."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+    @property
+    def label(self) -> str:
+        return {
+            "PENDING": "Pending",
+            "APPROVED": "Approved",
+            "REJECTED": "Rejected",
+        }[self.value]
+
+    @property
+    def badge(self) -> str:
+        if self is DeclarationStatus.PENDING:
+            return "pending"
+        if self is DeclarationStatus.APPROVED:
+            return "approved"
+        return "rejected"
+
+
 # Removal history — each removed value has a migration remapping stored rows to
 # OTHER, so the enum must never regrow one without a matching data plan:
 #   BRIEFING, SITE_TESTING  removed 2026-07-11 (owner directive, f31c09a7d5e2)

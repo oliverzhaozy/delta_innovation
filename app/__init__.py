@@ -86,17 +86,23 @@ def create_app(config_class=None):
         # No notifications by design — the nav badge is how approvers find work.
         from flask_login import current_user
 
-        from app.domain.types import RequestStatus
-        from app.models import LeaveRequest
+        from app.domain.types import DeclarationStatus, RequestStatus
+        from app.models import LeaveRequest, OverseasDeclaration
 
         if not current_user.is_authenticated:
             return {}
         if policy.is_pc(current_user):
             # Any PC may approve any PENDING_PC request (owner decision
             # 2026-07-09), so the badge counts all of them, not just own-platoon.
+            # A PC's badge covers BOTH queues — leave and travel declarations —
+            # so it must stay in lockstep with leave.pc_queue AND overseas.queue.
             count = (
                 db.session.query(LeaveRequest.id)
                 .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
+                .count()
+            ) + (
+                db.session.query(OverseasDeclaration.id)
+                .filter(OverseasDeclaration.status == DeclarationStatus.PENDING)
                 .count()
             )
         elif policy.can_final_approve(current_user):

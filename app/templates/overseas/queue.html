@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Travel approvals{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Travel approvals</h1>
+  <p class="muted">{{ declarations | length }} awaiting your decision.</p>
+</div>
+
+<section class="card">
+  {% if declarations %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Who</th><th>Pl</th><th>Dates</th><th>Destination</th><th></th></tr></thead>
+      <tbody>
+        {% for d in declarations %}
+        <tr>
+          <td>{{ d.person.rank.value }} {{ d.person.display_name }}</td>
+          <td>{{ d.person.platoon or "—" }}</td>
+          <td>{{ d.when_label }}</td>
+          <td>{{ d.destination }}</td>
+          <td>
+            <form action="{{ url_for('overseas.approve', declaration_id=d.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit">Approve</button>
+            </form>
+            <form action="{{ url_for('overseas.reject', declaration_id=d.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="remarks" maxlength="300" placeholder="Reason (required)" required>
+              <button type="submit" class="btn danger">Reject</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nothing pending.</p>
+  {% endif %}
+</section>
+{% endblock %}

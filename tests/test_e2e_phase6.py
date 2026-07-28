@@ -99,12 +99,16 @@ def test_phase6_end_to_end(app, client, make_person):
 
     # --- 4. A det member declares overseas: flags on builder + pick list -----
     _switch(client, "ang")
+    # Deliberately NOT following the redirect: the period is the owner's
+    # historical sample, so this declaration has already ended, and
+    # /overseas/mine would purge it on sight (owner 2026-07-28). The manning
+    # flag is what this walk is about, and it flags PENDING rows too.
     resp = client.post("/overseas/declare", data={
         "start_date": date(2026, 7, 10).isoformat(),
         "end_date": date(2026, 7, 12).isoformat(),
         "destination": "Japan",
-    }, follow_redirects=True)
-    assert resp.status_code == 200
+    })
+    assert resp.status_code == 302
 
     _switch(client, "s3")
     html = client.get(f"/manning/{period_id}").get_data(as_text=True)
