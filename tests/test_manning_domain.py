@@ -212,3 +212,109 @@ def test_render_groups_dets_and_orders_comd_first():
     assert text.index("TU 1") < text.index("TU 2")
     assert text.index("DET COMD: 3WO D1C") < text.index("DET PERSONNEL: CPL D1P")
     assert text.index("DET COMD: 2SG D2C") < text.index("DET PERSONNEL: CPL D2P")
+
+
+# --- the fixed-structure generator (P6.7b) ------------------------------------------
+
+def full_pools():
+    """Fresh pools every call — determinism is asserted over equal inputs, not
+    over a shared mutable fixture."""
+    return {
+        ManningSlotType.TU_COMD: [1, 2],
+        ManningSlotType.TU_PLANNER: [3, 4],
+        ManningSlotType.TU_DET_COMD: [5, 6, 7],
+        ManningSlotType.DET_PERSONNEL: [10, 11, 12, 13, 14, 15, 16],
+    }
+
+
+def picked(result, slot, det_number):
+    return [p.person_id for p in result if p.slot is slot and p.det_number == det_number]
+
+
+def test_full_pools_fill_the_fixed_structure_in_order():
+    result = manning.generate(pools=full_pools(), existing=[])
+    assert result == [
+        manning.GeneratedPick(ManningSlotType.TU_COMD, None, 1),
+        manning.GeneratedPick(ManningSlotType.TU_PLANNER, None, 3),
+        manning.GeneratedPick(ManningSlotType.TU_DET_COMD, 1, 5),
+        manning.GeneratedPick(ManningSlotType.TU_DET_COMD, 2, 6),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 1, 10),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 1, 11),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 1, 12),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 2, 13),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 2, 14),
+        manning.GeneratedPick(ManningSlotType.DET_PERSONNEL, 2, 15),
+    ]
+    assert len(result) == 2 + len(manning.GENERATED_DETS) * (1 + manning.DET_PERSONNEL_PER_DET)
+
+
+def test_generation_is_deterministic():
+    # No randomness and no fairness history: equal inputs, identical output.
+    assert manning.generate(pools=full_pools(), existing=[]) == manning.generate(
+        pools=full_pools(), existing=[]
+    )
+
+
+def test_existing_rows_count_against_their_slot():
+    result = manning.generate(
+        pools=full_pools(),
+        existing=[
+            (ManningSlotType.TU_COMD, None, 90),
+            (ManningSlotType.DET_PERSONNEL, 1, 91),
+        ],
+    )
+    assert picked(result, ManningSlotType.TU_COMD, None) == []
+    # Det 1 needs two more; det 2 is untouched and still gets its three.
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == [10, 11]
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 2) == [12, 13, 14]
+    assert picked(result, ManningSlotType.TU_PLANNER, None) == [3]
+
+
+def test_existing_person_is_never_picked_again():
+    # Kept manually in one slot, still sitting in the pools for others.
+    result = manning.generate(
+        pools=full_pools(),
+        existing=[(ManningSlotType.TU_DET_COMD, 1, 5)],
+    )
+    assert all(p.person_id != 5 for p in result)
+    assert picked(result, ManningSlotType.TU_DET_COMD, 2) == [6]
+
+
+def test_exhausted_pool_leaves_vacancies_and_fills_the_rest():
+    pools = full_pools()
+    pools[ManningSlotType.DET_PERSONNEL] = [10, 11, 12, 13]
+    result = manning.generate(pools=pools, existing=[])
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == [10, 11, 12]
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 2) == [13]
+    # HQ is filled regardless — a thin det never starves the slots above it.
+    assert picked(result, ManningSlotType.TU_COMD, None) == [1]
+    assert picked(result, ManningSlotType.TU_PLANNER, None) == [3]
+
+
+def test_missing_pool_key_is_an_empty_pool():
+    result = manning.generate(
+        pools={ManningSlotType.TU_COMD: [1]}, existing=[],
+    )
+    assert result == [manning.GeneratedPick(ManningSlotType.TU_COMD, None, 1)]
+
+
+def test_manual_row_outside_the_generated_dets_satisfies_nothing():
+    # Det 3 is not part of the fixed structure: the row only takes its man
+    # off the table, dets 1 and 2 still generate their full complement.
+    result = manning.generate(
+        pools=full_pools(),
+        existing=[(ManningSlotType.DET_PERSONNEL, 3, 10)],
+    )
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == [11, 12, 13]
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 2) == [14, 15, 16]
+
+
+def test_person_in_two_pools_is_picked_once():
+    pools = full_pools()
+    pools[ManningSlotType.TU_DET_COMD] = [5, 6]
+    pools[ManningSlotType.DET_PERSONNEL] = [6, 10, 11, 12, 13, 14, 15]
+    result = manning.generate(pools=pools, existing=[])
+    ids = [p.person_id for p in result]
+    assert ids.count(6) == 1
+    assert picked(result, ManningSlotType.TU_DET_COMD, 2) == [6]
+    assert picked(result, ManningSlotType.DET_PERSONNEL, 1) == [10, 11, 12]

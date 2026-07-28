@@ -11,7 +11,7 @@ direct absences, out-of-camp statuses) from the shared fetch into
 conflict (an MC or a course from the TP calendar).
 """
 import enum
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 
 from app.domain.eligibility import TU_SLOT_APPOINTMENTS
 from app.domain.types import DeclarationStatus, ManningSlotType
@@ -115,3 +115,54 @@ def render_manning(start_date, end_date, *, slots) -> ManningDoc:
         blocks.append("\n".join(lines))
 
     return ManningDoc(text="\n\n".join(blocks), unfilled=unfilled)
+
+
+# The generated structure is FIXED by the owner (2026-07-28): HQ plus dets 1
+# and 2 at three personnel each. Sizing is not a per-period choice.
+GENERATED_DETS = (1, 2)
+DET_PERSONNEL_PER_DET = 3
+
+GeneratedPick = namedtuple("GeneratedPick", "slot det_number person_id")
+
+# (slot, det_number, how many that pair needs) in fill order.
+_STRUCTURE = (
+    (ManningSlotType.TU_COMD, None, 1),
+    (ManningSlotType.TU_PLANNER, None, 1),
+    *((ManningSlotType.TU_DET_COMD, det, 1) for det in GENERATED_DETS),
+    *((ManningSlotType.DET_PERSONNEL, det, DET_PERSONNEL_PER_DET) for det in GENERATED_DETS),
+)
+
+
+def generate(*, pools, existing):
+    """[GeneratedPick] filling the fixed structure around the rows that stay.
+
+    `pools` = {ManningSlotType: [person_id, ...]}, pre-filtered by the caller
+    to eligible AND no-known-conflict, in roster order; a missing key is an
+    empty pool. `existing` = (slot, det_number, person_id) rows surviving
+    regeneration (the manual ones): each person is barred from every pick, and
+    each row counts against the need for ITS (slot, det_number) pair — so a
+    manual det-3 row satisfies nothing, it only takes its man off the table.
+
+    An exhausted pool leaves that vacancy unpicked and moves on; later slots
+    still fill, and the builder's `doc.unfilled` banner is where a thin HQ
+    surfaces. Deliberate deviation from `roster.generate`: no randomness and
+    no fairness history. Activation periods are sporadic, not a monthly
+    rotation, so spreading them evenly would be arithmetic about nothing —
+    the S3 reshuffles by hand. Identical inputs give identical output.
+    """
+    used = set()
+    filled = defaultdict(int)
+    for slot, det_number, person_id in existing:
+        used.add(person_id)
+        filled[(slot, det_number)] += 1
+
+    picks = []
+    for slot, det_number, needed in _STRUCTURE:
+        pool = pools.get(slot, ())
+        for _ in range(needed - filled[(slot, det_number)]):
+            person_id = next((p for p in pool if p not in used), None)
+            if person_id is None:
+                break
+            used.add(person_id)
+            picks.append(GeneratedPick(slot, det_number, person_id))
+    return picks
