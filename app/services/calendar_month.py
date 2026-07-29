@@ -14,7 +14,7 @@ import calendar as stdlib_calendar
 from datetime import date, datetime, time
 
 from app.domain import monthgrid, policy
-from app.domain.dates import today_sgt
+from app.domain.dates import adjacent_ym, parse_ym, today_sgt
 from app.domain.types import Calendar
 from app.extensions import db
 from app.models import Event
@@ -43,14 +43,6 @@ def _dedupe_by_person(rows):
         seen.add(row.person_id)
         out.append(row)
     return out
-
-
-def _adjacent_ym(year, month, delta):
-    # delta is +-1 month; only ever called with |delta| == 1 so no general
-    # modular-arithmetic case is needed.
-    if delta == 1:
-        return (year + 1, 1) if month == 12 else (year, month + 1)
-    return (year - 1, 12) if month == 1 else (year, month - 1)
 
 
 def _bar(*, kind, obj, segment, row):
@@ -138,21 +130,12 @@ def build_month_context(user, ym_raw):
     """Return the template context for `calendar/month.html` for `user`.
 
     `ym_raw` is the raw `?ym=YYYY-MM` string ("" for the current month); a bad
-    value falls back to today, mirroring the parade morning page's bad-?date=
-    convention (fall back, never 404).
+    value falls back to today via the shared `parse_ym`, mirroring the parade
+    morning page's bad-?date= convention (fall back, never 404).
     """
     today = today_sgt()
-    year, month_num = today.year, today.month
-    if ym_raw:
-        try:
-            year_str, month_str = ym_raw.split("-")
-            year, month_num = int(year_str), int(month_str)
-            month_start, month_end_exclusive = _month_bounds(year, month_num)
-        except ValueError:
-            year, month_num = today.year, today.month
-            month_start, month_end_exclusive = _month_bounds(year, month_num)
-    else:
-        month_start, month_end_exclusive = _month_bounds(year, month_num)
+    year, month_num = parse_ym(ym_raw)
+    month_start, month_end_exclusive = _month_bounds(year, month_num)
     month_end_inclusive = date.fromordinal(month_end_exclusive.toordinal() - 1)
 
     show_arctic = policy.can_view_arctic(user)
@@ -201,8 +184,8 @@ def build_month_context(user, ym_raw):
         "month_start": month_start,
         "weekday_labels": list(stdlib_calendar.day_abbr),
         "weeks": weeks,
-        "prev_ym": "%04d-%02d" % _adjacent_ym(year, month_num, -1),
-        "next_ym": "%04d-%02d" % _adjacent_ym(year, month_num, 1),
+        "prev_ym": "%04d-%02d" % adjacent_ym(year, month_num, -1),
+        "next_ym": "%04d-%02d" % adjacent_ym(year, month_num, 1),
         "today_ym": "%04d-%02d" % (today.year, today.month),
         "show_arctic": show_arctic,
     }

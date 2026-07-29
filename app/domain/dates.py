@@ -17,6 +17,31 @@ def now_sgt() -> datetime:
     return datetime.now(SGT).replace(tzinfo=None, microsecond=0)
 
 
+def parse_ym(raw) -> tuple:
+    """(year, month) from a raw `?ym=YYYY-MM` query string. "" or an
+    unparseable value falls back to today's month — every month grid falls
+    back, never 404s (the parade pages' bad-?date= convention).
+    """
+    if raw:
+        try:
+            year_str, month_str = raw.split("-")
+            year, month = int(year_str), int(month_str)
+            date(year, month, 1)  # rejects month 13 / year 0 before a grid is built
+            return year, month
+        except ValueError:
+            pass
+    today = today_sgt()
+    return today.year, today.month
+
+
+def adjacent_ym(year: int, month: int, delta: int) -> tuple:
+    # delta is +-1 month; only ever called with |delta| == 1 so no general
+    # modular-arithmetic case is needed.
+    if delta == 1:
+        return (year + 1, 1) if month == 12 else (year, month + 1)
+    return (year - 1, 12) if month == 1 else (year, month - 1)
+
+
 def iter_days(start: date, end: date):
     d = start
     while d <= end:
