@@ -1,4 +1,5 @@
 from flask import Flask, render_template
+from flask_wtf.csrf import CSRFError
 
 from app.extensions import csrf, db, limiter, login_manager, migrate
 from config import get_config
@@ -118,6 +119,12 @@ def create_app(config_class=None):
     @app.errorhandler(403)
     def forbidden(error):
         return render_template("errors/403.html"), 403
+
+    @app.errorhandler(CSRFError)
+    def csrf_expired(error):
+        # CSRFError is a bare 400: unhandled, a rejected form drops the keyer on
+        # Werkzeug's unstyled page with no hint that reloading fixes it.
+        return render_template("errors/csrf.html"), 400
 
     @app.template_filter("days")
     def fmt_half_days(half_days):

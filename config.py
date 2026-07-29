@@ -11,6 +11,10 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///delta.db")
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    # Flask-WTF expires CSRF tokens 3600s after the page renders, which 400s a
+    # form left open for an hour inside a login that lasts 30 days. None drops
+    # the timestamp check; the session the token is bound to still bounds it.
+    WTF_CSRF_TIME_LIMIT = None
     REMEMBER_COOKIE_HTTPONLY = True
     # Flask-Login's default is no SameSite attribute at all — set it explicitly.
     REMEMBER_COOKIE_SAMESITE = "Lax"
