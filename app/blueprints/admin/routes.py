@@ -35,6 +35,7 @@ _AUDIT_FIELDS = (
     "service",
     "stay_out",
     "duty_exempt",
+    "meals_opt_in",
     "is_admin",
     "is_active",
 )
@@ -70,6 +71,7 @@ def _apply_form(person, form):
     person.service = Service(form.service.data)
     person.stay_out = form.stay_out.data
     person.duty_exempt = form.duty_exempt.data
+    person.meals_opt_in = form.meals_opt_in.data
     person.is_admin = form.is_admin.data
     person.is_active = form.is_active.data
 

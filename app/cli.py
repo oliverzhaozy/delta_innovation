@@ -62,6 +62,7 @@ def register_cli(app):
                         stay_out=col("stay_out") == "1",
                         # Optional column, like is_admin: absent -> not exempt.
                         duty_exempt=col("duty_exempt") == "1",
+                        meals_opt_in=col("meals_opt_in") == "1",
                         is_admin=col("is_admin") == "1",
                     )
                 except ValueError as exc:

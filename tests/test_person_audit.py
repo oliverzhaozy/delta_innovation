@@ -78,6 +78,24 @@ def test_appointment_edit_writes_one_row_and_shows_in_view(app, client, make_per
     assert b"OPR" in page.data and b"PC" in page.data
 
 
+def test_meals_opt_in_edit_writes_one_row(app, client, make_person):
+    make_person(username="target")
+    login(client, make_s3(make_person))
+    target_id = _pid(app, "target")
+    resp = client.post(
+        f"/admin/people/{target_id}",
+        data=_edit_payload(meals_opt_in="y"),
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    with app.app_context():
+        person = db.session.get(Person, target_id)
+        assert person.meals_opt_in is True
+        rows = db.session.query(PersonAudit).filter_by(person_id=target_id).all()
+        assert len(rows) == 1
+        assert (rows[0].field, rows[0].old, rows[0].new) == ("meals_opt_in", "no", "yes")
+
+
 def test_noop_save_writes_zero_rows(app, client, make_person):
     make_person(username="target")
     login(client, make_s3(make_person))

@@ -39,6 +39,10 @@ class Person(UserMixin, db.Model):
     # 2026-07-24, first case: the 3WO P2IC). The rank/appointment rules stay
     # law in eligibility.py; this flag is the unit's judgment call per person.
     duty_exempt = db.Column(db.Boolean, nullable=False, default=False)
+    # Regulars who eat in camp opt in to the meal indents (owner decision (bb)
+    # 2026-07-29 revising (j)); NSFs are always counted, so the flag only ever
+    # matters for regulars — domain/meals.py owns that predicate.
+    meals_opt_in = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     password_hash = db.Column(db.String(255), nullable=False)

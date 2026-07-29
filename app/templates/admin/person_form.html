@@ -19,6 +19,7 @@
   <p>{{ form.service.label }}{{ form.service() }}</p>
   <p class="check">{{ form.stay_out() }} {{ form.stay_out.label }}</p>
   <p class="check">{{ form.duty_exempt() }} {{ form.duty_exempt.label }}</p>
+  <p class="check">{{ form.meals_opt_in() }} {{ form.meals_opt_in.label }}</p>
   <p class="check">{{ form.is_admin() }} {{ form.is_admin.label }}</p>
   <p class="check">{{ form.is_active() }} {{ form.is_active.label }}</p>
   {% for field in form if field.errors %}
