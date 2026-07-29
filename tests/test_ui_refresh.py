@@ -50,7 +50,7 @@ def test_nav_groups_are_rights_gated(app, client, make_person):
     for summary in ("Parade", "Duty", "Leave", "Calendar", "Account"):
         assert f"<summary>{summary}" in html, summary
     # Staff-only entries stay invisible to an Opr.
-    for hidden in ("Manning", "OFF/OIL ledger", ">People<", "NSF meals",
+    for hidden in ("TU manning", "OFF/OIL ledger", ">People<", "NSF meals",
                    "Statuses", "Direct absences", "ARCTIC FOE"):
         assert hidden not in html, hidden
 
@@ -58,7 +58,7 @@ def test_nav_groups_are_rights_gated(app, client, make_person):
     make_person(username="s3_admin", company_role="S3", is_admin=True)
     login(client, "s3_admin")
     html = client.get("/").get_data(as_text=True)
-    for visible in ("Manning", "OFF/OIL ledger", ">People<", "NSF meals"):
+    for visible in ("TU manning", "OFF/OIL ledger", ">People<", "NSF meals"):
         assert visible in html, visible
 
 
@@ -87,12 +87,12 @@ def test_home_calendar_renders_for_every_role(app, client, make_person):
     client.post("/logout")
     login(client, "admin")
     html = client.get("/").get_data(as_text=True)
-    for visible in (">People<", "NSF meals", "Manning"):
+    for visible in (">People<", "NSF meals", "TU manning"):
         assert visible in html, visible
 
     # ...which a plain Opr never sees.
     client.post("/logout")
     login(client, "opr_only")
     opr_html = client.get("/").get_data(as_text=True)
-    for hidden in (">People<", "NSF meals", "Manning", "OFF/OIL ledger"):
+    for hidden in (">People<", "NSF meals", "TU manning", "OFF/OIL ledger"):
         assert hidden not in opr_html, hidden

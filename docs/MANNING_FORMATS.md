@@ -46,7 +46,12 @@ DET PERSONNEL: LCP SAMUEL LIM
    `TU PLANNER: <RANK> <NAME IN CAPS>`, each followed by a phone line.
 3. **Detachments:** `TU <n>` heading, then one `DET COMD:` line and N
    `DET PERSONNEL:` lines (3 each in the sample; headcount is data, not a
-   rule — per-det headcount rules are deliberately cut from P6).
+   rule — per-det headcount rules are deliberately cut from P6). Since
+   decision (aa) that splits in two: auto-generation SIZES to a fixed
+   structure (2 dets × (1 Det Comd + 3 personnel), plus 1 TU Comd and 1 TU
+   Planner), but RENDERING still enforces no headcount rule — a period built
+   or edited by hand into any shape, with a fourth man or a det 3, renders
+   exactly as keyed.
 4. **THE TRAP, in the document itself:** the rendered label `DET COMD:` is
    the manning slot `TU_DET_COMD`, filled by appointment **P2IC/PS** — never
    by a company-appointment Det Comd, who fills `DET PERSONNEL`. The UI label
@@ -69,3 +74,6 @@ DET PERSONNEL: LCP SAMUEL LIM
   CLAUDE.md's data-sensitivity rule is amended accordingly.
 - **(r) Period naming:** periods are date-ranged in the document; the model
   keeps an OPTIONAL name for the S3's period list only — it never renders.
+  `[SUPERSEDED 2026-07-28 by TECH_PLAN decision (aa): periods are date-ranged
+  and nothing else — the name column is dropped, so the second clause no
+  longer describes the model.]`

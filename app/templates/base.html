@@ -38,7 +38,7 @@
             <a href="{{ url_for('duty.roster') }}">Duty roster</a>
             <a href="{{ url_for('ro.view') }}">Routine Orders</a>
             {% if policy.can_manage_manning(current_user) %}
-              <a href="{{ url_for('manning.index') }}">Manning</a>
+              <a href="{{ url_for('manning.index') }}">TU manning</a>
             {% endif %}
           </div>
         </details>
