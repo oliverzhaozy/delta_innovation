@@ -185,11 +185,11 @@ def test_meals_page_notice(app, client, make_person):
     login(client, "s4")
 
     # Meals for day D cover the night D→D+1 — one day later than roll_call(D).
-    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
     assert notice_duties(html) == "COS, CDO/S"
 
     plant_duty(app, "cos_guy", D)
-    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
     assert notice_duties(html) == "CDO/S"
 
 
@@ -202,5 +202,5 @@ def test_meals_notice_never_names_a_covered_duty(app, client, make_person):
 
     plant_duty(app, "cos_guy", D, duty=Duty.COS)
     plant_duty(app, "cos_guy", D, duty=Duty.CDOS)
-    html = client.get(f"/meals?date={D.isoformat()}").get_data(as_text=True)
+    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
     assert NOTICE not in html

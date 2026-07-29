@@ -6,7 +6,7 @@ every DATE the event covers (clock times ignored — owner decision 3). These te
 pin the day rule, the precedence position (a keyed status beats a derived course,
 a course beats stay-out), the category mapping, and the fact that every downstream
 consumer of the shared fetch inherits it: the away panel, duty availability, the
-duty absent-holder flag, manning conflicts, and the NSF meal counters. The
+duty absent-holder flag, manning conflicts, and the meal-indent counters. The
 month-calendar NSF OFF/LEAVE layer must NOT: it filters on source == "leave".
 """
 from datetime import date, datetime, timedelta

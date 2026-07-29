@@ -1,47 +1,51 @@
 {% extends "base.html" %}
-{% block title %}NSF meal counter{% endblock %}
+{% block title %}Meal indents{% endblock %}
+{# The month grid wants width — opt this page out of the 44rem reading column. #}
+{% block main_class %}wide{% endblock %}
 
 {% block content %}
-<div class="page-head">
-  <h1>NSF meal counter</h1>
+<div class="cal-toolbar">
+  <div class="cal-nav">
+    <a class="cal-today" href="{{ url_for('meals.index', ym=today_ym) }}">Today</a>
+    <a class="cal-step" href="{{ url_for('meals.index', ym=prev_ym) }}" aria-label="Previous month">&lsaquo;</a>
+    <a class="cal-step" href="{{ url_for('meals.index', ym=next_ym) }}" aria-label="Next month">&rsaquo;</a>
+    <h1 class="cal-title">Meal indents &mdash; {{ month_start.strftime("%B %Y") }}</h1>
+  </div>
 </div>
 
 <section class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
-    <a href="{{ url_for('meals.index', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
-    <a href="{{ url_for('meals.index', date=today.isoformat()) }}">Today</a>
-    <a href="{{ url_for('meals.index', date=next_day.isoformat()) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  <div class="month-grid-wrap">
+    <div class="month-grid">
+      <div class="month-weekdays">
+        {% for label in weekday_labels %}
+        <div class="month-grid-head">{{ label }}</div>
+        {% endfor %}
+      </div>
+      {# One number per day, no lanes: the meals grid is the calendar grid with
+         a single row of content per cell. #}
+      {% for week in weeks %}
+      <div class="month-week" style="--lanes: 1">
+        {% for cell in week %}
+        <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}" style="grid-column: {{ loop.index }}">
+          <div class="cell-head">
+            <span class="day-num{% if not cell.in_month %} muted{% endif %}">{{ cell.date.day }}</span>
+          </div>
+          {% if cell.in_month %}
+            {% if cell.expected is none %}
+            <a class="meal-num meal-warn" href="{{ url_for('meals.day', date=cell.date.isoformat()) }}"
+               title="A parade document for these dates is out of balance">&mdash;</a>
+            {% else %}
+            <a class="meal-num" href="{{ url_for('meals.day', date=cell.date.isoformat()) }}">{{ cell.expected }}</a>
+            {% endif %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
   </div>
 </section>
 
-{% if missing_duties %}
-  <p class="flash flash-error">No confirmed duty for this night:
-    {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
-    — this document counts nobody as on duty.</p>
-{% endif %}
-
-{% if imbalance %}
-<section class="card">
-  <p class="error">Cannot compute &mdash; a parade document for these dates is out of balance; check keyed data.</p>
-</section>
-{% else %}
-<section class="card">
-  <h2>{{ day.strftime("%A %d %b %Y") }}</h2>
-  <ul class="toollist">
-    <li><span>NSFs in camp during the day</span><strong id="nsf-day">{{ counts.day_in_camp }}</strong></li>
-    <li><span>NSFs staying tonight ({{ day.strftime("%d %b") }} &rarr; {{ next_day.strftime("%d %b") }})</span><strong id="nsf-overnight">{{ counts.overnight }}</strong></li>
-  </ul>
-</section>
-{% endif %}
-
-<section class="card">
-  <h2>How these numbers are derived</h2>
-  {# Assumptions in the open, so a wrong one is challenged by the person who'd
-     know. Decision (j), owner-confirmed 2026-07-07: indents are NSF-only. #}
-  <ul class="toollist">
-    <li>Day count = morning parade ({{ day.strftime("%d %b") }}) PRESENT IN CAMP, NSFs only &mdash; regulars are never counted.</li>
-    <li>Overnight = roll call ({{ next_day.strftime("%d %b") }}) CURRENT STRENGTH, NSFs only &mdash; tonight's stayers are tomorrow's breakfast.</li>
-  </ul>
-  <p class="tag">Indents are NSF-only &mdash; confirmed via owner, 07 Jul 2026.</p>
-</section>
+<p class="muted">Each number is the day's indent &mdash; the larger of the people in
+  camp by day and those staying the night. Open a day for the breakdown.</p>
 {% endblock %}

@@ -4,7 +4,7 @@ One S3 keys everything a real evening needs, then every Phase-3 surface is
 checked against the SAME derivation: S3 keys an MC and a regular's out-of-camp
 status -> COS message (compiled D-1) categorizes both -> roll call balances ->
 FP quick-add moves a man to OTHERS IN CAMP -> morning parade shows both
-absences -> the NSF meal counters read the same derivation (decision j) -> and
+absences -> the meal-indent counters read the same derivation (decisions j/bb) -> and
 the ledger is untouched, because keying parade data never moves a balance.
 """
 from datetime import timedelta
@@ -86,9 +86,9 @@ def test_phase3_end_to_end(app, client, make_person):
         counts, imbalance = meal_service.compute_for(D)
         assert imbalance is None
         assert (counts.day_in_camp, counts.overnight) == (3, 2)
-    page = client.get(f"/meals?date={D.isoformat()}")
-    assert b'id="nsf-day">3<' in page.data
-    assert b'id="nsf-overnight">2<' in page.data
+    page = client.get(f"/meals/day?date={D.isoformat()}")
+    assert b'id="meal-day">3<' in page.data
+    assert b'id="meal-overnight">2<' in page.data
 
     # --- Morning parade agrees ------------------------------------------------
     absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]

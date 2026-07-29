@@ -51,7 +51,7 @@ conducts as Phase 1 applied to OFF/OIL:
 - ARCTIC visibility doesn't change — command team only, same as it was on
   TimeTree; this cutover is about which tool is authoritative, not who sees what.
 
-## Phase 3 cutover — parade states & NSF meal counter
+## Phase 3 cutover — parade states & meal indents
 
 Phase 3 replaces the COS's nightly hand-assembly of the three WhatsApp
 documents. The stakes are byte-level: a parade state with a wrong count is
@@ -71,8 +71,10 @@ worse than none, so this cutover is judged on exact output, not vibes.
 - **Finalize is the record:** from day one of the parallel run, whoever copies
   a document presses "Finalize & copy" — the snapshot archive is what settles
   "what did we actually send that night".
-- **S4 counter:** S4 compares the NSF day/overnight counters against their own
-  count for the same nights (indents are NSF-only, decision (j)).
+- **S4 counter:** S4 compares the month grid's expected number — and the
+  day/overnight counters behind it — against their own count for the same
+  nights (every NSF plus the regulars ticked as counted for meal indents in
+  People admin, decisions (j)/(bb)).
 - **Hard cutover:** announce a date; from that night the app's text IS the
   message (paste, don't retype). Manual assembly stops. Anything still keyed
   wrong surfaces as a conflict line or a wrong count the next morning and gets
@@ -104,7 +106,7 @@ the cutover risk is a roster nobody reviewed, not a silent reassignment.
   slot.
 - **Hard cutover:** the following month, the manual roster stops. From day
   one of that month the app's roster drives roll-call CURRENT STRENGTH, the
-  NSF overnight meal counter, the RO's duty lines, and the rotating COS's
+  overnight meal counter, the RO's duty lines, and the rotating COS's
   parade-keying rights (today's and tomorrow's COS can key statuses; the
   rights disappear with the assignment).
 

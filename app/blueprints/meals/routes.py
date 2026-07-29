@@ -24,6 +24,14 @@ def _parse_day(raw: str) -> date:
 def index():
     # Viewing is S4/admin-only (unlike the parade pages): the indent numbers
     # are S4's working tool, not broadcast information.
+    return render_template(
+        "meals/index.html", **meal_service.month_context(request.args.get("ym", ""))
+    )
+
+
+@bp.route("/day")
+@require(policy.can_manage_meals)
+def day():
     day = _parse_day(request.args.get("date", ""))
     counts, imbalance = meal_service.compute_for(day)
     # Day D's overnight counter covers the night D → D+1 (one day LATER than
@@ -31,11 +39,12 @@ def index():
     night_duties = {row.duty for row in duty_service.duties_on(day)}
     missing_duties = [duty for duty in Duty if duty not in night_duties]
     return render_template(
-        "meals/index.html",
+        "meals/day.html",
         day=day,
         today=today_sgt(),
         prev_day=day - timedelta(days=1),
         next_day=day + timedelta(days=1),
+        back_ym="%04d-%02d" % (day.year, day.month),
         counts=counts,
         imbalance=imbalance,
         missing_duties=missing_duties,

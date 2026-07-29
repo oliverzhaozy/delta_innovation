@@ -8,10 +8,11 @@ def _values(enum_cls):
 
 
 class MealAdjustment(db.Model):
-    """DORMANT since owner decision (j) (2026-07-07): meal indents are NSF-only
-    and the manual ± was removed with the per-meal counts. The table and model
-    stay — dropping a table is riskier than ignoring one — but no route or
-    service writes here anymore.
+    """DORMANT since owner decision (j) (2026-07-07): the manual ± was removed
+    with the per-meal counts, and the indent is derived presence only (decision
+    (bb) 2026-07-29 widened WHO is counted, not how). The table and model stay —
+    dropping a table is riskier than ignoring one — but no route or service
+    writes here anymore.
 
     Original design (P3b.5): S4's manual per-meal ± (people added/removed from
     a food order).

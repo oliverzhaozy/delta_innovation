@@ -81,7 +81,7 @@
           <summary>Account</summary>
           <div class="navmenu">
             {% if policy.can_manage_meals(current_user) %}
-              <a href="{{ url_for('meals.index') }}">NSF meals</a>
+              <a href="{{ url_for('meals.index') }}">Meal indents</a>
             {% endif %}
             <a href="{{ url_for('auth.change_password') }}">Password</a>
             <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">

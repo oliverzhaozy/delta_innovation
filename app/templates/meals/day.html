@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Meal indents &mdash; {{ day.strftime("%d %b %Y") }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Meal indents &mdash; {{ day.strftime("%A %d %b %Y") }}</h1>
+  <p class="muted"><a href="{{ url_for('meals.index', ym=back_ym) }}">&larr; {{ day.strftime("%B %Y") }}</a></p>
+</div>
+
+<section class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
+    <a href="{{ url_for('meals.day', date=prev_day.isoformat()) }}">&larr; {{ prev_day.strftime("%d %b") }}</a>
+    <a href="{{ url_for('meals.day', date=today.isoformat()) }}">Today</a>
+    <a href="{{ url_for('meals.day', date=next_day.isoformat()) }}">{{ next_day.strftime("%d %b") }} &rarr;</a>
+  </div>
+</section>
+
+{% if missing_duties %}
+  <p class="flash flash-error">No confirmed duty for this night:
+    {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
+    — this document counts nobody as on duty.</p>
+{% endif %}
+
+{% if imbalance %}
+<section class="card">
+  <p class="error">Cannot compute &mdash; a parade document for these dates is out of balance; check keyed data.</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>Expected: <strong id="meal-expected">{{ counts.expected }}</strong></h2>
+  <ul class="toollist">
+    <li><span>In camp during the day</span><strong id="meal-day">{{ counts.day_in_camp }}</strong></li>
+    <li><span>Staying tonight ({{ day.strftime("%d %b") }} &rarr; {{ next_day.strftime("%d %b") }})</span><strong id="meal-overnight">{{ counts.overnight }}</strong></li>
+  </ul>
+  <p class="muted">Expected = the larger of the two.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>How these numbers are derived</h2>
+  {# Assumptions in the open, so a wrong one is challenged by the person who'd
+     know. Decision (bb), owner-confirmed 2026-07-29, revises (j). #}
+  <ul class="toollist">
+    <li>Day count = morning parade ({{ day.strftime("%d %b") }}) PRESENT IN CAMP.</li>
+    <li>Overnight = roll call ({{ next_day.strftime("%d %b") }}) CURRENT STRENGTH &mdash; tonight's stayers are tomorrow's breakfast.</li>
+    <li>Counted = every NSF, plus regulars marked as counted for meal indents in People admin.</li>
+  </ul>
+</section>
+{% endblock %}

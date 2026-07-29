@@ -997,6 +997,27 @@ table.list a:hover { text-decoration: underline; }
   border-bottom-right-radius: 0;
 }
 
+/* Meal indents: the day's expected number IS the cell's body — no lanes to
+   share it with, so the link fills what the day-number head leaves. */
+.meal-num {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 0.3rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.meal-num:hover { color: var(--accent); }
+
+/* Out-of-balance day: an em dash in the warning colour, still clickable so the
+   day view can explain which document is off. */
+.meal-num.meal-warn { color: var(--amber-ink); font-weight: 500; }
+
 /* ---------- Desktop ---------- */
 
 @media (min-width: 40rem) {
@@ -1011,4 +1032,5 @@ table.list a:hover { text-decoration: underline; }
   .month-cell { padding: 0 0.4rem; }
   .month-cell .day-num { font-size: 0.95rem; }
   .month-week .chip { font-size: 0.72rem; padding: 0.08rem 0.45rem; }
+  .meal-num { font-size: 1.6rem; }
 }
