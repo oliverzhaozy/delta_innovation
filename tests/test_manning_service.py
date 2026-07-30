@@ -398,3 +398,124 @@ def test_candidates_order_by_priority_inside_each_conflict_group(app, make_perso
         rows = manning_service.candidates(period)[ManningSlotType.DET_PERSONNEL]
         assert [c.person.username for c in rows] == ["opr2", "opr1", "det1"]
         assert rows[-1].status is ManningConflict.CONFLICT
+
+
+# --- reassign: swap a holder in place ------------------------------------------------
+
+def test_reassign_swaps_the_holder_and_marks_the_row_manual(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        # A GENERATED row, so the is_manual flip is not vacuous.
+        row = ManningSlot(
+            period_id=period.id, slot=ManningSlotType.DET_PERSONNEL,
+            person_id=pid(app, "opr1"), det_number=1, is_manual=False,
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+        swapped = manning_service.reassign_slot(period, row_id, get_person("det1"))
+        assert swapped.id == row_id          # the row keeps its identity
+        assert swapped.person_id == pid(app, "det1")
+        assert swapped.is_manual is True     # regeneration must now leave it be
+        assert db.session.query(ManningSlot).count() == 1
+
+
+def test_reassign_hard_blocks_an_ineligible_person(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        row = manning_service.assign_slot(
+            period, ManningSlotType.TU_DET_COMD, get_person("p2ic3"), det_number=1,
+        )
+        # The trap through the in-place edit: a company Det Comd can never take
+        # over the slot the document labels DET COMD.
+        with pytest.raises(manning_service.IneligibleSlot):
+            manning_service.reassign_slot(period, row.id, get_person("det1"))
+        assert db.session.get(ManningSlot, row.id).person_id == pid(app, "p2ic3")
+
+
+def test_reassign_to_someone_already_in_the_period_is_the_friendly_duplicate(
+    app, make_person
+):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.assign_slot(
+            period, ManningSlotType.DET_PERSONNEL, get_person("opr1"), det_number=1,
+        )
+        target = manning_service.assign_slot(
+            period, ManningSlotType.DET_PERSONNEL, get_person("det1"), det_number=2,
+        )
+        with pytest.raises(manning_service.DuplicatePerson):
+            manning_service.reassign_slot(period, target.id, get_person("opr1"))
+        db.session.rollback()
+        # The UNIQUE backstop answered; both rows survive untouched.
+        assert db.session.get(ManningSlot, target.id).person_id == pid(app, "det1")
+        assert db.session.query(ManningSlot).count() == 2
+
+
+def test_reassigning_a_slot_to_its_own_holder_is_a_defined_no_op(app, make_person):
+    # An accidental resubmit of an unchanged select must not flash a duplicate.
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        row = manning_service.assign_slot(
+            period, ManningSlotType.TU_COMD, get_person("oc"), det_number=None,
+        )
+        again = manning_service.reassign_slot(period, row.id, get_person("oc"))
+        assert again.person_id == pid(app, "oc")
+        assert db.session.query(ManningSlot).count() == 1
+
+
+def test_reassign_refuses_a_slot_from_another_period(app, make_person):
+    # Object-level check: the role proves who the S3 is, never that this slot
+    # belongs to the period in the URL.
+    make_cast(make_person)
+    mine = make_period(app)
+    theirs = make_period_between(app, date(2026, 9, 1), date(2026, 9, 5))
+    put_in_period(app, theirs, "opr1", ManningSlotType.DET_PERSONNEL, det_number=1)
+    with app.app_context():
+        foreign_id = (
+            db.session.query(ManningSlot.id).filter_by(period_id=theirs).scalar()
+        )
+        period = db.session.get(ManningPeriod, mine)
+        assert manning_service.reassign_slot(period, foreign_id, get_person("det1")) is None
+        # Untouched: refusal is not a silent edit somewhere else.
+        assert db.session.get(ManningSlot, foreign_id).person_id == pid(app, "opr1")
+        assert manning_service.reassign_slot(period, 9999, get_person("det1")) is None
+
+
+def test_open_positions_is_the_structure_minus_what_is_already_there(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        assert len(manning_service.open_positions(period)) == STRUCTURE_TOTAL
+        # Fill order: HQ, then the det comds, then the personnel.
+        assert manning_service.open_positions(period)[:3] == [
+            (ManningSlotType.TU_COMD, None),
+            (ManningSlotType.TU_PLANNER, None),
+            (ManningSlotType.TU_DET_COMD, 1),
+        ]
+
+        manning_service.assign_slot(
+            period, ManningSlotType.TU_COMD, get_person("oc"), det_number=None,
+        )
+        db.session.refresh(period)
+        remaining = manning_service.open_positions(period)
+        assert (ManningSlotType.TU_COMD, None) not in remaining
+        assert len(remaining) == STRUCTURE_TOTAL - 1
+
+        # A row OUTSIDE the structure (det 3) satisfies none of it — the page's
+        # open lines and the generate flash's count agree because both read this.
+        manning_service.assign_slot(
+            period, ManningSlotType.DET_PERSONNEL, get_person("opr1"), det_number=3,
+        )
+        db.session.refresh(period)
+        assert len(manning_service.open_positions(period)) == STRUCTURE_TOTAL - 1

@@ -1,5 +1,18 @@
 {% extends "base.html" %}
+{% import "_priority.html" as priority_chip %}
 {% block title %}TU manning builder{% endblock %}
+
+{# One option source for every pick list on this page: the same conflict flag,
+   the same "last activation" suffix, wherever a person can be chosen. #}
+{% macro person_options(rows, selected_id) %}
+  {% for c in rows %}
+  <option value="{{ c.person.id }}"{% if c.person.id == selected_id %} selected{% endif %}>
+    {%- if c.reasons %}&#9888; {% endif -%}
+    {{ c.person.rank.value }} {{ c.person.display_name }} — {{ priority_chip.gap(last_done.get(c.person.id), today) }}
+    {%- if c.reasons %} — {{ c.reasons|join("; ") }}{% endif -%}
+  </option>
+  {% endfor %}
+{% endmacro %}
 
 {% block content %}
 <div class="page-head">
@@ -18,15 +31,27 @@
   <pre id="manningtext" style="white-space:pre-wrap; margin:0">{{ doc.text }}</pre>
 </section>
 
+{# The single editing surface: the period's rows, then the fixed structure's
+   still-open positions. Changing a holder is a state edit, so the current man
+   IS preselected; an open position starts on its placeholder. Conflicted people
+   stay in every list, flagged — the pick list IS the replacement list, and the
+   S3 decides from one screen (there is no confirm step here, deliberately). #}
 <section class="card">
-  <h2>Assigned slots</h2>
-  {% if period.slots %}
+  <h2>Slots</h2>
   <ul class="toollist">
     {% for s in hq %}
     <li>
       <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
         {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
         {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
+      <form method="post" action="{{ url_for('manning.reassign', period_id=period.id) }}" class="cell-assign">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="slot_id" value="{{ s.id }}">
+        <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="{{ s.slot.ui_label }}">
+          {{ person_options(candidates[s.slot], s.person_id) }}
+        </select>
+        <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+      </form>
       <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="slot_id" value="{{ s.id }}">
@@ -40,6 +65,14 @@
         <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
           {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
           {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
+        <form method="post" action="{{ url_for('manning.reassign', period_id=period.id) }}" class="cell-assign">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="slot_id" value="{{ s.id }}">
+          <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="TU {{ det }} {{ s.slot.ui_label }}">
+            {{ person_options(candidates[s.slot], s.person_id) }}
+          </select>
+          <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+        </form>
         <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="slot_id" value="{{ s.id }}">
@@ -48,8 +81,27 @@
       </li>
       {% endfor %}
     {% endfor %}
+    {% for slot, det in open_positions %}
+    <li>
+      <span>{% if det %}TU {{ det }} · {% endif %}{{ slot.ui_label }} — <em class="muted">open</em></span>
+      {% if candidates[slot] %}
+      <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}" class="cell-assign">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="slot" value="{{ slot.value }}">
+        <input type="hidden" name="det_number" value="{{ det if det else '' }}">
+        <select name="person_id" required data-autosubmit data-slot="{{ slot.value }}" aria-label="Fill {{ slot.ui_label }}">
+          <option value="" disabled selected>— assign —</option>
+          {{ person_options(candidates[slot], None) }}
+        </select>
+        <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+      </form>
+      {% else %}
+      <span class="badge rejected">&#9888; Nobody is eligible for {{ slot.ui_label }} — the appointment rule, not the app, may be the problem.</span>
+      {% endif %}
+    </li>
+    {% endfor %}
   </ul>
-  {% else %}
+  {% if not period.slots and not open_positions %}
   <p class="muted">Nothing assigned yet.</p>
   {% endif %}
 </section>
@@ -63,40 +115,53 @@
   <p class="muted">Fills the fixed structure &mdash; HQ plus dets 1 and 2 &mdash; from people with no known conflict. Manual picks are kept; only auto-planned slots are replaced.</p>
 </section>
 
+{# The escape hatch from the fixed structure (decision (aa): auto-generation
+   sizes to HQ + dets 1-2, but a hand-built period of ANY shape renders). The
+   lines above can only express the structure's own positions, so a det 3 or a
+   fourth man in det 1 is keyed here. The person list is grouped by slot but not
+   filtered by the chosen slot: the server hard-blocks a mismatched pair. #}
 <section class="card">
-  <h2>Manual assignment</h2>
-  <p class="muted">One slot at a time, below. Anything assigned here is tagged &ldquo;manual&rdquo; in the list above and survives an auto-generate.</p>
-</section>
-
-{% for slot in ManningSlotType %}
-<section class="card">
-  <h2>Assign {{ slot.ui_label }}</h2>
+  <h2>Add extra slot</h2>
   <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="slot" value="{{ slot.value }}">
+    <label>Slot
+      <select name="slot">
+        {% for slot in ManningSlotType %}<option value="{{ slot.value }}">{{ slot.ui_label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Det <input type="number" name="det_number" min="1" value="{{ next_det }}"></label>
     <label>Person
-      <select name="person_id" data-slot="{{ slot.value }}">
-        {% for c in candidates[slot] %}
-        <option value="{{ c.person.id }}">
-          {%- if c.reasons %}&#9888; {% endif -%}
-          {{ c.person.rank.value }} {{ c.person.display_name }}
-          {%- if c.reasons %} — {{ c.reasons|join("; ") }}{% endif -%}
-        </option>
+      <select name="person_id">
+        {% for slot in ManningSlotType %}
+        <optgroup label="{{ slot.ui_label }}" data-slot="{{ slot.value }}">
+          {{ person_options(candidates[slot], None) }}
+        </optgroup>
         {% endfor %}
       </select>
     </label>
-    {% if slot.value in ("TU_DET_COMD", "DET_PERSONNEL") %}
-    <label>Det <input type="number" name="det_number" min="1" value="{{ next_det if slot.value == 'TU_DET_COMD' else (dets.keys()|list|last if dets else 1) }}"></label>
-    {% else %}
-    <input type="hidden" name="det_number" value="">
-    {% endif %}
-    <button type="submit" class="btn">Assign</button>
+    <button type="submit" class="btn">Add</button>
   </form>
-  {% if not candidates[slot] %}
-  <p class="flash flash-error">&#9888; Nobody is eligible for {{ slot.ui_label }} — the appointment rule, not the app, may be the problem.</p>
-  {% endif %}
+  <p class="muted">Leave Det blank for the two HQ slots.</p>
 </section>
-{% endfor %}
+
+{# Priority: who is owed the next activation period. Display only — generation
+   is deliberately fairness-free (decision (aa)); this is the S3's eye, not a
+   rule. Top of each list has waited longest. #}
+<section class="card">
+  <h2>Priority</h2>
+  <p class="muted">Longest since their last activation period, first.</p>
+  {% for slot in ManningSlotType %}
+  <h3>{{ slot.ui_label }} ({{ priority[slot]|length }})</h3>
+  <ul class="toollist">
+    {% for p, last in priority[slot] %}
+      <li><span>{{ p.rank.value }} {{ p.display_name }}</span><span class="chip plain">{{ priority_chip.gap(last, today) }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if not priority[slot] %}
+  <p class="muted">Nobody is eligible for {{ slot.ui_label }}.</p>
+  {% endif %}
+  {% endfor %}
+</section>
 
 <section class="card">
   <h2>Danger</h2>

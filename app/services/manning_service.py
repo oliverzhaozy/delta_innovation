@@ -162,16 +162,34 @@ _STRUCTURE_NEEDS = {
 }
 
 
-def _open_slots(existing) -> int:
-    """Structure vacancies before generation: the fixed shape's size minus the
-    surviving rows that already satisfy part of it. A row outside the generated
-    structure (a det-3 pick, a fourth man in det 1) satisfies nothing, exactly
-    as the pure generator treats it."""
+def _open_pairs(existing):
+    """The structure's vacancies as [(slot, det_number)], one entry per missing
+    body, in fill order. A row outside the generated structure (a det-3 pick, a
+    fourth man in det 1) satisfies nothing, exactly as the pure generator treats
+    it.
+
+    The builder renders one dropdown per entry and `_open_slots` counts the same
+    list, so the page's empty lines and the generate flash's number cannot
+    disagree."""
     filled = defaultdict(int)
     for slot, det_number, _person_id in existing:
         filled[(slot, det_number)] += 1
-    return sum(
-        max(0, needed - filled[pair]) for pair, needed in _STRUCTURE_NEEDS.items()
+    return [
+        pair
+        for pair, needed in _STRUCTURE_NEEDS.items()
+        for _ in range(max(0, needed - filled[pair]))
+    ]
+
+
+def _open_slots(existing) -> int:
+    return len(_open_pairs(existing))
+
+
+def open_positions(period):
+    """This period's still-empty structural positions as [(slot, det_number)] —
+    what the builder gives an empty in-place dropdown to."""
+    return _open_pairs(
+        [(row.slot, row.det_number, row.person_id) for row in period.slots]
     )
 
 
@@ -237,6 +255,40 @@ def assign_slot(period, slot, person, *, det_number):
         is_manual=True,
     )
     db.session.add(row)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise DuplicatePerson(
+            f"{person.display_name} is already in this period — one slot per person."
+        )
+    return row
+
+
+def reassign_slot(period, slot_id, person):
+    """Swap the holder of an existing slot in place — what the builder's row
+    dropdowns post to. Returns the row, or None when `slot_id` is not this
+    period's to edit (the object-level check: a role check proves who the S3 is,
+    not that this slot belongs to the period in the URL).
+
+    Same split as assign_slot: eligibility is LAW (hard block), conflicts stay
+    judgment flagged in the pick list, and the row becomes the S3's own pick so
+    regeneration leaves it standing. Re-picking the person already in the slot
+    is a defined no-op update, not an error — an accidental resubmit of an
+    unchanged select must not flash a duplicate.
+
+    The duplicate guard is UNIQUE(period, person) plus a caught IntegrityError,
+    never a pre-check SELECT."""
+    row = db.session.get(ManningSlot, slot_id)
+    if row is None or row.period_id != period.id:
+        return None
+    if not manning.slot_eligible(row.slot, person):
+        raise IneligibleSlot(
+            f"{person.display_name} can never hold {row.slot.ui_label} — "
+            "appointment rule."
+        )
+    row.person_id = person.id
+    row.is_manual = True
     try:
         db.session.commit()
     except IntegrityError:

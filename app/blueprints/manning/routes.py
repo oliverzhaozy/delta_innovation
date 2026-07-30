@@ -11,6 +11,7 @@ from flask_login import current_user
 from app.authz import require
 from app.blueprints.manning import bp
 from app.domain import policy
+from app.domain.dates import today_sgt
 from app.domain.types import ManningSlotType
 from app.extensions import db
 from app.models import ManningPeriod, Person
@@ -63,6 +64,9 @@ def builder(period_id):
     doc = manning_service.build_document(period)
     candidates = manning_service.candidates(period)
     checks = manning_service.conflict_map(period)
+    # One last-done fetch feeds both the priority card and the dropdown
+    # suffixes; the reference date is passed in, never read inside the ranking.
+    last_done = manning_service.last_manning_end()
     hq = [s for s in period.slots if s.det_number is None]
     det_numbers = sorted({s.det_number for s in period.slots if s.det_number is not None})
     dets = {
@@ -81,6 +85,10 @@ def builder(period_id):
         checks=checks,
         hq=hq,
         dets=dets,
+        open_positions=manning_service.open_positions(period),
+        priority=manning_service.slot_priority(last_done),
+        last_done=last_done,
+        today=today_sgt(),
         next_det=(max(det_numbers) + 1) if det_numbers else 1,
         ManningSlotType=ManningSlotType,
     )
@@ -125,6 +133,30 @@ def assign(period_id):
         flash(str(exc), "error")
         return redirect(url_for("manning.builder", period_id=period.id))
     flash("Assigned.", "success")
+    return redirect(url_for("manning.builder", period_id=period.id))
+
+
+@bp.route("/<int:period_id>/reassign", methods=["POST"])
+@require(policy.can_manage_manning)
+def reassign(period_id):
+    period = _get_period(period_id)
+    try:
+        slot_id = int(request.form.get("slot_id", ""))
+        person = db.session.get(Person, int(request.form.get("person_id", "")))
+    except ValueError:
+        abort(400)
+    if person is None:
+        abort(400)
+    try:
+        row = manning_service.reassign_slot(period, slot_id, person)
+    except manning_service.IneligibleSlot as exc:
+        abort(400, description=str(exc))
+    except manning_service.DuplicatePerson as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("manning.builder", period_id=period.id))
+    if row is None:
+        abort(404)
+    flash("Reassigned.", "success")
     return redirect(url_for("manning.builder", period_id=period.id))
 
 
