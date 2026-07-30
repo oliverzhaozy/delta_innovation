@@ -49,7 +49,13 @@ def _render_roster(month, *, pending_assign=None):
     one builder, so the conflict card renders over the very page the user was
     looking at."""
     view = duty_service.month_view(month)
-    people_by_id = {p.id: p for duty in Duty for p in view.pools[duty]}
+    # The dropdown reads the UNFILTERED pools: a platoon excused the COS pool is
+    # warned about on assign, not hidden (decision (ee)). Name lookup adds the
+    # current holders on top — an excused (or since-exempted) person can hold a
+    # slot, and a flag line must name them rather than print a bare id.
+    assignable = {p.id: p for duty in Duty for p in view.assignable_pools[duty]}
+    people_by_id = dict(assignable)
+    people_by_id.update({row.person_id: row.person for row in view.rows})
     adjacency_marks = {
         (person_id, d) for person_id, d1, d2 in view.violations.adjacency for d in (d1, d2)
     }
@@ -64,7 +70,7 @@ def _render_roster(month, *, pending_assign=None):
         month=month,
         view=view,
         Duty=Duty,
-        roster_people=sorted(people_by_id.values(), key=parade_sort_key),
+        roster_people=sorted(assignable.values(), key=parade_sort_key),
         people_by_id=people_by_id,
         adjacency_marks=adjacency_marks,
         adjacency_rows=adjacency_rows,

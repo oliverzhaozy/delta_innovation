@@ -12,14 +12,14 @@ from datetime import date, datetime
 from app.domain import roster
 from app.domain.types import (
     Appointment, Calendar, DayPart, Duty, LeaveType,
-    ParticipantCategory, Rank, RequestStatus, StatusType,
+    ParticipantCategory, PlatoonCategory, Rank, RequestStatus, StatusType,
 )
 from app.extensions import db
 from app.models import (
     DutyAssignment, DutyBlockedDay, Event, EventParticipant, LeaveRequest,
     Person, PublicHoliday, StatusEntry,
 )
-from app.services import duty_service, event_service
+from app.services import duty_service, event_service, platoon_service
 
 JULY = "2026-07"
 
@@ -422,6 +422,105 @@ def test_unblock_reports_whether_anything_was_blocked(app, make_person):
         assert duty_service.unblock_day(TUE_BLOCKED) is False
         assert db.session.query(DutyBlockedDay).count() == 0
         assert TUE_BLOCKED in duty_service.duty_days(TUE_BLOCKED, TUE_BLOCKED).active
+
+
+# --- decision (ee): a platoon excused the COS pool ------------------------------
+
+def excuse_platoon(number, category=PlatoonCategory.STC):
+    """Map `number` to a category that is OUT of the COS pool. Call inside an
+    app context."""
+    platoon_service.set_categories({category: (number, False)})
+
+
+def test_generation_never_picks_an_excused_platoon(app, make_person):
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=1)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+
+    with app.app_context():
+        excuse_platoon(2)
+        duty_service.generate_month(AUG, get_person("det1"))
+        holders = {r.person_id for r in db.session.query(DutyAssignment).all()}
+        assert holders == {get_person("det1").id}
+
+
+def test_excused_platoon_leaves_the_auto_pool_but_stays_assignable(app, make_person):
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=1)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+
+    with app.app_context():
+        excuse_platoon(2)
+        pools, _availability, _manual = duty_service.availability_for_month(AUG)
+        assert [p.username for p in pools[Duty.COS]] == ["det1"]
+        # CDO/S is NEVER platoon-filtered: the toggle is about COS, and platoon
+        # 2's PS does CDO/S regardless.
+        assert [p.username for p in pools[Duty.CDOS]] == ["ps2"]
+
+        view = duty_service.month_view(AUG)
+        assert [p.username for p in view.pools[Duty.COS]] == ["det1"]
+        # The unfiltered pool is what keeps the excused man keyable-with-a-warning.
+        assert [p.username for p in view.assignable_pools[Duty.COS]] == ["det1", "opr2"]
+
+
+def test_manual_assign_of_an_excused_platoon_warns_then_succeeds(app, make_person):
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+    make_person(username="ps3", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=3)
+    day = date(2026, 8, 5)
+
+    with app.app_context():
+        excuse_platoon(2)
+        with pytest.raises(duty_service.NeedsAvailabilityConfirm) as caught:
+            duty_service.assign(
+                day, Duty.COS, get_person("opr2"),
+                actor=get_person("ps3"), override_availability=False,
+            )
+        # Soft warning, NOT duty_exempt's hard block: the reason names the
+        # platoon and its category, and the confirm goes through.
+        assert caught.value.reasons == [
+            "Platoon 2 (STC) is excluded from the COS pool"
+        ]
+        assert db.session.query(DutyAssignment).count() == 0
+
+        row = duty_service.assign(
+            day, Duty.COS, get_person("opr2"),
+            actor=get_person("ps3"), override_availability=True,
+        )
+        assert row.is_manual is True
+        assert row.person_id == get_person("opr2").id
+
+
+def test_cdos_assignment_from_an_excused_platoon_does_not_even_warn(app, make_person):
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+
+    with app.app_context():
+        excuse_platoon(2)
+        row = duty_service.assign(
+            date(2026, 8, 5), Duty.CDOS, get_person("ps2"),
+            actor=get_person("ps2"), override_availability=False,
+        )
+        assert row.duty is Duty.CDOS
+
+
+def test_spread_violations_ignore_an_excused_platoon(app, make_person):
+    # A man sitting at zero picks is exactly what the spread rule surfaces — but
+    # an EXCUSED man is not in the auto pool at all, so he must not count.
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=1)
+    make_person(username="det2", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=2)
+
+    with app.app_context():
+        excuse_platoon(2)
+        duty_service.generate_month(AUG, get_person("det1"))
+        view = duty_service.month_view(AUG)
+        assert [p.username for p in view.pools[Duty.COS]] == ["det1"]
+        assert Duty.COS not in view.violations.spread
+        # Not vacuous: the very same rows DO breach once platoon 2 is back in
+        # the pool — det1 holds all 21 weekdays and det2 none.
+        platoon_service.set_categories({PlatoonCategory.STC: (2, True)})
+        assert duty_service.month_view(AUG).violations.spread[Duty.COS] == (0, 21)
 
 
 def test_pools_shape(app, make_person):

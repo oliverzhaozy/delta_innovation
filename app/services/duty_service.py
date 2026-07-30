@@ -16,6 +16,11 @@ event query of its own and passes nothing to `eligibility.available`'s frozen
 B4 event parameter, which keeps its empty default for P6.3's use. A
 Course-labelled TP event still blocks, but only as a course cover reaching this
 module through the shared absence fetch above.
+
+Decision (ee) 2026-07-30: a platoon category may be excused the COS pool. That
+carve-out is applied HERE, in `_pools`, because eligibility.py's API is frozen
+(B4) and the rule is keyed data, not law — the excused platoon's people are
+never auto-picked but stay manually assignable with a warning.
 """
 from calendar import monthrange
 from collections import defaultdict, namedtuple
@@ -28,7 +33,7 @@ from app.domain.dates import is_working_day, iter_days, today_sgt
 from app.domain.types import Duty
 from app.extensions import db
 from app.models import DutyAssignment, DutyBlockedDay, PublicHoliday
-from app.services import event_service, presence_service
+from app.services import event_service, platoon_service, presence_service
 
 
 def month_bounds(month: str):
@@ -66,6 +71,33 @@ def duty_days(first, last) -> DutyDays:
     return DutyDays(weekdays=weekdays, active=active, holidays=holidays, blocked=blocked)
 
 
+Pools = namedtuple("Pools", "auto assignable")
+
+
+def _pools(people) -> Pools:
+    """The ONE owner of "which pool is which" (decision (ee)).
+
+    `assignable` is the raw eligibility pool — who may LEGALLY hold the duty, and
+    therefore what the manual-assign dropdown offers. `auto` is that minus the
+    platoons excused the COS pool: who the generator may PICK, what the pools
+    panel shows, and what spread violations are measured over. CDO/S is never
+    filtered — the toggle is about COS, and a platoon's PS does CDO/S regardless.
+
+    Both call sites (availability_for_month, month_view) come through here so the
+    pool the page shows and the pool the generator uses cannot drift apart.
+    """
+    assignable = {duty: eligibility.pool(duty, people) for duty in Duty}
+    excluded = platoon_service.cos_excluded_platoons()
+    auto = {
+        duty: [
+            p for p in members
+            if duty is not Duty.COS or p.platoon not in excluded
+        ]
+        for duty, members in assignable.items()
+    }
+    return Pools(auto=auto, assignable=assignable)
+
+
 def _assignments_between(first, last):
     return (
         db.session.query(DutyAssignment)
@@ -77,7 +109,9 @@ def _assignments_between(first, last):
 
 def availability_for_month(month: str):
     """(pools, availability, manual_rows) for the month — the shaped inputs
-    the generator and the manual-assign checks (P4.6) both consume.
+    the generator and the manual-assign checks (P4.6) both consume. `pools` is
+    the AUTO-PICK pool, so its COS list already excludes the platoons excused
+    from that pool (decision (ee)).
 
     One shared absence fetch for the whole month; in-camp statuses do NOT
     block (in camp is not away — an in-camp status eats meals and can hold a
@@ -94,8 +128,7 @@ def availability_for_month(month: str):
     make a person look unavailable for the very slot being re-planned.
     """
     first, last = month_bounds(month)
-    people = event_service.active_roster()
-    pools = {duty: eligibility.pool(duty, people) for duty in Duty}
+    pools = _pools(event_service.active_roster()).auto
 
     leaves, statuses, courses = presence_service.fetch_absence_rows(first, last)
     absence_rows = defaultdict(list)
@@ -211,13 +244,23 @@ class NotBlockable(Exception):
 
 def _availability_reasons(person, day, duty):
     """Soft-warning reasons for putting `person` on (day, duty): covering
-    absence or held duty, adjacency (incl. cross-month tail), spread breach.
+    absence or held duty, an excused platoon (decision (ee)), adjacency (incl.
+    cross-month tail), spread breach.
     """
     month = day.strftime("%Y-%m")
     pools, availability, _manual = availability_for_month(month)
     reasons = []
     if not availability(person, day):
         reasons.append("covering absence or duty that day")
+    if duty is Duty.COS:
+        # Warn, never block (owner 2026-07-30): the excused platoon is the
+        # unit's convention, and the PS may still key someone from it.
+        category = platoon_service.cos_exclusions().get(person.platoon)
+        if category is not None:
+            reasons.append(
+                f"Platoon {person.platoon} ({category.value}) is excluded from "
+                "the COS pool"
+            )
     first, last = month_bounds(month)
     rows = _assignments_between(first, last)
     _counts, tail = _prior_month_inputs(first)
@@ -405,7 +448,8 @@ def _absent_assignment_ids(rows, first, last):
 DayRow = namedtuple("DayRow", "date holiday_name blocked")
 
 MonthView = namedtuple(
-    "MonthView", "first last days active rows by_slot pools violations absent_flags"
+    "MonthView",
+    "first last days active rows by_slot pools assignable_pools violations absent_flags",
 )
 
 
@@ -416,13 +460,17 @@ def month_view(month: str) -> MonthView:
     derived over those alone. `violations` and `absent_flags` are re-derived
     from the CURRENT rows on every call (the pure module's contract: re-flag
     after manual edits, not only after generation). Blanks are slots with NO
-    row — the DB never stores a None assignment."""
+    row — the DB never stores a None assignment.
+
+    Two pool fields, deliberately: `pools` is the auto-pick pool the panel and
+    the violations read; `assignable_pools` is the unfiltered eligibility pool
+    the manual-assign dropdown reads, so a platoon excused the COS pool stays
+    keyable-with-a-warning instead of vanishing from the page (decision (ee))."""
     first, last = month_bounds(month)
     dd = duty_days(first, last)
     rows = _assignments_between(first, last)
     by_slot = {(r.date, r.duty): r for r in rows}
-    people = event_service.active_roster()
-    pools = {duty: eligibility.pool(duty, people) for duty in Duty}
+    pools = _pools(event_service.active_roster())
     assignments = {
         (d, duty): (by_slot[(d, duty)].person_id if (d, duty) in by_slot else None)
         for d in dd.active
@@ -436,7 +484,8 @@ def month_view(month: str) -> MonthView:
             for d in dd.weekdays
         ],
         active=dd.active,
-        rows=rows, by_slot=by_slot, pools=pools,
-        violations=roster.violations(assignments, pools, prior_tail=prior_tail),
+        rows=rows, by_slot=by_slot,
+        pools=pools.auto, assignable_pools=pools.assignable,
+        violations=roster.violations(assignments, pools.auto, prior_tail=prior_tail),
         absent_flags=_absent_assignment_ids(rows, first, last),
     )

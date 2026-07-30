@@ -8,11 +8,11 @@ import re
 from datetime import date
 
 from app.domain.types import (
-    Appointment, DayPart, Duty, LeaveType, Rank, RequestStatus,
+    Appointment, DayPart, Duty, LeaveType, PlatoonCategory, Rank, RequestStatus,
 )
 from app.extensions import db
 from app.models import DutyAssignment, DutyBlockedDay, LeaveRequest, Person, PublicHoliday
-from app.services import duty_service
+from app.services import duty_service, platoon_service
 from tests.conftest import login
 
 AUG = "2026-08"
@@ -330,6 +330,92 @@ def test_assign_on_a_weekend_is_400(app, client, make_person):
     assert resp.status_code == 400  # a Saturday carries no duty — not confirmable
     with app.app_context():
         assert db.session.query(DutyAssignment).count() == 0
+
+
+# --- decision (ee): an excused platoon warns, it never disappears -----------------
+
+def make_excused_cast(app, make_person):
+    """A platoon-1 Det Comd, a platoon-2 Opr, and a roster-managing PS, with
+    platoon 2 excused the COS pool."""
+    make_person(username="det1", display_name="Alpha Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="opr2", display_name="Bravo Opr", rank=Rank.CPL,
+                appointment=Appointment.OPR, platoon=2)
+    make_person(username="ps3", display_name="Delta Ps", rank=Rank.TWO_SG,
+                appointment=Appointment.PS, platoon=3)
+    with app.app_context():
+        platoon_service.set_categories({PlatoonCategory.STC: (2, False)})
+
+
+def test_excused_platoon_out_of_the_pool_panel_but_in_the_assign_dropdown(
+    app, client, make_person
+):
+    make_excused_cast(app, make_person)
+    login(client, "ps3")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    # The panel shows the AUTO-PICK pool, so the count and the tiny-pool warning
+    # tell the truth about who generation can choose.
+    pool_block = re.search(r"<h2>COS pool \(1\)</h2>.*?</ul>", html, re.S).group(0)
+    assert "Alpha Det" in pool_block
+    assert "Bravo Opr" not in pool_block
+    # ...but the dropdown reads the UNFILTERED pool: allowed with a warning, not
+    # hidden. Still parade-ordered (PS, Det Comd, Opr).
+    select = re.search(r'<select name="person_id">.*?</select>', html, re.S).group(0)
+    assert re.findall(r'<option value="\d+">([^<]+)</option>', select) == [
+        "2SG Delta Ps",
+        "3SG Alpha Det",
+        "CPL Bravo Opr",
+    ]
+
+
+def test_assign_from_an_excused_platoon_warns_then_confirms(app, client, make_person):
+    make_excused_cast(app, make_person)
+    login(client, "ps3")
+
+    resp = client.post(
+        "/duty/roster/assign", data=assign_form("opr2", app, date(2026, 8, 5))
+    )
+    assert resp.status_code == 200
+    assert "Platoon 2 (STC) is excluded from the COS pool" in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+
+    resp = client.post(
+        "/duty/roster/assign",
+        data=assign_form("opr2", app, date(2026, 8, 5), confirm="1"),
+        follow_redirects=True,
+    )
+    assert "Assigned." in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.query(DutyAssignment).one().person_id == pid(app, "opr2")
+
+
+def test_an_excused_holder_renders_on_the_grid_and_in_the_flags(app, client, make_person):
+    make_excused_cast(app, make_person)
+    plant_assignment(app, "opr2", date(2026, 8, 5), Duty.COS, is_manual=True)
+    plant_assignment(app, "opr2", date(2026, 8, 6), Duty.COS, is_manual=True)
+    login(client, "ps3")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "CPL Bravo Opr" in html
+    assert "Bravo Opr: 05 Aug &amp; 06 Aug adjacent" in html
+
+
+def test_a_duty_exempt_holder_is_still_named_in_the_flags(app, client, make_person):
+    # The name lookup adds the CURRENT holders on top of the pools: a person
+    # carved out of every pool (duty_exempt) who still holds rows must be named,
+    # not printed as a bare id.
+    make_full_cast(make_person)
+    make_person(username="det_x", display_name="Exempt Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1, duty_exempt=True)
+    plant_assignment(app, "det_x", date(2026, 8, 5), Duty.COS, is_manual=True)
+    plant_assignment(app, "det_x", date(2026, 8, 6), Duty.COS, is_manual=True)
+    login(client, "ps2")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "Exempt Det: 05 Aug &amp; 06 Aug adjacent" in html
+    assert "Person #" not in html
 
 
 def test_block_removes_the_day_s_holders_and_unblock_restores_the_slots(
