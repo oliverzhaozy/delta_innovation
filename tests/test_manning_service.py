@@ -314,3 +314,87 @@ def test_thin_pools_report_the_shortfall_in_the_counts(app, make_person):
         assert (filled, open_before) == (5, STRUCTURE_TOTAL)
         assert filled < open_before
         assert len(slots_of(period_id)) == 5
+
+
+# --- priority: longest since the last activation period (display only) --------------
+
+def make_period_between(app, start, end, creator="oc"):
+    with app.app_context():
+        period = ManningPeriod(
+            start_date=start, end_date=end, created_by_id=pid(app, creator),
+        )
+        db.session.add(period)
+        db.session.commit()
+        return period.id
+
+
+def put_in_period(app, period_id, username, slot, *, det_number=None):
+    with app.app_context():
+        db.session.add(ManningSlot(
+            period_id=period_id, slot=slot, person_id=pid(app, username),
+            det_number=det_number, is_manual=True,
+        ))
+        db.session.commit()
+
+
+def test_last_manning_end_is_the_max_end_date_per_person(app, make_person):
+    make_cast(make_person)
+    old = make_period_between(app, date(2026, 3, 2), date(2026, 3, 8))
+    new = make_period_between(app, date(2026, 5, 4), date(2026, 5, 10))
+    put_in_period(app, old, "opr1", ManningSlotType.DET_PERSONNEL, det_number=1)
+    put_in_period(app, new, "opr1", ManningSlotType.DET_PERSONNEL, det_number=1)
+    put_in_period(app, old, "det1", ManningSlotType.DET_PERSONNEL, det_number=2)
+
+    with app.app_context():
+        last = manning_service.last_manning_end()
+        assert last[pid(app, "opr1")] == date(2026, 5, 10)   # the later period
+        assert last[pid(app, "det1")] == date(2026, 3, 8)
+        # Never-in-a-period people are absent from the map, not zero-dated.
+        assert pid(app, "pc1") not in last
+        assert isinstance(last[pid(app, "opr1")], date)
+
+
+def test_slot_priority_ranks_eligible_people_never_first_then_oldest(app, make_person):
+    make_cast(make_person)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR,
+                display_name="Second Operator")
+    old = make_period_between(app, date(2026, 3, 2), date(2026, 3, 8))
+    new = make_period_between(app, date(2026, 5, 4), date(2026, 5, 10))
+    put_in_period(app, old, "opr1", ManningSlotType.DET_PERSONNEL, det_number=1)
+    put_in_period(app, new, "det1", ManningSlotType.DET_PERSONNEL, det_number=1)
+
+    with app.app_context():
+        ranking = manning_service.slot_priority(manning_service.last_manning_end())
+        assert [
+            (p.username, last)
+            for p, last in ranking[ManningSlotType.DET_PERSONNEL]
+        ] == [
+            ("opr2", None), ("opr1", date(2026, 3, 8)), ("det1", date(2026, 5, 10)),
+        ]
+        # Every slot is a key, and the trap holds here too: a company Det Comd
+        # ranks for Det Personnel, never for the slot labelled DET COMD.
+        assert set(ranking) == set(ManningSlotType)
+        assert [p.username for p, _last in ranking[ManningSlotType.TU_DET_COMD]] == ["p2ic3"]
+
+
+def test_candidates_order_by_priority_inside_each_conflict_group(app, make_person):
+    make_cast(make_person)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR,
+                display_name="Second Operator")
+    done = make_period_between(app, date(2026, 5, 4), date(2026, 5, 10))
+    put_in_period(app, done, "opr1", ManningSlotType.DET_PERSONNEL, det_number=1)
+    period_id = make_period(app)
+    with app.app_context():
+        # det1 conflicts, so he sorts last however long he has waited — priority
+        # only decides WITHIN a conflict group.
+        db.session.add(LeaveRequest(
+            person_id=pid(app, "det1"), type=LeaveType.OFF,
+            start_date=date(2026, 7, 6), end_date=date(2026, 7, 6),
+            day_part=DayPart.FULL, status=RequestStatus.APPROVED,
+        ))
+        db.session.commit()
+
+        period = db.session.get(ManningPeriod, period_id)
+        rows = manning_service.candidates(period)[ManningSlotType.DET_PERSONNEL]
+        assert [c.person.username for c in rows] == ["opr2", "opr1", "det1"]
+        assert rows[-1].status is ManningConflict.CONFLICT

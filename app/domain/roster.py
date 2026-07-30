@@ -11,7 +11,11 @@ at 36 people an unfair Tuesday is a conversation, not an optimization problem.
 No solver, no randomness — identical inputs generate identical rosters.
 
 `violations()` is deliberately standalone: the roster page re-flags on every
-render, after manual edits, not only after generation.
+render, after manual edits, not only after generation. `priority_ranking()` is
+standalone for the opposite reason — it is DISPLAY ONLY, a "who is owed the
+next turn" ordering for the pages (duty pools panel, TU manning priority
+card); no generator reads it, so ranking and picking can never quietly become
+the same rule.
 
 `prior_tail` = (day, duty, person_id) rows from the LAST 3 CALENDAR DAYS of
 the previous month (Fri -> Mon adjacency can reach 3 days back); `prior_counts`
@@ -80,6 +84,30 @@ def generate(days, pools, availability, prior_counts=None, prior_tail=()):
             duty_dates[pick.id].add(day)
 
     return assignments
+
+
+def priority_ranking(pool, last_dates):
+    """[(person, last_date | None)] — who most needs this duty next, first.
+
+    `pool` = [person, ...] in roster (parade) order; `last_dates` =
+    {person_id: date} of each person's most recent turn. Sort key, smallest
+    first: (has_a_date, last_date, pool_position) — never-done people lead in
+    pool order, then oldest date first.
+
+    FUTURE dates belong in `last_dates` and are not special-cased: an ascending
+    date sort sinks someone already slated next week below everyone whose last
+    turn is behind them, which is exactly the wanted answer. Display-only —
+    generate() keeps its own fairness tuple and never consults this.
+    """
+    ranked = sorted(
+        enumerate(pool),
+        key=lambda indexed: (
+            last_dates.get(indexed[1].id) is not None,
+            last_dates.get(indexed[1].id) or date.min,
+            indexed[0],
+        ),
+    )
+    return [(person, last_dates.get(person.id)) for _position, person in ranked]
 
 
 def violations(assignments, pools, prior_tail=()):

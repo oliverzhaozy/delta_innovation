@@ -158,6 +158,32 @@ def availability_for_month(month: str):
     return pools, availability, manual
 
 
+def last_duty_dates():
+    """{Duty: {person_id: date}} — each person's most recent date per duty, over
+    EVERY assignment row. One grouped query, never a per-person lookup: the
+    priority panel and the per-cell dropdowns of a 21-row grid read the same map.
+
+    Future rows count: someone already slated next week has their turn on the
+    books and is not owed another. How far back the map can see is bounded by
+    the annual retention purge — a duty older than that horizon reads as
+    "never". Acceptable because this map is display-only (domain/roster's
+    `priority_ranking` is not part of generation).
+    """
+    rows = (
+        db.session.query(
+            DutyAssignment.duty,
+            DutyAssignment.person_id,
+            db.func.max(DutyAssignment.date),
+        )
+        .group_by(DutyAssignment.duty, DutyAssignment.person_id)
+        .all()
+    )
+    result = {duty: {} for duty in Duty}
+    for duty, person_id, last in rows:
+        result[duty][person_id] = last
+    return result
+
+
 def _prior_month_inputs(first):
     """Previous-month history for the generator (A7): counts = the whole
     previous month; tail = its last 3 calendar days (Fri->Mon adjacency can
@@ -449,7 +475,8 @@ DayRow = namedtuple("DayRow", "date holiday_name blocked")
 
 MonthView = namedtuple(
     "MonthView",
-    "first last days active rows by_slot pools assignable_pools violations absent_flags",
+    "first last days active rows by_slot pools assignable_pools priority "
+    "assignable_priority unavailable violations absent_flags",
 )
 
 
@@ -465,18 +492,27 @@ def month_view(month: str) -> MonthView:
     Two pool fields, deliberately: `pools` is the auto-pick pool the panel and
     the violations read; `assignable_pools` is the unfiltered eligibility pool
     the manual-assign dropdown reads, so a platoon excused the COS pool stays
-    keyable-with-a-warning instead of vanishing from the page (decision (ee))."""
+    keyable-with-a-warning instead of vanishing from the page (decision (ee)).
+    `priority`/`assignable_priority` are those same two pools re-ordered by
+    "longest since their last turn" for the panel and the dropdowns.
+
+    `unavailable` = {(person_id, date)} for the grid's ⚠ marks, computed with
+    the SAME availability closure the generator uses (one shared absence fetch,
+    no second derivation). It is a hint only: `assign` re-checks and is the
+    authority on whether a pick needs confirming."""
     first, last = month_bounds(month)
     dd = duty_days(first, last)
     rows = _assignments_between(first, last)
     by_slot = {(r.date, r.duty): r for r in rows}
     pools = _pools(event_service.active_roster())
+    _auto_pools, availability, _manual = availability_for_month(month)
     assignments = {
         (d, duty): (by_slot[(d, duty)].person_id if (d, duty) in by_slot else None)
         for d in dd.active
         for duty in Duty
     }
     _counts, prior_tail = _prior_month_inputs(first)
+    last_dates = last_duty_dates()
     return MonthView(
         first=first, last=last,
         days=[
@@ -486,6 +522,21 @@ def month_view(month: str) -> MonthView:
         active=dd.active,
         rows=rows, by_slot=by_slot,
         pools=pools.auto, assignable_pools=pools.assignable,
+        priority={
+            duty: roster.priority_ranking(members, last_dates[duty])
+            for duty, members in pools.auto.items()
+        },
+        assignable_priority={
+            duty: roster.priority_ranking(members, last_dates[duty])
+            for duty, members in pools.assignable.items()
+        },
+        unavailable={
+            (person.id, day)
+            for members in pools.assignable.values()
+            for person in members
+            for day in dd.active
+            if not availability(person, day)
+        },
         violations=roster.violations(assignments, pools.auto, prior_tail=prior_tail),
         absent_flags=_absent_assignment_ids(rows, first, last),
     )

@@ -11,7 +11,7 @@ from collections import defaultdict, namedtuple
 
 from sqlalchemy.exc import IntegrityError
 
-from app.domain import manning
+from app.domain import manning, roster
 from app.domain.types import ManningSlotType
 from app.extensions import db
 from app.models import ManningPeriod, ManningSlot, OverseasDeclaration
@@ -87,19 +87,64 @@ def conflict_map(period):
     }
 
 
+def last_manning_end():
+    """{person_id: date} — each person's most recent manning period END date,
+    over every slot row they have ever held. One grouped query behind both the
+    builder's priority card and its dropdown suffixes; never a per-person
+    lookup.
+
+    Future periods count (a man already on next month's activation is not owed
+    the next one), and the lookback is bounded by the annual retention purge —
+    display-only, so an over-the-horizon period reading as "never" is
+    acceptable."""
+    rows = (
+        db.session.query(ManningSlot.person_id, db.func.max(ManningPeriod.end_date))
+        .join(ManningPeriod, ManningSlot.period_id == ManningPeriod.id)
+        .group_by(ManningSlot.person_id)
+        .all()
+    )
+    return {person_id: last for person_id, last in rows}
+
+
 def candidates(period):
     """{slot_type: [Candidate]} — eligible people only (the trap lives in
-    domain/manning.slot_eligible), no-known-conflict first, then roster
-    order. Conflicted candidates are flagged, never hidden."""
+    domain/manning.slot_eligible), no-known-conflict first, then longest since
+    their last activation period. Conflicted candidates are flagged, never
+    hidden.
+
+    Two sorts, in this order deliberately: `priority_ranking` orders the whole
+    eligible list, then a STABLE sort by conflict lifts the clean names — so
+    priority decides within each conflict group and conflict-last still wins
+    overall."""
     people = event_service.active_roster()
     checks = conflict_map(period)
+    last_ends = last_manning_end()
     result = {}
     for slot in ManningSlotType:
         eligible = [p for p in people if manning.slot_eligible(slot, p)]
-        rows = [Candidate(p, checks[p.id][0], checks[p.id][1]) for p in eligible]
+        rows = [
+            Candidate(p, checks[p.id][0], checks[p.id][1])
+            for p, _last in roster.priority_ranking(eligible, last_ends)
+        ]
         rows.sort(key=lambda c: c.status is manning.ManningConflict.CONFLICT)
         result[slot] = rows
     return result
+
+
+def slot_priority(last_ends):
+    """{slot_type: [(person, last_end | None)]} — per slot, who is owed the next
+    activation period. Display only: generation is deliberately fairness-free
+    (decision (aa)), so this ranks for the S3's eye and nothing else reads it.
+
+    Takes the map rather than fetching it so the builder's one
+    `last_manning_end()` call feeds both this card and the dropdown suffixes."""
+    people = event_service.active_roster()
+    return {
+        slot: roster.priority_ranking(
+            [p for p in people if manning.slot_eligible(slot, p)], last_ends
+        )
+        for slot in ManningSlotType
+    }
 
 
 # The generated structure's per-pair sizes, rebuilt from domain/manning's

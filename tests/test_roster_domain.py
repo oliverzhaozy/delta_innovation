@@ -10,7 +10,9 @@ No solver, no randomness: same inputs, same roster, forever.
 from datetime import date
 from types import SimpleNamespace
 
-from app.domain.roster import adjacent_duty_days, generate, violations
+from app.domain.roster import (
+    adjacent_duty_days, generate, priority_ranking, violations,
+)
 from app.domain.types import Duty
 
 # September 2026: Tue 1st; first Friday the 4th, following Monday the 7th.
@@ -167,3 +169,47 @@ def test_violations_reflags_after_manual_edits_not_only_after_generation():
     report = violations(manual, pools)
     assert (1, SEP(1), SEP(2)) in report.adjacency
     assert (SEP(3), Duty.COS) in report.blanks
+
+
+# --- priority_ranking: display-only "who is owed the next turn" ----------------
+
+def test_never_done_lead_in_pool_order_then_oldest_first():
+    pool = [person(1), person(2), person(3), person(4)]
+    last = {2: SEP(20), 4: SEP(1)}
+    # 1 and 3 never did it (pool order between them), then 4 (older), then 2.
+    assert priority_ranking(pool, last) == [
+        (pool[0], None), (pool[2], None), (pool[3], SEP(1)), (pool[1], SEP(20)),
+    ]
+
+
+def test_a_scheduled_future_turn_sinks_to_the_bottom():
+    # The whole point of counting future rows: person 2 is already on next
+    # week's roster, so person 1 — six weeks idle — is owed this one.
+    pool = [person(1), person(2)]
+    last = {1: date(2026, 7, 20), 2: date(2026, 9, 30)}
+    assert [p.id for p, _last in priority_ranking(pool, last)] == [1, 2]
+
+
+def test_equal_dates_keep_pool_position():
+    pool = [person(7), person(3), person(5)]
+    last = {7: SEP(4), 3: SEP(4), 5: SEP(4)}
+    assert [p.id for p, _last in priority_ranking(pool, last)] == [7, 3, 5]
+
+
+def test_ranking_crosses_month_and_year_boundaries_by_date_not_by_day_number():
+    # Day-of-month arithmetic would put the 30th after the 2nd; only real date
+    # comparison gets December-then-January right.
+    pool = [person(1), person(2), person(3)]
+    last = {1: date(2026, 1, 2), 2: date(2025, 12, 30), 3: date(2026, 1, 30)}
+    assert [p.id for p, _last in priority_ranking(pool, last)] == [2, 1, 3]
+
+
+def test_a_stranger_in_the_map_never_joins_the_pool():
+    # last_dates is keyed by person id across the WHOLE table; someone no longer
+    # eligible (or exempt) must not reappear in a ranking of this pool.
+    pool = [person(1)]
+    assert priority_ranking(pool, {1: SEP(3), 99: SEP(1)}) == [(pool[0], SEP(3))]
+
+
+def test_empty_pool_ranks_to_nothing():
+    assert priority_ranking([], {1: SEP(3)}) == []

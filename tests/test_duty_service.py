@@ -536,3 +536,91 @@ def test_pools_shape(app, make_person):
         # The known gap: a 3SG PS satisfies neither rule and appears in NO pool.
         for members in pools.values():
             assert "ps3" not in [p.username for p in members]
+
+
+# --- last-done map + the month_view fields the pages read (priority counters) -----
+
+def plant_duty(app, username, day, duty=Duty.COS):
+    with app.app_context():
+        person_id = get_person(username).id
+        db.session.add(DutyAssignment(
+            date=day, duty=duty, person_id=person_id, is_manual=True,
+            created_by_id=person_id,
+        ))
+        db.session.commit()
+
+
+def test_last_duty_dates_is_the_max_per_person_per_duty(app, make_person):
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    plant_duty(app, "det1", date(2026, 7, 6))
+    plant_duty(app, "det1", date(2026, 7, 20))     # the later one wins
+    plant_duty(app, "det1", date(2026, 7, 8))
+    plant_duty(app, "ps2", date(2026, 7, 7), duty=Duty.CDOS)
+
+    with app.app_context():
+        last = duty_service.last_duty_dates()
+        # Both duties are always keys, even with no rows at all for one of them.
+        assert set(last) == set(Duty)
+        assert last[Duty.COS] == {get_person("det1").id: date(2026, 7, 20)}
+        assert last[Duty.CDOS] == {get_person("ps2").id: date(2026, 7, 7)}
+        # A real date object, not the string SQLite stores.
+        assert isinstance(last[Duty.COS][get_person("det1").id], date)
+        # Never-done people are ABSENT from the map, not zero-dated.
+        assert get_person("opr2").id not in last[Duty.COS]
+
+
+def test_last_duty_dates_counts_future_rows(app, make_person):
+    # A turn already on the books is a turn: the map must see next month's row,
+    # which is what sinks that person down the priority ranking.
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD)
+    plant_duty(app, "det1", date(2026, 12, 1))
+
+    with app.app_context():
+        assert duty_service.last_duty_dates()[Duty.COS] == {
+            get_person("det1").id: date(2026, 12, 1)
+        }
+
+
+def test_month_view_priority_ranks_the_auto_pool_and_dropdowns_the_assignable_one(
+    app, make_person
+):
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=1)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+    plant_duty(app, "det1", date(2026, 7, 6))
+
+    with app.app_context():
+        excuse_platoon(2)
+        view = duty_service.month_view(JULY)
+        # The panel describes the rotation the GENERATOR runs, so the excused
+        # platoon is absent from it...
+        assert [(p.username, last) for p, last in view.priority[Duty.COS]] == [
+            ("det1", date(2026, 7, 6))
+        ]
+        # ...while the dropdown keeps them, never-done first.
+        assert [(p.username, last) for p, last in view.assignable_priority[Duty.COS]] == [
+            ("opr2", None), ("det1", date(2026, 7, 6)),
+        ]
+        assert view.priority[Duty.CDOS] == []
+
+
+def test_month_view_unavailable_marks_cover_the_assignable_pool(app, make_person):
+    # The ⚠ mark must reach an EXCUSED person too — they are still keyable, so
+    # the warning has to be visible before the click, not only after it.
+    make_person(username="det1", rank=Rank.THREE_SG, appointment=Appointment.DET_COMD,
+                platoon=1)
+    make_person(username="opr2", rank=Rank.CPL, appointment=Appointment.OPR, platoon=2)
+    away = date(2026, 7, 8)
+    plant_leave(app, pid(app, "opr2"), away)
+    plant_leave(app, pid(app, "det1"), date(2026, 7, 9))
+
+    with app.app_context():
+        excuse_platoon(2)
+        view = duty_service.month_view(JULY)
+        assert (get_person("opr2").id, away) in view.unavailable
+        assert (get_person("det1").id, date(2026, 7, 9)) in view.unavailable
+        assert (get_person("det1").id, away) not in view.unavailable
+        # Weekends and holidays are not duty days, so they carry no mark at all.
+        assert not any(d.weekday() >= 5 for _person_id, d in view.unavailable)
