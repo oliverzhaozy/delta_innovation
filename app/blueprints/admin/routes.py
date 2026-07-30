@@ -8,19 +8,24 @@ from sqlalchemy.orm import joinedload
 from app.authz import require
 from app.blueprints.admin import bp
 from app.blueprints.admin.forms import PersonForm
-from app.domain import policy
+from app.domain import platoons, policy
 from app.domain.dates import today_sgt
 from app.domain.types import (
     Appointment,
     CompanyRole,
     PENDING_STATUSES,
+    PlatoonCategory,
     Rank,
     RequestStatus,
     Service,
 )
 from app.extensions import db
 from app.models import LeaveRequest, Person, PersonAudit
-from app.services import event_service, person_service
+from app.services import event_service, person_service, platoon_service
+
+# The platoon numbers the category form may key. Person.platoon is a bare
+# nullable Integer, so the accepted set lives here, beside the <select> options.
+_PLATOONS = (1, 2, 3)
 
 # The person fields _apply_form writes — the exact set the edit route audits.
 _AUDIT_FIELDS = (
@@ -85,7 +90,49 @@ def _username_taken(username, exclude_id=None):
 def people():
     # Every person row is a serving member since decision (dd), so this is just
     # THE roster in its one canonical order — read from the function that owns it.
-    return render_template("admin/people.html", people=event_service.active_roster())
+    # The section split is the domain's (decision (ee)); the view stays thin.
+    roster = event_service.active_roster()
+    category_rows = platoon_service.category_rows()
+    return render_template(
+        "admin/people.html",
+        people=roster,
+        category_rows=category_rows,
+        platoon_options=_PLATOONS,
+        groups=platoons.group_people(roster, category_rows),
+    )
+
+
+def _parse_category_form(form):
+    """{PlatoonCategory: (platoon or None, in_cos_pool)} from raw form fields.
+    Raises ValueError on anything the <select> could not have produced, so the
+    route can 400 rather than store a platoon that does not exist."""
+    assignments = {}
+    for category in PlatoonCategory:
+        raw = (form.get(f"platoon_{category.name}") or "").strip()
+        platoon = int(raw) if raw else None
+        if platoon is not None and platoon not in _PLATOONS:
+            raise ValueError(f"platoon {platoon} is not 1-3")
+        assignments[category] = (
+            platoon,
+            form.get(f"in_cos_pool_{category.name}") == "1",
+        )
+    return assignments
+
+
+@bp.route("/people/platoon-categories", methods=["POST"])
+@require(policy.can_manage_people)
+def platoon_categories():
+    try:
+        assignments = _parse_category_form(request.form)
+    except ValueError:
+        abort(400)
+    try:
+        platoon_service.set_categories(assignments)
+    except platoon_service.DuplicatePlatoon as exc:
+        flash(str(exc), "error")
+    else:
+        flash("Platoon categories saved.", "success")
+    return redirect(url_for("admin.people"))
 
 
 @bp.route("/audit")

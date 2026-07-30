@@ -1,8 +1,11 @@
 import datetime
 
-from app.domain.types import Appointment, DayPart, LeaveType, Rank, RequestStatus
+from app.domain.types import (
+    Appointment, DayPart, LeaveType, PlatoonCategory, Rank, RequestStatus,
+)
 from app.extensions import db
 from app.models import LeaveRequest, Person
+from app.services import platoon_service
 from tests.conftest import login
 
 
@@ -52,6 +55,130 @@ def test_people_page_is_parade_ordered(client, make_person):
         for name in ("Aaa Oc", "Zed Two", "Yan Sm", "Bee P2ic", "Ace P2ic")
     ]
     assert positions == sorted(positions)
+
+
+# --- decision (ee): platoon-category sections + the config card -------------------
+
+DEFAULT_MAPPING = {
+    PlatoonCategory.STC: (2, False),
+    PlatoonCategory.SENIOR: (3, True),
+    PlatoonCategory.JUNIOR: (1, True),
+    PlatoonCategory.BABY: (None, True),
+}
+
+
+def make_platoon_cast(make_person):
+    make_person(username="cat_oc", display_name="Cee Oc", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None)
+    make_person(username="cat_opr1", display_name="One Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    make_person(username="cat_opr2", display_name="Two Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=2)
+    make_person(username="cat_opr3", display_name="Three Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=3)
+
+
+def category_state():
+    return {
+        row.category: (row.platoon, row.in_cos_pool)
+        for row in platoon_service.category_rows()
+    }
+
+
+def test_people_page_groups_by_platoon_category(app, client, make_person):
+    make_platoon_cast(make_person)
+    login(client, make_s3(make_person))
+    with app.app_context():
+        platoon_service.set_categories(DEFAULT_MAPPING)
+
+    body = client.get("/admin/people").get_data(as_text=True)
+    headers = (
+        "<h2>Command</h2>",
+        "STC &mdash; Platoon 2 &middot; Excluded from COS pool",
+        "Senior &mdash; Platoon 3 &middot; In COS pool",
+        "Junior &mdash; Platoon 1 &middot; In COS pool",
+        "<h2>Baby</h2>",
+    )
+    # Sections in PlatoonCategory declaration order, command first.
+    positions = [body.index(header) for header in headers]
+    assert positions == sorted(positions)
+    # An empty category keeps its header AND says why it is empty.
+    assert "No platoon assigned." in body
+    # People follow their platoon's section, not the flat roster order.
+    assert body.index("Two Opr") < body.index("Three Opr") < body.index("One Opr")
+    assert body.index("Cee Oc") < body.index("Two Opr")
+
+
+def test_people_page_shows_an_unmapped_platoon_rather_than_hiding_it(app, client, make_person):
+    make_platoon_cast(make_person)
+    login(client, make_s3(make_person))
+    with app.app_context():
+        platoon_service.set_categories({
+            PlatoonCategory.STC: (2, False),
+            PlatoonCategory.SENIOR: (None, True),
+            PlatoonCategory.JUNIOR: (1, True),
+            PlatoonCategory.BABY: (None, True),
+        })
+
+    body = client.get("/admin/people").get_data(as_text=True)
+    assert "Platoon 3 &mdash; no category" in body
+    assert body.index("Platoon 3 &mdash; no category") < body.index("Three Opr")
+
+
+def test_people_page_shows_a_platoon_less_trooper_in_its_own_section(app, client, make_person):
+    make_person(username="cat_stray", display_name="Stray Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=None)
+    login(client, make_s3(make_person))
+
+    body = client.get("/admin/people").get_data(as_text=True)
+    assert "<h2>No platoon</h2>" in body
+    assert body.index("<h2>No platoon</h2>") < body.index("Stray Opr")
+
+
+def test_platoon_categories_post_saves_the_mapping(app, client, make_person):
+    login(client, make_s3(make_person))
+
+    resp = client.post(
+        "/admin/people/platoon-categories",
+        data={
+            "platoon_STC": "2",
+            "platoon_SENIOR": "3", "in_cos_pool_SENIOR": "1",
+            "platoon_JUNIOR": "1", "in_cos_pool_JUNIOR": "1",
+            "platoon_BABY": "", "in_cos_pool_BABY": "1",
+        },
+        follow_redirects=True,
+    )
+    assert b"Platoon categories saved." in resp.data
+    with app.app_context():
+        # An unticked checkbox posts nothing at all — that is the excusal.
+        assert category_state() == DEFAULT_MAPPING
+        assert platoon_service.cos_excluded_platoons() == frozenset({2})
+
+
+def test_platoon_categories_post_rejects_a_duplicate_platoon(app, client, make_person):
+    login(client, make_s3(make_person))
+
+    resp = client.post(
+        "/admin/people/platoon-categories",
+        data={"platoon_STC": "2", "platoon_SENIOR": "2", "platoon_JUNIOR": "1"},
+        follow_redirects=True,
+    )
+    assert b"only one category" in resp.data
+    with app.app_context():
+        # Rejected whole: no half-written mapping.
+        assert all(platoon is None for platoon, _flag in category_state().values())
+
+
+def test_platoon_categories_post_rejects_a_platoon_outside_1_to_3(app, client, make_person):
+    login(client, make_s3(make_person))
+    resp = client.post("/admin/people/platoon-categories", data={"platoon_STC": "9"})
+    assert resp.status_code == 400
+
+
+def test_opr_cannot_key_platoon_categories(client, make_person):
+    login(client, make_person(username="opr_cat"))
+    resp = client.post("/admin/people/platoon-categories", data={})
+    assert resp.status_code == 403
 
 
 def test_create_person_end_to_end(app, client, make_person):

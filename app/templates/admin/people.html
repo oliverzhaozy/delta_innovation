@@ -1,6 +1,35 @@
 {% extends "base.html" %}
 {% block title %}People{% endblock %}
 
+{# One row source for every section below — the columns and badges must not
+   drift between Command, the four categories, and the leftover groups. #}
+{% macro person_table(rows) %}
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th>Name</th><th>Rank</th><th>Appt</th><th>Pl</th><th>Role</th><th>Flags</th></tr>
+    </thead>
+    <tbody>
+      {% for p in rows %}
+      <tr>
+        <td><a href="{{ url_for('admin.person_edit', person_id=p.id) }}">{{ p.display_name }}</a></td>
+        <td>{{ p.rank.value }}</td>
+        <td>{{ p.appointment.label }}</td>
+        <td>{{ p.platoon or "—" }}</td>
+        <td>{{ p.company_role.value if p.company_role else "—" }}</td>
+        <td>
+          {% if p.stay_out %}<span class="badge pending">Stay out</span>{% endif %}
+          {% if p.duty_exempt %}<span class="badge pending">Duty exempt</span>{% endif %}
+          {% if p.meals_opt_in %}<span class="badge pending">Meals</span>{% endif %}
+          {% if p.is_admin %}<span class="badge approved">Admin</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="page-head">
   <h1>People</h1>
@@ -12,30 +41,80 @@
   <a class="btn" href="{{ url_for('admin.audit') }}">Audit trail</a>
 </p>
 
+{# Platoon categories (decision (ee)): the mapping is keyed data, so it is edited
+   here rather than renumbered in code. Four categories, three platoons — one is
+   always empty. #}
 <section class="card">
-  <div class="table-wrap">
-    <table class="list">
-      <thead>
-        <tr><th>Name</th><th>Rank</th><th>Appt</th><th>Pl</th><th>Role</th><th>Flags</th></tr>
-      </thead>
-      <tbody>
-        {% for p in people %}
-        <tr>
-          <td><a href="{{ url_for('admin.person_edit', person_id=p.id) }}">{{ p.display_name }}</a></td>
-          <td>{{ p.rank.value }}</td>
-          <td>{{ p.appointment.label }}</td>
-          <td>{{ p.platoon or "—" }}</td>
-          <td>{{ p.company_role.value if p.company_role else "—" }}</td>
-          <td>
-            {% if p.stay_out %}<span class="badge pending">Stay out</span>{% endif %}
-            {% if p.duty_exempt %}<span class="badge pending">Duty exempt</span>{% endif %}
-            {% if p.meals_opt_in %}<span class="badge pending">Meals</span>{% endif %}
-            {% if p.is_admin %}<span class="badge approved">Admin</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <h2>Platoon categories</h2>
+  <form method="post" action="{{ url_for('admin.platoon_categories') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-wrap">
+      <table class="list">
+        <thead>
+          <tr><th>Category</th><th>Platoon</th><th>COS pool</th></tr>
+        </thead>
+        <tbody>
+          {% for row in category_rows %}
+          <tr>
+            <td>{{ row.category.value }}</td>
+            <td>
+              <select name="platoon_{{ row.category.name }}">
+                <option value="" {% if row.platoon is none %}selected{% endif %}>—</option>
+                {% for n in platoon_options %}
+                <option value="{{ n }}" {% if row.platoon == n %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <label class="check">
+                <input type="checkbox" name="in_cos_pool_{{ row.category.name }}" value="1"
+                       {% if row.in_cos_pool %}checked{% endif %}>
+                <span>In COS pool</span>
+              </label>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="btn">Save categories</button>
+  </form>
+  <p class="muted">Each platoon sits in one category. Unticking the COS pool keeps
+    that platoon's Det Comds and Oprs out of COS auto-generation — they can still
+    be keyed manually, with a warning. The PS does CDO/S regardless; only the COS
+    pool is affected.</p>
 </section>
+
+<section class="card">
+  <h2>Command</h2>
+  {{ person_table(groups.command) }}
+</section>
+
+{% for section in groups.sections %}
+{% set pool_state = "In COS pool" if section.in_cos_pool else "Excluded from COS pool" %}
+<section class="card">
+  <h2>{{ section.category.value }}{% if section.platoon %} &mdash; Platoon {{ section.platoon }} &middot; {{ pool_state }}{% endif %}</h2>
+  {% if section.platoon is none %}
+    <p class="muted">No platoon assigned.</p>
+  {% elif not section.people %}
+    <p class="muted">Nobody in Platoon {{ section.platoon }}.</p>
+  {% else %}
+    {{ person_table(section.people) }}
+  {% endif %}
+</section>
+{% endfor %}
+
+{% for group in groups.uncategorised %}
+<section class="card">
+  <h2>Platoon {{ group.platoon }} &mdash; no category</h2>
+  {{ person_table(group.people) }}
+</section>
+{% endfor %}
+
+{% if groups.no_platoon %}
+<section class="card">
+  <h2>No platoon</h2>
+  {{ person_table(groups.no_platoon) }}
+</section>
+{% endif %}
 {% endblock %}
