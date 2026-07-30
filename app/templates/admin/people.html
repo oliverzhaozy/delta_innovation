@@ -41,50 +41,6 @@
   <a class="btn" href="{{ url_for('admin.audit') }}">Audit trail</a>
 </p>
 
-{# Platoon categories (decision (ee)): the mapping is keyed data, so it is edited
-   here rather than renumbered in code. Four categories, three platoons — one is
-   always empty. #}
-<section class="card">
-  <h2>Platoon categories</h2>
-  <form method="post" action="{{ url_for('admin.platoon_categories') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="table-wrap">
-      <table class="list">
-        <thead>
-          <tr><th>Category</th><th>Platoon</th><th>COS pool</th></tr>
-        </thead>
-        <tbody>
-          {% for row in category_rows %}
-          <tr>
-            <td>{{ row.category.value }}</td>
-            <td>
-              <select name="platoon_{{ row.category.name }}">
-                <option value="" {% if row.platoon is none %}selected{% endif %}>—</option>
-                {% for n in platoon_options %}
-                <option value="{{ n }}" {% if row.platoon == n %}selected{% endif %}>{{ n }}</option>
-                {% endfor %}
-              </select>
-            </td>
-            <td>
-              <label class="check">
-                <input type="checkbox" name="in_cos_pool_{{ row.category.name }}" value="1"
-                       {% if row.in_cos_pool %}checked{% endif %}>
-                <span>In COS pool</span>
-              </label>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <button type="submit" class="btn">Save categories</button>
-  </form>
-  <p class="muted">Each platoon sits in one category. Unticking the COS pool keeps
-    that platoon's Det Comds and Oprs out of COS auto-generation — they can still
-    be keyed manually, with a warning. The PS does CDO/S regardless; only the COS
-    pool is affected.</p>
-</section>
-
 <section class="card">
   <h2>Command</h2>
   {{ person_table(groups.command) }}
@@ -117,4 +73,44 @@
   {{ person_table(groups.no_platoon) }}
 </section>
 {% endif %}
+
+{# Platoon categories (decision (ee)): the mapping is keyed data, so it is edited
+   here rather than renumbered in code. Four categories, three platoons — one is
+   always empty. #}
+<section class="card">
+  <h2>Platoon categories</h2>
+  <form method="post" action="{{ url_for('admin.platoon_categories') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-wrap">
+      <table class="list">
+        <thead>
+          <tr><th>Category</th><th>Platoon</th><th>COS pool</th></tr>
+        </thead>
+        <tbody>
+          {% for row in category_rows %}
+          <tr>
+            <td>{{ row.category.value }}</td>
+            <td>
+              <select name="platoon_{{ row.category.name }}">
+                <option value="" {% if row.platoon is none %}selected{% endif %}>—</option>
+                {% for n in platoon_options %}
+                <option value="{{ n }}" {% if row.platoon == n %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <label class="check">
+                <input type="checkbox" name="in_cos_pool_{{ row.category.name }}" value="1"
+                       {% if row.in_cos_pool %}checked{% endif %}>
+                <span>Include</span>
+              </label>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="btn">Save categories</button>
+  </form>
+</section>
 {% endblock %}
