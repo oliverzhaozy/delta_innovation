@@ -40,7 +40,6 @@ def make_person(app):
         stay_out=False,
         duty_exempt=False,
         meals_opt_in=False,
-        is_active=True,
         is_admin=False,
         must_change_pw=False,
         password=DEFAULT_TEST_PASSWORD,
@@ -57,7 +56,6 @@ def make_person(app):
                 stay_out=stay_out,
                 duty_exempt=duty_exempt,
                 meals_opt_in=meals_opt_in,
-                is_active=is_active,
                 is_admin=is_admin,
                 must_change_pw=must_change_pw,
             )

@@ -224,7 +224,7 @@ def test_admin_phone_field_round_trip(app, client, make_person):
     data = {
         "username": "oc", "display_name": "Wong Li Xuan", "phone": "9190 9702",
         "rank": "CPT", "appointment": "OC", "company_role": "", "platoon": "",
-        "service": "REGULAR", "is_active": "y",
+        "service": "REGULAR",
     }
     resp = client.post(f"/admin/people/{oc_id}", data=data, follow_redirects=True)
     assert b"Saved." in resp.data

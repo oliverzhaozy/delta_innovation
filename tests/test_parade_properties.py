@@ -65,7 +65,6 @@ def _make_person(rng, idx):
         platoon=rng.choice(_PLATOONS),
         service=rng.choice(_SERVICES),
         stay_out=rng.choice((True, False)),
-        is_active=True,  # presence_inputs is active-only; deactivated never reaches a parade
     )
 
 

@@ -124,9 +124,8 @@ _COS_CATEGORIES = ("stay_out", "leave", "off_oil", "on_course", "mc", "others")
 
 class ParadeImbalance(Exception):
     """A parade document whose category math cannot balance — a double-counted
-    person, a drifted total, or a state that must never reach a parade
-    (DEACTIVATED). We raise instead of rendering: a document the app knows is
-    wrong is worse than none (the single-source-of-truth promise).
+    person or a drifted total. We raise instead of rendering: a document the app
+    knows is wrong is worse than none (the single-source-of-truth promise).
     """
 
 
@@ -276,9 +275,7 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
     Each person lands in exactly one category: ABSENT by the winning row's kind;
     otherwise CURRENT STRENGTH — except on morning an in-camp annotation
     promotes them to OTHERS IN CAMP, and on roll call a STAY_OUT person goes to
-    STAY OUT (in-camp annotations are dropped there — morning-only). A
-    DEACTIVATED resolution must never reach a parade (presence_inputs is
-    active-only) — we raise rather than silently drop the person.
+    STAY OUT (in-camp annotations are dropped there — morning-only).
     """
     if variant not in ("morning", "roll_call"):
         raise ValueError(f"unknown parade variant: {variant!r}")
@@ -290,8 +287,6 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
     people: dict[str, list] = {name: [] for name in names}
     for person, resolution in pairs:
         state = resolution.state
-        if state is PresenceState.DEACTIVATED:
-            raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
             line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"
@@ -553,15 +548,12 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
     ranged absence inherits purely by date coverage upstream in `resolve`.
     PRESENT / DUTY are omitted entirely (clean NSFs aren't in this message).
     `in_camp_rows` are ignored — Message 1 has no OTHERS IN CAMP, and single-day
-    in-camp artifacts on D-1 don't cover D anyway. DEACTIVATED must never reach
-    a parade document (presence_inputs is active-only) — we raise, not drop.
+    in-camp artifacts on D-1 don't cover D anyway.
     """
     lines: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
     people: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
     for person, resolution in pairs:
         state = resolution.state
-        if state is PresenceState.DEACTIVATED:
-            raise ParadeImbalance(f"deactivated person on the parade: {person!r}")
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
             line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"

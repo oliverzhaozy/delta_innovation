@@ -157,9 +157,7 @@ def test_every_person_appears_exactly_once_as_a_draggable_line(app, client, make
     html = client.get("/parade/morning").get_data(as_text=True)
     ids = _dragged_ids(html)
     with app.app_context():
-        roster_ids = {
-            pid for (pid,) in db.session.query(Person.id).filter_by(is_active=True)
-        }
+        roster_ids = {pid for (pid,) in db.session.query(Person.id)}
     assert sorted(ids) == sorted(roster_ids)
     assert len(ids) == len(set(ids))
 

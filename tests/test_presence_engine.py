@@ -10,8 +10,8 @@ D = date(2026, 7, 10)
 
 # --- fakes (duck-typed rows; the engine returns the caller's own objects) ---
 
-def person(is_active=True, stay_out=False, service=Service.NSF):
-    return SimpleNamespace(is_active=is_active, stay_out=stay_out, service=service)
+def person(stay_out=False, service=Service.NSF):
+    return SimpleNamespace(stay_out=stay_out, service=service)
 
 
 def absence(start=D, end=D, day_part=DayPart.FULL, kind="leave"):
@@ -67,14 +67,6 @@ def test_absent_for_day_full_and_am_absent_pm_present():
 
 
 # --- adjacent precedence pairs (criterion 1) -----------------------------
-
-def test_deactivated_beats_leave():
-    lv = absence()
-    res = presence.resolve(person(is_active=False), D, leaves=[lv])
-    assert res.state is PresenceState.DEACTIVATED
-    assert res.row is None
-    assert lv in res.conflicts  # surfaced, never silently dropped
-
 
 def test_leave_beats_out_of_camp_status():
     lv = absence(kind="leave")
@@ -222,7 +214,7 @@ def test_mc_while_on_leave_surfaces_conflict():
     assert res.conflicts == (mc,)
 
 
-# --- conflict ordering & deactivated classification ----------------------
+# --- conflict ordering ---------------------------------------------------
 
 def test_conflicts_preserve_precedence_order():
     lv = absence(kind="leave")
@@ -233,22 +225,6 @@ def test_conflicts_preserve_precedence_order():
     # Leave wins; the other leave-tier row keeps its input position, and the
     # out-of-camp status ranks after the whole leave tier.
     assert res.conflicts == (off, mc)
-
-
-def test_deactivated_still_classifies_all_rows():
-    full_leave = absence(day_part=DayPart.FULL, kind="leave")
-    pm_off = absence(day_part=DayPart.PM, kind="off")
-    mc = status(in_camp=False, kind="mc")
-    briefing = status(in_camp=True, kind="briefing")
-    res = presence.resolve(
-        person(is_active=False), D, leaves=[full_leave, pm_off], statuses=[mc, briefing]
-    )
-    assert res.state is PresenceState.DEACTIVATED
-    assert res.row is None
-    # No winner when deactivated: every absent-making row is a conflict.
-    assert res.conflicts == (full_leave, mc)
-    assert res.partial_rows == (pm_off,)
-    assert res.in_camp_rows == (briefing,)
 
 
 def test_duty_state_still_collects_partials():

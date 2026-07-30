@@ -13,8 +13,12 @@ def _values(enum_cls):
 class Person(UserMixin, db.Model):
     """One row per soldier; doubles as the login account (strict 1:1 at 40 users).
 
-    Never hard-deleted: ORD/post-out sets is_active=False, which also blocks
-    login via Flask-Login's is_active check.
+    ORD/post-out HARD-deletes the row and every row referencing it, via
+    `person_service.delete_person` (owner decision (dd) 2026-07-30). There is no
+    is_active flag: everyone in this table is serving, so no query filters on it
+    and no document has a "deactivated" tier. Flask-Login's UserMixin supplies a
+    constant `is_active = True`, which is what keeps login working without the
+    column.
     """
 
     __tablename__ = "person"
@@ -43,7 +47,6 @@ class Person(UserMixin, db.Model):
     # 2026-07-29 revising (j)); NSFs are always counted, so the flag only ever
     # matters for regulars — domain/meals.py owns that predicate.
     meals_opt_in = db.Column(db.Boolean, nullable=False, default=False)
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     password_hash = db.Column(db.String(255), nullable=False)
     must_change_pw = db.Column(db.Boolean, nullable=False, default=True)

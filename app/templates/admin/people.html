@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
   <h1>People</h1>
-  <p class="muted">{{ people | selectattr("is_active") | list | length }} active · total strength tracks this list.</p>
+  <p class="muted">{{ people | length }} serving · total strength tracks this list.</p>
 </div>
 
 <p>
@@ -27,7 +27,6 @@
           <td>{{ p.platoon or "—" }}</td>
           <td>{{ p.company_role.value if p.company_role else "—" }}</td>
           <td>
-            {% if not p.is_active %}<span class="badge cancelled">Inactive</span>{% endif %}
             {% if p.stay_out %}<span class="badge pending">Stay out</span>{% endif %}
             {% if p.duty_exempt %}<span class="badge pending">Duty exempt</span>{% endif %}
             {% if p.meals_opt_in %}<span class="badge pending">Meals</span>{% endif %}

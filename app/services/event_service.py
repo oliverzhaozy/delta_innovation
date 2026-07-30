@@ -8,15 +8,19 @@ from app.models import Event, Person
 
 
 def active_roster():
-    """Active people in PARADE order — appointment, then rank, then platoon,
+    """The whole roster in PARADE order — appointment, then rank, then platoon,
     then keyed order (owner directive 2026-07-26: every user-facing list of
     people reads the same order the documents print, never alphabetical).
     Neither appointment nor rank seniority is expressible as a column ORDER BY
     (the stored enum values sort by neither), so the one canonical key does it
     in Python; at ~40 rows this costs nothing. Every roster-derived list —
     pickers, pools, candidates, dropdowns — inherits from here.
+
+    There is no filter: since decision (dd) (2026-07-30) an ORD/posted-out
+    person is deleted outright, so every `person` row is a serving member. The
+    name is kept because callers depend on this function as THE roster order.
     """
-    people = db.session.query(Person).filter_by(is_active=True).all()
+    people = db.session.query(Person).all()
     people.sort(key=parade.parade_sort_key)
     return people
 
@@ -51,8 +55,8 @@ def picker_groups():
 
 
 def command_person_ids() -> set:
-    """Ids of the command team (an appointment-based set) among the active
-    roster. The picker marks these person checkboxes so the "Command team"
+    """Ids of the command team (an appointment-based set) among the roster.
+    The picker marks these person checkboxes so the "Command team"
     category box and its members stay in sync both ways — reuses the pure
     `participants.in_category` predicate rather than re-deriving the appointment
     set here.
@@ -65,8 +69,9 @@ def command_person_ids() -> set:
 
 
 def resolve_participants(event) -> list:
-    """Resolve `event`'s category/person rows against who's active right now
-    — categories are never stored membership, they resolve at query time.
+    """Resolve `event`'s category/person rows against the roster as it stands
+    right now — categories are never stored membership, they resolve at query
+    time.
     """
     return participants.resolve(event.participants, active_roster())
 

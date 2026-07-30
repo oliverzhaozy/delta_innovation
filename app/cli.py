@@ -149,7 +149,7 @@ def register_cli(app):
         type=click.DateTime(formats=["%Y-%m-%d"]),
         help="Cutoff date (YYYY-MM-DD); rows that fully ended before this go.",
     )
-    @click.option("--by", "by_username", required=True, help="Active username to own carry-forward rows.")
+    @click.option("--by", "by_username", required=True, help="Username to own carry-forward rows.")
     @click.option(
         "--execute/--dry-run",
         "do_execute",
@@ -163,15 +163,11 @@ def register_cli(app):
         deleted — balances are preserved and verified identical (A10).
         """
         cutoff = before.date()
-        # Resolve --by in both modes so an unknown/inactive username fails before
+        # Resolve --by in both modes so an unknown username fails before
         # anything is touched (dry-run stays read-only either way).
-        actor = (
-            db.session.query(Person)
-            .filter_by(username=by_username.lower(), is_active=True)
-            .first()
-        )
+        actor = db.session.query(Person).filter_by(username=by_username.lower()).first()
         if actor is None:
-            raise click.ClickException(f"No active user: {by_username}")
+            raise click.ClickException(f"No such user: {by_username}")
         if do_execute:
             result = purge_service.execute(cutoff, actor=actor)
             _echo_purge(result)

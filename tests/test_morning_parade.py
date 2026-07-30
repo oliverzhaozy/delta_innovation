@@ -303,12 +303,6 @@ def test_morning_variant_has_no_stay_out_category():
 
 # --- done-criterion 5: ParadeImbalance ------------------------------------
 
-def test_deactivated_resolution_raises():
-    pairs = [(person("PTE Ghost", 1), Resolution(state=PresenceState.DEACTIVATED))]
-    with pytest.raises(parade.ParadeImbalance):
-        parade.categorize(DAY, pairs, "morning")
-
-
 def test_corrupted_doc_double_count_raises_on_render():
     # A person double-counted across two categories: total says 1 but two
     # lines are present — the app refuses to render it.

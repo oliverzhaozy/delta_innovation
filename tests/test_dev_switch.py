@@ -2,7 +2,6 @@
 import pytest
 
 from app import create_app
-from app.domain.types import Appointment
 from app.extensions import db
 from app.models import Person
 from config import ProdConfig, TestConfig
@@ -89,9 +88,8 @@ def test_real_login_with_must_change_pw_still_bounced(client, make_person):
     assert "/password" in resp.headers["Location"]
 
 
-def test_switch_to_inactive_or_unknown_is_404(app, client, make_person):
-    username = make_person(username="gone", is_active=False)
-    assert client.post(f"/dev/switch/{_pid(app, username)}").status_code == 404
+def test_switch_to_unknown_person_is_404(app, client, make_person):
+    make_person(username="present")
     assert client.post("/dev/switch/99999").status_code == 404
 
 
@@ -100,16 +98,13 @@ def test_dropdown_lists_profiles_not_names(client, make_person):
     make_person(username="bravo", display_name="Bravo Two", platoon=2)  # same profile
     make_person(username="charlie", display_name="Charlie Three", company_role="S3")
     make_person(username="delta", display_name="Delta Four", is_admin=True)
-    make_person(
-        username="gone", display_name="Gone Guy", appointment=Appointment.PC, is_active=False
-    )
     html = client.get("/login").data.decode()
     assert "Dev: switch user" in html
     # Profiles, not people: no names, duplicates collapsed, variants kept apart.
-    for name in ("Alpha One", "Bravo Two", "Charlie Three", "Delta Four", "Gone Guy"):
+    for name in ("Alpha One", "Bravo Two", "Charlie Three", "Delta Four"):
         assert name not in html
     assert html.count(">Opr</button>") == 1
     assert ">Opr (S3)</button>" in html
     assert ">Opr (admin)</button>" in html
-    # The only PC is inactive, so that profile has no valid representative.
+    # Nobody holds PC, so that profile has no representative at all.
     assert ">PC</button>" not in html

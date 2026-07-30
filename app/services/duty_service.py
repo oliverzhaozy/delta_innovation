@@ -248,7 +248,7 @@ def assign(day, duty, person, *, actor, override_availability):
             "holidays, and blocked days carry no COS or CDO/S."
         )
     rule = eligibility.eligible_cos if duty is Duty.COS else eligibility.eligible_cdos
-    if not (person.is_active and rule(person)):
+    if not rule(person):
         raise IneligibleAssignment(
             f"{person.display_name} can never hold {duty.label} — rank/appointment rule."
         )

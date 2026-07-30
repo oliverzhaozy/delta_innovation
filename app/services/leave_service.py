@@ -20,7 +20,7 @@ DECIDED_AGAINST_STATUSES = frozenset(
 
 def live_requests(person_id):
     """This person's still-open requests: awaiting a decision, or approved leave
-    not yet elapsed (same predicate as the admin deactivation check). Pending rows
+    not yet elapsed (same predicate as the admin pre-delete warning). Pending rows
     whose dates already passed stay live — nobody has decided them yet.
     """
     return (

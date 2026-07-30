@@ -29,9 +29,9 @@ def login():
             .filter_by(username=form.username.data.strip().lower())
             .first()
         )
-        # One generic message for unknown user, wrong password, or deactivated
-        # account — the login page must not leak which usernames exist.
-        if person is None or not person.check_password(form.password.data) or not person.is_active:
+        # One generic message for unknown user and wrong password alike — the
+        # login page must not leak which usernames exist.
+        if person is None or not person.check_password(form.password.data):
             flash("Invalid credentials.", "error")
         else:
             session.clear()  # rotate the session at the auth boundary (fixation)

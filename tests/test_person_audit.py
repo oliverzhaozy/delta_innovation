@@ -34,7 +34,6 @@ def _edit_payload(**overrides):
         "company_role": "",
         "platoon": "1",
         "service": "NSF",
-        "is_active": "y",  # keep active unless a test drops it
     }
     data.update(overrides)
     return data

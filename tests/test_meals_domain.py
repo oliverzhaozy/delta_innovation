@@ -32,17 +32,17 @@ DAY = D                   # alias used by the parade-people section
 
 # --- duck-typed fakes ----------------------------------------------------
 
-def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True,
+def person(display_name, *, service=Service.NSF, stay_out=False,
            meals_opt_in=False, id):
     # `display_name` is passed "RANK Name" for brevity; the fake mirrors the real
     # Person, which since ee20005 holds the plain name with rank as a separate enum
     # column. Split them here so parade_line pairs them back into "RANK NAME".
-    # resolve() reads service/stay_out/is_active; the meal sub-count and
-    # person-identity dedup read service/meals_opt_in and id.
+    # resolve() reads service/stay_out; the meal sub-count and person-identity
+    # dedup read service/meals_opt_in and id.
     rank_token, _, plain = display_name.partition(" ")
     return SimpleNamespace(
         id=id, display_name=plain, rank=Rank(rank_token), service=service,
-        stay_out=stay_out, is_active=is_active, meals_opt_in=meals_opt_in,
+        stay_out=stay_out, meals_opt_in=meals_opt_in,
     )
 
 

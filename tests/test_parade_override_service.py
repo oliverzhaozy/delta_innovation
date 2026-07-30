@@ -108,27 +108,6 @@ def test_no_cross_day_or_variant_leakage(app, make_person):
         assert rc.has_overrides is False
 
 
-def test_stale_person_override_still_validates(app, make_person):
-    make_person(username="ov_stale_active")
-    make_person(username="ov_stale_gone", is_active=False)
-    with app.app_context():
-        active_pid = _pid("ov_stale_active")
-        gone_pid = _pid("ov_stale_gone")  # inactive → never on the parade
-        parade_service.set_override(
-            TODAY, MORNING, gone_pid, OverrideCategory.MC, created_by_id=active_pid
-        )
-        db.session.commit()
-
-        built = parade_service.build_doc(TODAY, MORNING)
-        # The row exists (indicator lights), but the person isn't in the doc so
-        # apply_overrides skips them — no imbalance, and the active person is
-        # untouched in CURRENT STRENGTH.
-        assert built.imbalance is None
-        assert built.has_overrides is True
-        assert "CURRENT STRENGTH: 1" in built.text
-        assert "MC (0):" in built.text
-
-
 def test_cos_current_strength_override_drops_the_line(app, make_person):
     # D4 through the service: the COS message is built for tomorrow, and a
     # regular defaults to STAY OUT there — dragging onto "present" removes them.

@@ -15,8 +15,8 @@ from app.domain.types import Appointment, DeclarationStatus, ManningSlotType
 START, END = date(2026, 7, 5), date(2026, 7, 13)
 
 
-def person(appointment, *, is_active=True):
-    return SimpleNamespace(appointment=appointment, is_active=is_active)
+def person(appointment):
+    return SimpleNamespace(appointment=appointment)
 
 
 def absence(start, end, label="OFF"):
@@ -51,10 +51,6 @@ def test_slot_eligibility_over_the_frozen_mapping():
     assert manning.slot_eligible(ManningSlotType.TU_PLANNER, person(Appointment.PC))
     assert not manning.slot_eligible(ManningSlotType.TU_PLANNER, person(Appointment.PS))
     assert manning.slot_eligible(ManningSlotType.DET_PERSONNEL, person(Appointment.OPR))
-    # Deactivated people are never eligible, whatever the appointment.
-    assert not manning.slot_eligible(
-        ManningSlotType.TU_COMD, person(Appointment.OC, is_active=False)
-    )
 
 
 # --- the conflict tri-state ---------------------------------------------------------

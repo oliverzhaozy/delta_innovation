@@ -94,8 +94,8 @@ def cover(start=DAY, end=DAY):
     )
 
 
-def person_like(service=Service.NSF, stay_out=False, is_active=True):
-    return SimpleNamespace(is_active=is_active, stay_out=stay_out, service=service)
+def person_like(service=Service.NSF, stay_out=False):
+    return SimpleNamespace(stay_out=stay_out, service=service)
 
 
 def course_suffix(start=DAY, end=DAY, title="Sig Course"):

@@ -27,14 +27,14 @@ YESTERDAY = DAY - timedelta(days=1)
 
 # --- duck-typed fakes (feed the real resolve engine) ---------------------
 
-def person(display_name, *, service=Service.NSF, stay_out=False, is_active=True, id=0):
+def person(display_name, *, service=Service.NSF, stay_out=False, id=0):
     # `display_name` is passed "RANK Name" for brevity; the fake mirrors the real
     # Person, which since ee20005 holds the plain name with rank as a separate enum
     # column. Split them here so parade_line pairs them back into "RANK NAME".
     rank_token, _, plain = display_name.partition(" ")
     return SimpleNamespace(
         id=id, display_name=plain, rank=Rank(rank_token), service=service,
-        stay_out=stay_out, is_active=is_active,
+        stay_out=stay_out,
     )
 
 
@@ -214,14 +214,6 @@ def test_cos_stay_out_lines_stay_bare():
 
 
 # --- guards -----------------------------------------------------------------
-
-def test_deactivated_person_raises():
-    from app.domain.presence import PresenceState, Resolution
-    pairs = [(person("PTE Ghost", is_active=False, id=1),
-              Resolution(state=PresenceState.DEACTIVATED))]
-    with pytest.raises(parade.ParadeImbalance):
-        parade.compute_cos_message(DAY, COS, pairs)
-
 
 def test_double_listed_cos_doc_raises_on_validate():
     # The at-most-once guarantee: a hand-built doc with a name in two categories

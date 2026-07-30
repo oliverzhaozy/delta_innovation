@@ -4,9 +4,9 @@ from app.domain import participants
 from app.domain.types import Appointment, ParticipantCategory, Service
 
 
-def person(id, service=Service.NSF, appointment=Appointment.OPR, platoon=1, is_active=True):
+def person(id, service=Service.NSF, appointment=Appointment.OPR, platoon=1):
     return SimpleNamespace(
-        id=id, service=service, appointment=appointment, platoon=platoon, is_active=is_active
+        id=id, service=service, appointment=appointment, platoon=platoon
     )
 
 
@@ -98,21 +98,6 @@ def test_resolve_person_include_beats_category_exclude():
         person_row(1, include=True),  # person-include overrides the category-exclude
     ]
     assert participants.resolve(rows, people) == [command_team_member, other_regular]
-
-
-def test_resolve_inactive_dropped_even_when_category_member():
-    active_reg = person(1, service=Service.REGULAR, is_active=True)
-    inactive_reg = person(2, service=Service.REGULAR, is_active=False)
-    people = [active_reg, inactive_reg]
-    rows = [category_row(ParticipantCategory.REGULAR, include=True)]
-    assert participants.resolve(rows, people) == [active_reg]
-
-
-def test_resolve_inactive_dropped_even_when_person_included():
-    inactive_but_named = person(1, is_active=False)
-    people = [inactive_but_named]
-    rows = [person_row(1, include=True)]
-    assert participants.resolve(rows, people) == []
 
 
 def test_resolve_excluded_category_subtracts_from_included_categories():

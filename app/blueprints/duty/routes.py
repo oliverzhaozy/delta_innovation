@@ -35,7 +35,7 @@ def _parse_month(raw: str) -> str:
 
 def _flag_order(person, person_id):
     """Parade order for one adjacency flag's holder. A holder outside this
-    month's pools (a prior-month tail row, or someone since deactivated) has no
+    month's pools (a prior-month tail row, or someone since deleted) has no
     parade key at all — they sort after the roster, by id, rather than ahead of
     it on an empty key.
     """

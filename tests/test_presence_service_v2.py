@@ -279,10 +279,12 @@ def test_presence_inputs_passes_all_sources_so_conflicts_surface(app, make_perso
         assert res.conflicts[0].type is StatusType.MC  # MC surfaced, never dropped
 
 
-def test_presence_inputs_excludes_deactivated_people(app, make_person):
-    make_person(username="pi_active", appointment=Appointment.OPR, platoon=1)
-    make_person(username="pi_gone", appointment=Appointment.OPR, platoon=1, is_active=False)
-    plant_leave(app, "pi_gone", start=DAY, end=DAY)  # even with leave, off the roster
+def test_presence_inputs_covers_the_whole_roster(app, make_person):
+    # Since decision (dd) there is no deactivation: every person row is serving,
+    # so presence_inputs resolves all of them and filters nobody out.
+    make_person(username="pi_one", appointment=Appointment.OPR, platoon=1)
+    make_person(username="pi_two", appointment=Appointment.OPR, platoon=1)
+    plant_leave(app, "pi_two", start=DAY, end=DAY)
     with app.app_context():
         entries = presence_service.presence_inputs(DAY)
-        assert [e.person.username for e in entries] == ["pi_active"]  # only the active person
+        assert sorted(e.person.username for e in entries) == ["pi_one", "pi_two"]

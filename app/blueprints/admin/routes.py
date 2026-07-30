@@ -3,7 +3,6 @@ from enum import Enum
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.authz import require
@@ -11,7 +10,6 @@ from app.blueprints.admin import bp
 from app.blueprints.admin.forms import PersonForm
 from app.domain import policy
 from app.domain.dates import today_sgt
-from app.domain.parade import parade_sort_key
 from app.domain.types import (
     Appointment,
     CompanyRole,
@@ -22,6 +20,7 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import LeaveRequest, Person, PersonAudit
+from app.services import event_service, person_service
 
 # The person fields _apply_form writes — the exact set the edit route audits.
 _AUDIT_FIELDS = (
@@ -37,7 +36,6 @@ _AUDIT_FIELDS = (
     "duty_exempt",
     "meals_opt_in",
     "is_admin",
-    "is_active",
 )
 
 
@@ -73,7 +71,6 @@ def _apply_form(person, form):
     person.duty_exempt = form.duty_exempt.data
     person.meals_opt_in = form.meals_opt_in.data
     person.is_admin = form.is_admin.data
-    person.is_active = form.is_active.data
 
 
 def _username_taken(username, exclude_id=None):
@@ -86,13 +83,9 @@ def _username_taken(username, exclude_id=None):
 @bp.route("/people")
 @require(policy.can_manage_people)
 def people():
-    # The canonical parade key (appointment, then rank — 36 rows, so a CASE
-    # ladder would just restate it), never a second ordering of its own.
-    # Active first keeps ORD/posted-out members from interleaving the live roster;
-    # inactive people are why this page can't read `active_roster()`.
-    everyone = db.session.query(Person).all()
-    everyone.sort(key=lambda p: (not p.is_active, *parade_sort_key(p)))
-    return render_template("admin/people.html", people=everyone)
+    # Every person row is a serving member since decision (dd), so this is just
+    # THE roster in its one canonical order — read from the function that owns it.
+    return render_template("admin/people.html", people=event_service.active_roster())
 
 
 @bp.route("/audit")
@@ -171,8 +164,8 @@ def person_edit(person_id):
             db.session.commit()
             flash("Saved.", "success")
             return redirect(url_for("admin.people"))
-    # Surface what deactivation would strand: pending requests and future
-    # approved leave need voiding/cancelling first (TECH_PLAN P1.1).
+    # Pre-delete warning (decision (dd)): these pending requests and future
+    # approved leave are DESTROYED by a delete, so S3 sees them before deciding.
     open_items = (
         db.session.query(LeaveRequest)
         .filter(
@@ -196,25 +189,18 @@ def person_edit(person_id):
 def person_delete(person_id):
     person = db.session.get(Person, person_id) or abort(404)
     # Deleting the row you're signed in as would strand the session; block it.
+    # This is the ONE user-facing self-delete guard (the service keeps a
+    # structural backstop that raises).
     if person.id == current_user.id:
         flash("You can't delete your own account.", "error")
         return redirect(url_for("admin.person_edit", person_id=person.id))
     name = person.display_name
-    db.session.delete(person)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        # A person referenced by leave/ledger/duty/parade rows can't be hard-
-        # deleted — foreign keys (ON) reject it. History is the source of truth
-        # (TECH_PLAN.md:58); deactivating is the reversible alternative.
-        db.session.rollback()
-        flash(
-            f"Can't delete {name} — they're still referenced by leave, ledger, "
-            "duty, or audit history. Deactivate them instead (uncheck Active).",
-            "error",
-        )
-        return redirect(url_for("admin.person_edit", person_id=person.id))
-    flash(f"Deleted {name}.", "success")
+    # Post-out cascade (decision (dd)): no IntegrityError fallback — the service
+    # clears every referencing row, so a failure here is a bug that must surface
+    # rather than be swallowed into a "deactivate instead" message.
+    counts = person_service.delete_person(person, actor=current_user)
+    detail = ", ".join(f"{table} ({rows})" for table, rows in counts.items())
+    flash(f"Deleted {name} and every record referencing them: {detail}.", "success")
     return redirect(url_for("admin.people"))
 
 

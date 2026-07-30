@@ -33,4 +33,3 @@ class PersonForm(FlaskForm):
     duty_exempt = BooleanField("Exempt from duty (COS/CDO-S pools)")
     meals_opt_in = BooleanField("Counted for meal indents (regulars opt in; NSFs always counted)")
     is_admin = BooleanField("Admin access")
-    is_active = BooleanField("Active", default=True)

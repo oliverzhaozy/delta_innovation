@@ -184,20 +184,6 @@ def test_editing_event_replaces_participant_rows_without_duplicates(app, client,
     assert "1 person" in body
 
 
-# ---------- Inactive person in a tagged category is dropped ----------
-
-def test_inactive_person_in_category_not_resolved(app, client, make_person):
-    login(client, make_person(**make_pc()))
-    make_person(username="p2_active", display_name="Active P2", rank=Rank.PTE, platoon=2)
-    make_person(username="p2_gone", display_name="Gone P2", rank=Rank.PTE, platoon=2, is_active=False)
-
-    resp = create_event(client, title="Roll call", categories=[ParticipantCategory.PLATOON_2.value])
-    assert resp.status_code == 200
-    body = resp.data.decode()
-    assert "Active P2" in body
-    assert "Gone P2" not in body
-
-
 # ---------- New form: ALL choice, five group dropdowns, people inputs, no legacy fields ----------
 
 def test_new_form_renders_category_checkboxes_with_no_exclude_control(client, make_person):
@@ -355,12 +341,14 @@ def test_active_roster_is_parade_ordered_not_platoon_or_alphabetical(app, make_p
                 appointment=Appointment.P2IC, platoon=1)
     make_person(username="ar_p2ic_lta", display_name="Ace P2ic", rank=Rank.LTA,
                 appointment=Appointment.P2IC, platoon=2)
-    make_person(username="ar_gone", display_name="Aaa Oc", rank=Rank.CPT,
-                appointment=Appointment.OC, platoon=None, is_active=False)
+    # The OC also pins that the roster is unfiltered since decision (dd): every
+    # person row is serving, and the OC's appointment sorts them to the top.
+    make_person(username="ar_oc", display_name="Aaa Oc", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None)
 
     with app.app_context():
         assert [p.username for p in event_service.active_roster()] == [
-            "ar_2ic", "ar_sm", "ar_p2ic_wo", "ar_p2ic_lta",
+            "ar_oc", "ar_2ic", "ar_sm", "ar_p2ic_wo", "ar_p2ic_lta",
         ]
 
 
@@ -410,13 +398,15 @@ def test_person_appears_in_service_and_platoon_group_and_double_check_saves_one_
     assert person_ids(app, event_id) == {dual_id}
 
 
-# ---------- An id outside the active roster is a clean form error, nothing saved ----------
+# ---------- An id outside the roster is a clean form error, nothing saved ----------
 
 def test_invalid_people_id_rejected_as_form_error(app, client, make_person):
     login(client, make_person(**make_pc()))
-    make_person(username="p2_ghost", display_name="Ghost P2", rank=Rank.PTE, platoon=2, is_active=False)
+    make_person(username="p2_real", display_name="Real P2", rank=Rank.PTE, platoon=2)
     with app.app_context():
-        ghost_id = db.session.query(Person.id).filter_by(username="p2_ghost").scalar()
+        # No deactivated people exist any more (decision (dd)), so "outside the
+        # roster" means an id belonging to nobody at all.
+        ghost_id = db.session.query(db.func.max(Person.id)).scalar() + 999
 
     resp = create_event(client, title="Ghost event", people=[str(ghost_id)])
     assert resp.status_code == 200

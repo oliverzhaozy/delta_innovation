@@ -30,7 +30,7 @@ def _profile_label(person):
 @bp.app_context_processor
 def inject_dev_switch_entries():
     # base.html renders the switcher dropdown on every page (dev only): one
-    # entry per distinct profile, backed by an active holder. The shared roster
+    # entry per distinct profile, backed by a real holder. The shared roster
     # fetch arrives in parade order, so each profile's representative is its
     # senior-most holder and the entries themselves list appointment then rank.
     representatives = {}
@@ -50,7 +50,7 @@ def inject_dev_switch_entries():
 def switch(person_id):
     # No @login_required: also usable from the login page.
     person = db.session.get(Person, person_id)
-    if person is None or not person.is_active:
+    if person is None:
         abort(404)
     session.clear()  # rotate the session at the auth boundary (fixation)
     login_user(person)

@@ -6,16 +6,14 @@ An event's involved people are never stored — they're computed from
 it when the event was created.
 
 Resolution order:
-  1. Only active people are ever eligible (deactivated people drop out even
-     if a person row names them directly).
-  2. The base set is every included category's members, minus every
+  1. The base set is every included category's members, minus every
      excluded category's members (e.g. NSF + REGULAR - COMMAND_TEAM).
-  3. Person rows then override the base set per person: include adds them,
+  2. Person rows then override the base set per person: include adds them,
      exclude removes them — this is how S3 carves out "except X plus Y"
      from a category. The schema forbids a person appearing on both a
      person row and being ambiguous (unique per event+person), so include
      and exclude can't collide for the same person.
-  4. No rows at all means nobody is involved — there is no implicit "whole
+  3. No rows at all means nobody is involved — there is no implicit "whole
      company" default; that's expressed explicitly by tagging NSF+REGULAR.
 """
 from app.domain.types import COMMAND_TEAM, ParticipantCategory, Service
@@ -43,8 +41,8 @@ def in_category(person, category: ParticipantCategory) -> bool:
 
 def resolve(rows, people) -> list:
     """Resolve `rows` (participant-shaped: .person_id, .category, .include)
-    against `people` (the active-or-not roster) into the list of people
-    actually involved, in `people`'s order.
+    against `people` (the roster) into the list of people actually involved,
+    in `people`'s order.
     """
     if not rows:
         return []
@@ -56,8 +54,6 @@ def resolve(rows, people) -> list:
 
     result = []
     for candidate in people:
-        if not candidate.is_active:
-            continue
         if candidate.id in excluded_person_ids:
             included = False
         elif candidate.id in included_person_ids:

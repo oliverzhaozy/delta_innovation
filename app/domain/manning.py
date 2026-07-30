@@ -24,10 +24,10 @@ class ManningConflict(str, enum.Enum):
 
 
 def slot_eligible(slot, person) -> bool:
-    """May `person` legally hold `slot`? Appointment from the frozen mapping
-    AND active — assignment eligibility, not app access (the two permission
-    concepts never mix)."""
-    return person.is_active and person.appointment in TU_SLOT_APPOINTMENTS[slot.value]
+    """May `person` legally hold `slot`? Appointment from the frozen mapping —
+    assignment eligibility, not app access (the two permission concepts never
+    mix)."""
+    return person.appointment in TU_SLOT_APPOINTMENTS[slot.value]
 
 
 def _range_label(start, end) -> str:

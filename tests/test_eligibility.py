@@ -23,10 +23,9 @@ from app.domain.types import Appointment, DayPart, Duty, Rank
 DAY = date(2026, 8, 5)  # a Wednesday
 
 
-def person(rank, appointment, *, is_active=True, duty_exempt=False, id=1):
+def person(rank, appointment, *, duty_exempt=False, id=1):
     return SimpleNamespace(
-        id=id, rank=rank, appointment=appointment,
-        is_active=is_active, duty_exempt=duty_exempt,
+        id=id, rank=rank, appointment=appointment, duty_exempt=duty_exempt,
     )
 
 
@@ -74,13 +73,12 @@ def test_nobody_is_dual_eligible_across_the_whole_rank_x_appointment_space():
 
 # --- pools --------------------------------------------------------------------
 
-def test_pool_filters_by_rule_and_activity():
+def test_pool_filters_by_rule():
     a = person(Rank.THREE_SG, Appointment.DET_COMD, id=1)
     b = person(Rank.CPL, Appointment.OPR, id=2)
-    c = person(Rank.CPL, Appointment.OPR, is_active=False, id=3)   # deactivated
     d = person(Rank.TWO_SG, Appointment.PS, id=4)                  # CDOS material
-    assert pool(Duty.COS, [a, b, c, d]) == [a, b]
-    assert pool(Duty.CDOS, [a, b, c, d]) == [d]
+    assert pool(Duty.COS, [a, b, d]) == [a, b]
+    assert pool(Duty.CDOS, [a, b, d]) == [d]
 
 
 def test_pool_excludes_duty_exempt_but_the_rules_still_pass_them():
@@ -149,11 +147,6 @@ def test_holding_the_other_duty_that_date_blocks():
     p = person(Rank.CPL, Appointment.OPR)
     assert not available(p, DAY, other_duty_dates={DAY})
     assert available(p, DAY, other_duty_dates={DAY + timedelta(days=1)})
-
-
-def test_deactivated_person_is_never_available():
-    p = person(Rank.CPL, Appointment.OPR, is_active=False)
-    assert not available(p, DAY)
 
 
 def test_no_rows_at_all_means_available():

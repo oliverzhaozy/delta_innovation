@@ -22,13 +22,6 @@ def test_unknown_user_gets_same_message(client, make_person):
     assert b"Invalid credentials." in resp.data
 
 
-def test_deactivated_user_cannot_login(client, make_person):
-    username = make_person(is_active=False)
-    resp = login(client, username)
-    assert b"Invalid credentials." in resp.data
-    assert client.get("/password").status_code == 302
-
-
 def test_logout_ends_session(client, make_person):
     username = make_person()
     login(client, username)

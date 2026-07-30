@@ -21,7 +21,6 @@
   <p class="check">{{ form.duty_exempt() }} {{ form.duty_exempt.label }}</p>
   <p class="check">{{ form.meals_opt_in() }} {{ form.meals_opt_in.label }}</p>
   <p class="check">{{ form.is_admin() }} {{ form.is_admin.label }}</p>
-  <p class="check">{{ form.is_active() }} {{ form.is_active.label }}</p>
   {% for field in form if field.errors %}
     {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
   {% endfor %}
@@ -31,7 +30,8 @@
 {% if person and open_items %}
 <section class="card">
   <h2>Open leave items</h2>
-  <p class="muted">Resolve these before deactivating — deactivation does not cancel them.</p>
+  <p class="muted">Deleting this person <strong>destroys</strong> these requests — there is no
+    soft-delete. Resolve anything that still matters before you delete them.</p>
   <ul class="toollist">
     {% for r in open_items %}
     <li>
@@ -54,12 +54,14 @@
 </section>
 
 <section class="card">
-  <h2>Delete</h2>
-  <p class="muted">Permanently removes this person. Only possible when they have no
-    leave, ledger, or duty history — otherwise deactivate instead (uncheck Active above).</p>
+  <h2>Delete (ORD / post-out)</h2>
+  <p class="muted">Permanently removes this person <strong>and every record that references
+    them</strong> — their leave, ledger, statuses, duties and manning slots, plus records they
+    actioned on others (leave they approved, statuses they keyed, events they created). Other
+    people's leave balances can change as a result. This cannot be undone.</p>
   <form action="{{ url_for('admin.person_delete', person_id=person.id) }}" method="post"
         class="inline-form"
-        onsubmit="return confirm('Delete {{ person.display_name }}? This cannot be undone.');">
+        onsubmit="return confirm('Delete {{ person.display_name }} and every record referencing them? Other people\'s balances may change. This cannot be undone.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn danger">Delete person</button>
   </form>

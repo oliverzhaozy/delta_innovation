@@ -322,7 +322,7 @@ def test_cli_unknown_username_errors(app, make_person):
         args=["purge", "--before", "2026-06-01", "--by", "nobody", "--execute"]
     )
     assert result.exit_code != 0
-    assert "No active user" in result.output
+    assert "No such user" in result.output
     with app.app_context():
         assert db.session.query(LedgerEntry).count() == 1  # untouched
 

@@ -28,12 +28,14 @@ def test_s3_lists_people(client, make_person):
     assert b"Opr B" in resp.data
 
 
-def test_people_page_is_parade_ordered_with_inactive_last(client, make_person):
+def test_people_page_is_parade_ordered(client, make_person):
     # UI-22: the People page reads the canonical parade key, so 2IC sits above
     # SM (the declaration APPOINTMENT_ORDER says otherwise) and a 3WO above an
     # LTA of the same appointment (the legal RANK_ORDER says otherwise). Names
-    # alphabetize in reverse of the expected order. Active still comes first:
-    # an OC who has ORD'd must not head the live roster.
+    # alphabetize in reverse of the expected order. Since decision (dd) there is
+    # no inactive tier — the OC simply heads the list, as parade order says.
+    make_person(username="ord_oc", display_name="Aaa Oc", rank=Rank.CPT,
+                appointment=Appointment.OC, platoon=None)
     make_person(username="ord_2ic", display_name="Zed Two", rank=Rank.LTA,
                 appointment=Appointment.TWO_IC, platoon=None)
     make_person(username="ord_sm", display_name="Yan Sm", rank=Rank.THREE_WO,
@@ -42,14 +44,14 @@ def test_people_page_is_parade_ordered_with_inactive_last(client, make_person):
                 appointment=Appointment.P2IC, platoon=1)
     make_person(username="ord_p2ic_lta", display_name="Ace P2ic", rank=Rank.LTA,
                 appointment=Appointment.P2IC, platoon=2)
-    make_person(username="ord_gone", display_name="Aaa Oc", rank=Rank.CPT,
-                appointment=Appointment.OC, platoon=None, is_active=False)
     login(client, make_s3(make_person))
 
     body = client.get("/admin/people").get_data(as_text=True)
-    positions = [body.index(name) for name in ("Zed Two", "Yan Sm", "Bee P2ic", "Ace P2ic")]
+    positions = [
+        body.index(name)
+        for name in ("Aaa Oc", "Zed Two", "Yan Sm", "Bee P2ic", "Ace P2ic")
+    ]
     assert positions == sorted(positions)
-    assert body.index("Aaa Oc") > positions[-1]
 
 
 def test_create_person_end_to_end(app, client, make_person):
@@ -95,31 +97,6 @@ def test_duplicate_username_rejected(app, client, make_person):
         assert db.session.query(Person).filter_by(username="taken").count() == 1
 
 
-def test_deactivate_via_edit_blocks_login(app, client, make_person):
-    victim = make_person(username="leaving")
-    login(client, make_s3(make_person))
-    with app.app_context():
-        victim_id = db.session.query(Person.id).filter_by(username="leaving").scalar()
-    resp = client.post(
-        f"/admin/people/{victim_id}",
-        data={
-            "username": "leaving",
-            "display_name": "Leaving",
-            "rank": "PTE",
-            "appointment": "OPR",
-            "company_role": "",
-            "platoon": "1",
-            "service": "NSF",
-            # is_active checkbox omitted -> False
-        },
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    client.post("/logout")
-    resp = login(client, victim)
-    assert b"Invalid credentials." in resp.data
-
-
 def test_delete_person_without_history(app, client, make_person):
     make_person(username="mistake")
     login(client, make_s3(make_person))
@@ -131,7 +108,9 @@ def test_delete_person_without_history(app, client, make_person):
         assert db.session.get(Person, target_id) is None
 
 
-def test_delete_person_with_history_blocked(app, client, make_person):
+def test_delete_person_with_history_cascades(app, client, make_person):
+    # Decision (dd) inverts the old rule: history no longer blocks the delete,
+    # it goes with the person, and the flash names what was removed.
     make_person(username="hashistory")
     login(client, make_s3(make_person))
     with app.app_context():
@@ -148,11 +127,10 @@ def test_delete_person_with_history_blocked(app, client, make_person):
         )
         db.session.commit()
     resp = client.post(f"/admin/people/{target_id}/delete", follow_redirects=True)
-    assert b"Can&#39;t delete" in resp.data
+    assert b"leave_request (1)" in resp.data
     with app.app_context():
-        # The referencing leave row and the person both survive intact.
-        assert db.session.get(Person, target_id) is not None
-        assert db.session.query(LeaveRequest).filter_by(person_id=target_id).count() == 1
+        assert db.session.get(Person, target_id) is None
+        assert db.session.query(LeaveRequest).filter_by(person_id=target_id).count() == 0
 
 
 def test_cannot_delete_own_account(app, client, make_person):

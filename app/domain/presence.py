@@ -18,8 +18,7 @@ strength unless a keyed status or a course says otherwise.
 
 Precedence (highest wins), matching TECH_PLAN's parade precedence rule:
 
-    deactivated
-      > approved leave
+    approved leave
       > out-of-camp status                (MC / other…)
       > course                            (derived from the TP calendar)
       > duty
@@ -50,7 +49,6 @@ class PresenceState(str, enum.Enum):
     # Presence vocabulary lives in this module, not types.py: it has a single
     # consumer family (the parade engine + its documents), not general domain
     # vocabulary shared across blueprints.
-    DEACTIVATED = "DEACTIVATED"
     ABSENT = "ABSENT"
     DUTY = "DUTY"
     STAY_OUT = "STAY_OUT"
@@ -65,8 +63,8 @@ class Resolution:
     ABSENT). `partial_rows` are covering rows that are away for only part of the
     day (PM) — present for parade, tagged "(PM)". `in_camp_rows` are covering
     in-camp statuses (annotations → OTHERS IN CAMP). `conflicts` are covering
-    absent-making rows that lost to the winner — or all of them when deactivated,
-    since there is no winner then — surfaced to the keyer, never dropped.
+    absent-making rows that lost to the winner, surfaced to the keyer, never
+    dropped.
     """
 
     state: PresenceState
@@ -137,14 +135,7 @@ def resolve(person, day, *, leaves=(), statuses=(), courses=(), duties=()) -> Re
 
     covering_duty = any(covers(row, day) for row in duties)
 
-    if not person.is_active:
-        # Deactivated wins outright, but every covering row is still classified
-        # so nothing a row says vanishes: with no winner, all absent-makers are
-        # conflicts (partials/in-camp are already collected above).
-        state = PresenceState.DEACTIVATED
-        winner = None
-        conflicts = tuple(absent_making)
-    elif absent_making:
+    if absent_making:
         state = PresenceState.ABSENT
         winner = absent_making[0]
         conflicts = tuple(absent_making[1:])

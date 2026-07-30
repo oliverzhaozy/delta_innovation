@@ -4,7 +4,7 @@ leave panel, and (from P3a.6) every parade document read.
 There is exactly ONE fetch of the presence sources (APPROVED leave + COS-keyed
 statuses + TP-calendar course covers). `absences_between` normalises it to
 away-only `AbsenceRow`s (in-camp statuses dropped — in camp is not away);
-`presence_inputs` resolves every active person through the pure precedence
+`presence_inputs` resolves every person through the pure precedence
 engine (in-camp statuses kept, as annotations). Two views of one fetch, never
 two fetches with different filters — a second derivation is exactly the drift
 bug this app exists to kill. Semantics (precedence, day-part) live in
@@ -27,7 +27,7 @@ from app.domain.types import (
     TpLabel,
 )
 from app.extensions import db
-from app.models import DutyAssignment, Event, LeaveRequest, Person, StatusEntry
+from app.models import DutyAssignment, Event, LeaveRequest, StatusEntry
 from app.services import event_service
 
 
@@ -111,10 +111,10 @@ def _course_covers(start_date, end_date):
 def fetch_absence_rows(start_date, end_date):
     """The ONE query layer, now the shared public fetch that `absences_between`,
     `presence_inputs`, and duty availability (P4.4) all read: APPROVED leave +
-    statuses + TP-calendar course covers that overlap [start_date, end_date] for
-    ACTIVE people, each in parade order (appointment → rank, then the row's own
-    id). Returns the leave/status ORIGINAL model rows plus the synthesized
-    course covers as three lists.
+    statuses + TP-calendar course covers that overlap [start_date, end_date],
+    each in parade order (appointment → rank, then the row's own id). Returns
+    the leave/status ORIGINAL model rows plus the synthesized course covers as
+    three lists.
 
     Extracting the leave/status/course filter here (written once) is the whole
     point of the task: `absences_between` and `presence_inputs` are two views of
@@ -122,16 +122,14 @@ def fetch_absence_rows(start_date, end_date):
     """
 
     def _overlapping(model, *extra):
-        # The join stays for the active-only filter; the ORDER is parade order,
-        # which no column ORDER BY can express (enum values sort by neither
-        # appointment nor seniority), so it happens in Python over the rows.
+        # The ORDER is parade order, which no column ORDER BY can express (enum
+        # values sort by neither appointment nor seniority), so it happens in
+        # Python over the rows.
         rows = (
             db.session.query(model)
-            .join(Person, model.person_id == Person.id)
             .filter(
                 model.start_date <= end_date,
                 model.end_date >= start_date,
-                Person.is_active.is_(True),
                 *extra,
             )
             .all()
@@ -141,8 +139,6 @@ def fetch_absence_rows(start_date, end_date):
 
     leaves = _overlapping(LeaveRequest, LeaveRequest.status == RequestStatus.APPROVED)
     statuses = _overlapping(StatusEntry)
-    # resolve_participants already restricts to the active roster, so course
-    # covers carry the same active-only filter the two queries above apply.
     courses = _course_covers(start_date, end_date)
     return leaves, statuses, courses
 
@@ -238,7 +234,7 @@ _DutyCover = namedtuple("DutyCover", "start_date end_date")
 
 
 def presence_inputs(day, *, duty_day=None):
-    """Every ACTIVE person's resolved presence for `day` as parade-sorted
+    """Every person's resolved presence for `day` as parade-sorted
     `PersonPresence(person, resolution)` pairs — the one function every parade
     document reads (P3a.6+).
 
@@ -246,8 +242,7 @@ def presence_inputs(day, *, duty_day=None):
     statuses are passed to the engine, so in-camp ones come back as annotations
     (`in_camp_rows`) rather than being dropped. The ORIGINAL model rows go to
     `resolve` — the engine returns the caller's own objects, and downstream
-    rendering reads model fields (`.type`, `.remarks`, `.person`). Deactivated
-    people are off the roster entirely, matching the away board.
+    rendering reads model fields (`.type`, `.remarks`, `.person`).
 
     `duty_day` (keyword-only): which date's duty_assignment rows feed
     the DUTY state — the fetch key ONLY. The adapter row handed to the engine
@@ -273,8 +268,8 @@ def presence_inputs(day, *, duty_day=None):
     for row in courses:
         by_course[row.person_id].append(row)
 
-    people = db.session.query(Person).filter_by(is_active=True).all()
-    people.sort(key=parade.parade_sort_key)  # parade display order (P3a.3)
+    # THE roster order (P3a.3), read from its one owner rather than re-sorted here.
+    people = event_service.active_roster()
     return [
         PersonPresence(
             person=person,

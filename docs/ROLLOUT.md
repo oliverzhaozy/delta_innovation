@@ -164,7 +164,10 @@ built in parallel.
 
 ## Ongoing habits
 
-- Someone ORDs/posts out → S3 deactivates the account the same week
-  (People → edit → untick Active). Deactivation lists any open leave to
-  resolve first.
+- Someone ORDs/posts out → S3 deletes the account the same week
+  (People → edit → Delete person). This is permanent and cascades: their
+  leave, ledger, statuses, duties and manning slots go, as do records they
+  actioned on others (leave they approved, and its ledger deductions — so
+  other people's balances can move). The edit page lists any open leave
+  first; resolve anything that still matters before deleting.
 - Nightly backups restore-drill once a month (see DEPLOY.md, Phase 0.8).
