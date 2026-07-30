@@ -139,9 +139,12 @@ class ParadeDoc:
     `len()` of the very tuple that renders and a count can never disagree with
     the list beneath it. The parallel person tuples ride alongside for consumers
     that need the people, not the strings — meals (P3b.5) counts CURRENT STRENGTH
-    and PRESENT IN CAMP persons and their NSF sub-set. Renderers ignore them, so
-    every existing golden stays byte-identical. `total` is the input headcount;
-    every balance check compares category lengths back to it.
+    and PRESENT IN CAMP persons and their NSF sub-set. A second parallel tuple set
+    (`*_notes`) carries the AbsenceNote each absent line's suffix was rendered
+    from (None on a bare line), so the drag sheet can show it as a chip without
+    re-parsing the line. Renderers ignore both, so every existing golden stays
+    byte-identical. `total` is the input headcount; every balance check compares
+    category lengths back to it.
 
     `stay_out` is populated for the roll_call variant only; on morning it is
     always empty (STAY OUT dissolves into CURRENT STRENGTH — Message 3 rule).
@@ -169,6 +172,16 @@ class ParadeDoc:
     mc_people: tuple = ()
     others_people: tuple = ()
     stay_out_people: tuple = ()
+    # Parallel AbsenceNote tuples (None per bare line), same default reasoning as
+    # the person tuples above. Never read by the renderers — only by the sheet.
+    current_strength_notes: tuple = ()
+    others_in_camp_notes: tuple = ()
+    leave_notes: tuple = ()
+    off_oil_notes: tuple = ()
+    on_course_notes: tuple = ()
+    mc_notes: tuple = ()
+    others_notes: tuple = ()
+    stay_out_notes: tuple = ()
 
     def _not_present(self) -> tuple:
         # Morning has no STAY OUT category; roll call counts it under D.
@@ -249,22 +262,48 @@ def _in_camp_reason(row) -> str:
     return (row.remarks or row.type.label).upper()
 
 
-def _absence_suffix(row) -> str:
-    """The parenthesized suffix every ABSENT line carries (owner 2026-07-27).
+# The suffix every ABSENT line carries (owner 2026-07-27), as DATA rather than a
+# baked-in string: `reason` is None when the category already names it. Held on
+# the document beside the rendered line so the drag sheet can show it as a chip
+# — and so a keyer's typed note (owner revision 2026-07-30) is the same shape as
+# a derived one and renders through the same one formatter.
+AbsenceNote = namedtuple("AbsenceNote", "reason start end")
 
-    Discriminated on the winning row's kind exactly as `_absent_category` is:
-    LEAVE / OFF-OIL / MC say only when ("(DDMMYY - DDMMYY)"), because the
-    category itself already names the reason; ON COURSE and OTHERS lead with a
-    reason ("(SIG COURSE: …)", "(HL: …)") since the category alone does not say
-    which course or which excuse. The reason falls back to the type's label the
-    same way `_in_camp_reason` does — a course cover always carries the TP event
-    title as its remarks.
+
+def absence_note(row) -> AbsenceNote:
+    """The AbsenceNote a winning ABSENT row dictates.
+
+    Discriminated on the row's kind exactly as `_absent_category` is: LEAVE /
+    OFF-OIL / MC carry no reason, because the category itself already names it;
+    ON COURSE and OTHERS lead with one ("SIG COURSE", "HL") since the category
+    alone does not say which course or which excuse. The reason falls back to the
+    type's label the same way `_in_camp_reason` does — a course cover always
+    carries the TP event title as its remarks — and is uppercased HERE, once, so
+    every consumer holds a print-ready string.
     """
-    dates = format_ddmmyy_range(row.start_date, row.end_date)
     kind = row.type
     if isinstance(kind, LeaveType) or kind is StatusType.MC:
-        return f"({dates})"
-    return f"({(row.remarks or kind.label).upper()}: {dates})"
+        reason = None
+    else:
+        reason = (row.remarks or kind.label).upper()
+    return AbsenceNote(reason=reason, start=row.start_date, end=row.end_date)
+
+
+def note_display(note: AbsenceNote) -> str:
+    """The ONE owner of the note's printed form: "DDMMYY - DDMMYY", or
+    "REASON: DDMMYY - DDMMYY" when the note names a reason (a one-day range
+    collapses inside format_ddmmyy_range). Every rendering of a note — the
+    parade line's parenthesized suffix and the drag sheet's chip — is this
+    string, so the two can never describe one note differently.
+    """
+    dates = format_ddmmyy_range(note.start, note.end)
+    if note.reason is None:
+        return dates
+    return f"{note.reason}: {dates}"
+
+
+def note_suffix(note: AbsenceNote) -> str:
+    return f"({note_display(note)})"
 
 
 def categorize(day, pairs, variant: str) -> ParadeDoc:
@@ -285,11 +324,16 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
     )
     lines: dict[str, list] = {name: [] for name in names}
     people: dict[str, list] = {name: [] for name in names}
+    notes: dict[str, list] = {name: [] for name in names}
     for person, resolution in pairs:
         state = resolution.state
+        # The note is built FIRST and the line rendered from it, so the stored
+        # note and the printed suffix cannot say different things.
+        note = None
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
-            line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"
+            note = absence_note(resolution.row)
+            line = f"{parade_line(person)} {note_suffix(note)}"
         elif variant == "morning" and resolution.in_camp_rows:
             reason = _in_camp_reason(resolution.in_camp_rows[0])
             bucket = "others_in_camp"
@@ -302,6 +346,7 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
             line = parade_line(person)
         lines[bucket].append(line)
         people[bucket].append(person)
+        notes[bucket].append(note)
 
     doc = ParadeDoc(
         day=day,
@@ -309,6 +354,7 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
         total=len(pairs),
         **{name: tuple(lines[name]) for name in names},
         **{f"{name}_people": tuple(people[name]) for name in names},
+        **{f"{name}_notes": tuple(notes[name]) for name in names},
     )
     return doc.validate()
 
@@ -320,8 +366,12 @@ def categorize(day, pairs, variant: str) -> ParadeDoc:
 # read, so the two can never drift — the renderers are literally a join over it.
 
 # person_id is None only for a hand-built line-only doc (no `*_people` tuples);
-# such an entry still renders but carries nothing to drag.
-SheetEntry = namedtuple("SheetEntry", "person_id text")
+# such an entry still renders but carries nothing to drag. `text` is the whole
+# numbered line and is what the copyable document is joined from. `body`/`note`
+# are the SAME line split at its suffix — filled only for a noted line — so an
+# interactive surface can print the note as a chip; `f"{body} ({note})" == text`
+# by construction, which is what keeps the two projections identical.
+SheetEntry = namedtuple("SheetEntry", "person_id text body note", defaults=(None, None))
 
 # key/title None marks inert chrome (title+date, strength lines, the "——" rules,
 # umbrella headers, the greeting, roll call's literal OTHERS IN CAMP line); a set
@@ -333,6 +383,25 @@ def _plain(text: str) -> SheetSection:
     return SheetSection(key=None, title=None, text=text, entries=())
 
 
+def _sheet_entry(n: int, line: str, person, note) -> SheetEntry:
+    """One numbered line as a SheetEntry. `body`/`note` are filled only when the
+    line HAS a note and the person behind it is known (a hand-built line-only doc
+    has neither) — everything else carries `text` alone, and the numbering is the
+    same `n` in both, so the two forms stay one line.
+    """
+    text = f"{n}. {line}"
+    if person is None:
+        return SheetEntry(person_id=None, text=text)
+    if note is None:
+        return SheetEntry(person_id=person.id, text=text)
+    return SheetEntry(
+        person_id=person.id,
+        text=text,
+        body=f"{n}. {parade_line(person)}",
+        note=note_display(note),
+    )
+
+
 def _category_section(doc, name: str) -> SheetSection:
     """One printed category as a section: the header, then one SheetEntry per
     line. The "N. " numbering happens HERE and nowhere else, and the section's
@@ -342,11 +411,11 @@ def _category_section(doc, name: str) -> SheetSection:
     the two cannot disagree; an empty category is the header alone.
     """
     lines = getattr(doc, name)
-    people = getattr(doc, f"{name}_people")
-    ids = [p.id for p in people] if people else [None] * len(lines)
+    people = getattr(doc, f"{name}_people") or (None,) * len(lines)
+    notes = getattr(doc, f"{name}_notes") or (None,) * len(lines)
     entries = tuple(
-        SheetEntry(person_id=person_id, text=f"{n}. {line}")
-        for n, (line, person_id) in enumerate(zip(lines, ids), 1)
+        _sheet_entry(n, line, person, note)
+        for n, (line, person, note) in enumerate(zip(lines, people, notes), 1)
     )
     title = CATEGORY_TITLES[name]
     header = f"{title} ({len(lines)}):"
@@ -502,6 +571,14 @@ class CosDoc:
     on_course_people: tuple = ()
     mc_people: tuple = ()
     others_people: tuple = ()
+    # Parallel AbsenceNote tuples, ParadeDoc precedent — the note each absent
+    # line's suffix was rendered from, None on a bare STAY OUT line.
+    stay_out_notes: tuple = ()
+    leave_notes: tuple = ()
+    off_oil_notes: tuple = ()
+    on_course_notes: tuple = ()
+    mc_notes: tuple = ()
+    others_notes: tuple = ()
 
     def validate(self) -> "CosDoc":
         """Raise ParadeImbalance if anyone is listed twice, else return self.
@@ -552,11 +629,14 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
     """
     lines: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
     people: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
+    notes: dict[str, list] = {name: [] for name in _COS_CATEGORIES}
     for person, resolution in pairs:
         state = resolution.state
+        note = None
         if state is PresenceState.ABSENT:
             bucket = _absent_category(resolution.row)
-            line = f"{parade_line(person)} {_absence_suffix(resolution.row)}"
+            note = absence_note(resolution.row)
+            line = f"{parade_line(person)} {note_suffix(note)}"
         elif state is PresenceState.STAY_OUT:
             # STAY OUT is not an absence: there is no backing row, so no suffix.
             bucket = "stay_out"
@@ -566,12 +646,14 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
             continue
         lines[bucket].append(line)
         people[bucket].append(person)
+        notes[bucket].append(note)
 
     doc = CosDoc(
         day=day,
         cos_display=cos_display,
         **{name: tuple(lines[name]) for name in _COS_CATEGORIES},
         **{f"{name}_people": tuple(people[name]) for name in _COS_CATEGORIES},
+        **{f"{name}_notes": tuple(notes[name]) for name in _COS_CATEGORIES},
     )
     return doc.validate()
 
@@ -648,6 +730,12 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
     categories = _doc_categories(doc)
     lines = {c: list(getattr(doc, c)) for c in categories}
     people = {c: list(getattr(doc, c + "_people")) for c in categories}
+    # Same empty-tuple fallback _category_section uses: a hand-built doc may carry
+    # people without notes, and the three tuples must stay index-aligned.
+    notes = {
+        c: list(getattr(doc, c + "_notes")) or [None] * len(lines[c])
+        for c in categories
+    }
     location = {p.id: c for c in categories for p in people[c]}
     for person_id, target in overrides.items():
         if target not in allowed:
@@ -660,6 +748,7 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
         idx = next(i for i, p in enumerate(people[current]) if p.id == person_id)
         person = people[current].pop(idx)
         lines[current].pop(idx)
+        notes[current].pop(idx)
         if (
             variant is ParadeVariant.COS_MESSAGE
             and target is OverrideCategory.CURRENT_STRENGTH
@@ -672,10 +761,12 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
         pos = bisect.bisect_right(people[dest], parade_sort_key(person), key=parade_sort_key)
         people[dest].insert(pos, person)
         lines[dest].insert(pos, parade_line(person))
+        notes[dest].insert(pos, None)
         location[person_id] = dest
     replacements = {}
     for c in categories:
         replacements[c] = tuple(lines[c])
         replacements[c + "_people"] = tuple(people[c])
+        replacements[c + "_notes"] = tuple(notes[c])
     return dataclasses.replace(doc, **replacements).validate()
 

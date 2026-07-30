@@ -7,12 +7,14 @@ structural fix is that the renderers ARE a join over `sheet_sections`; these
 tests pin that reassembly (`"\\n\\n".join(section.text) == render_*(doc)`) on
 all three variants, plus the shape guarantees the drag UI relies on: droppable
 sections carry a category key and one entry per person, inert chrome carries
-none, and the "N. " numbering exists in exactly one place.
+none, the "N. " numbering exists in exactly one place, and a noted line's
+`body`/`note` split recombines into its own `text` (the chip and the copied
+suffix are one string, formatted once by `note_display`).
 
 Pure unit tests with duck-typed fakes (same style as test_morning_parade.py):
 no app, no DB.
 """
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -140,6 +142,40 @@ def test_entry_text_is_the_numbered_line_and_rebuilds_the_block():
     # and the copied block are the same strings, not two formatters.
     header = f"{section.title} ({len(section.entries)}):"
     assert "\n".join([header, *(e.text for e in section.entries)]) == section.text
+
+
+def test_note_display_is_the_one_suffix_formatter():
+    # The two shapes docs/PARADE_FORMATS.md fixes: dates alone where the category
+    # already names the reason, "REASON: dates" where it does not. Every rendering
+    # of a note — the line's suffix and the sheet's chip — is this string.
+    dates_only = parade.AbsenceNote(reason=None, start=DAY, end=DAY)
+    assert parade.note_display(dates_only) == "060726"
+    assert parade.note_suffix(dates_only) == "(060726)"
+    reasoned = parade.AbsenceNote(reason="HL", start=DAY, end=DAY + timedelta(days=1))
+    assert parade.note_display(reasoned) == "HL: 060726 - 070726"
+    assert parade.note_suffix(reasoned) == "(HL: 060726 - 070726)"
+
+
+def test_noted_entries_split_the_line_into_body_and_note():
+    # A noted line is one string held two ways: the sheet prints `body` plus the
+    # note as a chip, the copied text prints `text`. The split must recombine
+    # exactly, or the two projections of the document have drifted.
+    doc = parade.categorize(DAY, _roster(), "morning")
+    entries = [
+        entry
+        for section in parade.sheet_sections(doc) if section.key
+        for entry in section.entries
+    ]
+    noted = [entry for entry in entries if entry.note is not None]
+    assert {entry.note for entry in noted} == {
+        "060726", "ON COURSE: 060726", "OTHER: 060726",
+    }
+    for entry in noted:
+        assert f"{entry.body} ({entry.note})" == entry.text
+    # A bare line (present, stay-out, an OTHERS IN CAMP reason) carries neither
+    # half, so nothing can render a chip where the document has no note.
+    bare = [entry for entry in entries if entry.note is None]
+    assert bare and all(entry.body is None for entry in bare)
 
 
 def test_plain_sections_carry_no_key_title_or_entries():
