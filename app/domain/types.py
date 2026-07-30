@@ -68,6 +68,20 @@ COMMAND_TEAM = frozenset({
 })
 
 
+class PlatoonCategory(str, enum.Enum):
+    """The unit's seniority grouping of its platoons (owner decision (ee)
+    2026-07-30). Declaration order IS the seniority/display order — the same
+    trick APPOINTMENT_ORDER uses, so one authoritative order serves the People
+    page sections and every other list. Four categories over three platoons, so
+    exactly one of STC/Baby is always empty; the mapping is keyed data
+    (`platoon_category` rows), never hard-coded here."""
+
+    STC = "STC"
+    SENIOR = "Senior"
+    JUNIOR = "Junior"
+    BABY = "Baby"
+
+
 class CompanyRole(str, enum.Enum):
     S3 = "S3"  # manpower
     S4 = "S4"  # logistics
