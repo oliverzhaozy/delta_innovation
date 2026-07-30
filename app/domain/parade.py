@@ -21,7 +21,6 @@ from app.domain.types import (
     Appointment,
     CourseAbsenceType,
     LeaveType,
-    NOTED_OVERRIDE_TARGETS,
     OverrideCategory,
     ParadeVariant,
     Rank,
@@ -705,28 +704,20 @@ def _doc_categories(doc) -> tuple:
     return _COS_CATEGORIES if isinstance(doc, CosDoc) else _PARADE_CATEGORIES
 
 
-# One stored drag: where the line goes, and the keyer's optional AbsenceNote for
-# it. `note` defaults to None so a move is still expressible as "just a target".
-OverrideMove = namedtuple("OverrideMove", "target note", defaults=(None,))
-
-
-def apply_overrides(doc, overrides: Mapping[int, OverrideMove]):
-    """Return a copy of `doc` with each `{person_id: OverrideMove}` applied, or
-    `doc` itself when `overrides` is empty (identity — no rebuild).
+def apply_overrides(doc, overrides: Mapping[int, OverrideCategory]):
+    """Return a copy of `doc` with each `{person_id: target}` override applied,
+    or `doc` itself when `overrides` is empty (identity — no rebuild).
 
     A disallowed target for the doc's variant is a wiring bug (the route
     validates the target against ALLOWED_OVERRIDE_TARGETS before it ever stores
     one) — raise ValueError. A person no longer in the doc is a stale override
     that self-heals — silently skipped. A person already in the target bucket is
-    a no-op. The moved line drops whatever suffix it had (an OTHERS IN CAMP
-    reason, or the absence range its old row quoted — that row does not describe
-    where it is going) and takes the keyer's note instead: bare when the move
-    carries none, which is what a fresh drag always is, since a dragged person
-    has no backing row whose dates could honestly be quoted. A note on a target
-    outside NOTED_OVERRIDE_TARGETS has no suffix format to render into and is
-    ignored. Lines land at their parade_sort_key position so the category stays
-    in parade order. The result is validated: a move that unbalanced the doc is
-    refused like any other.
+    a no-op. The moved line is the BARE parade_line (any parenthesized suffix —
+    an OTHERS IN CAMP reason or an absence date range — is dropped, and never
+    added on the way in: a dragged person has no truthful backing row to quote),
+    inserted at its parade_sort_key position so the category stays in parade
+    order. The result
+    is validated: a move that unbalanced the doc is refused like any other.
 
     CURRENT_STRENGTH on a CosDoc REMOVES the person (decision D4): Message 1 has
     no present-in-camp block, so "back to present" there means the line leaves
@@ -746,8 +737,7 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideMove]):
         for c in categories
     }
     location = {p.id: c for c in categories for p in people[c]}
-    for person_id, move in overrides.items():
-        target = move.target
+    for person_id, target in overrides.items():
         if target not in allowed:
             raise ValueError(
                 f"{target.value!r} is not a valid override target for {variant.value}"
@@ -768,14 +758,10 @@ def apply_overrides(doc, overrides: Mapping[int, OverrideMove]):
             location.pop(person_id)
             continue
         dest = target.value
-        note = move.note if target in NOTED_OVERRIDE_TARGETS else None
-        line = parade_line(person)
-        if note is not None:
-            line = f"{line} {note_suffix(note)}"
         pos = bisect.bisect_right(people[dest], parade_sort_key(person), key=parade_sort_key)
         people[dest].insert(pos, person)
-        lines[dest].insert(pos, line)
-        notes[dest].insert(pos, note)
+        lines[dest].insert(pos, parade_line(person))
+        notes[dest].insert(pos, None)
         location[person_id] = dest
     replacements = {}
     for c in categories:

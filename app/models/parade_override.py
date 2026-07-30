@@ -13,9 +13,6 @@ class ParadeOverride(db.Model):
     leave/status/ledger data is touched; the presence engine still resolves the
     person, and build_doc applies this override on top of that resolution.
 
-    The keyer may annotate the moved line with a note (`note_*` below) — still
-    display-only, still nothing written back into leave/status data.
-
     Latest-wins per (date, variant, person): a second drag of the same person
     on the same document overwrites the target via a single-statement SQLite
     upsert on `uq_parade_override_slot`, so there is never a check-then-act
@@ -36,31 +33,11 @@ class ParadeOverride(db.Model):
         db.Enum(OverrideCategory, values_callable=_values, name="override_category"),
         nullable=False,
     )
-    # The keyer's typed note for this moved line (owner revision 2026-07-30).
-    # A dragged person has no backing row whose dates could be quoted, so the
-    # keyer supplies them: these three columns ARE the AbsenceNote the domain
-    # renders the line's suffix from. All NULL = a bare line, which is the
-    # default and what a fresh drag always writes.
-    note_reason = db.Column(db.String(300))
-    note_start = db.Column(db.Date)
-    note_end = db.Column(db.Date)
     created_by_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=now_sgt)
 
     __table_args__ = (
         db.UniqueConstraint("date", "variant", "person_id", name="uq_parade_override_slot"),
-        # A note without dates has no suffix to render (the format is always
-        # dated), so the pair is all-or-nothing; a reason alone is refused by the
-        # route before it gets here.
-        db.CheckConstraint(
-            "(note_start IS NULL AND note_end IS NULL)"
-            " OR (note_start IS NOT NULL AND note_end IS NOT NULL)",
-            name="ck_override_note_dates_pair",
-        ),
-        db.CheckConstraint(
-            "note_start IS NULL OR note_end IS NULL OR note_start <= note_end",
-            name="ck_override_note_date_order",
-        ),
     )
 
     person = db.relationship("Person", foreign_keys=[person_id])
