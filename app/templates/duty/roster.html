@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_priority.html" as priority %}
 {% block title %}Duty roster{% endblock %}
 
 {% block content %}
@@ -11,10 +12,41 @@
   </div>
 </div>
 
+{# The override decision comes AFTER the conflict is known: the assign POST
+   comes back to this page with the reasons rather than redirecting to a flash.
+   It sits above the grid so the warning is read without scrolling back up. #}
+{% if pending_assign %}
+<div class="flash flash-error">
+  <p><strong>{{ pending_assign.person.rank.value }} {{ pending_assign.person.display_name }}</strong>
+     on {{ pending_assign.duty.label }}, {{ pending_assign.day.strftime("%a %d %b") }} —
+     not assigned yet:</p>
+  <ul>
+    {% for reason in pending_assign.reasons %}<li>{{ reason }}</li>{% endfor %}
+  </ul>
+  <div style="display:flex; gap:1rem; align-items:center">
+    <form method="post" action="{{ url_for('duty.assign') }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="date" value="{{ pending_assign.day.isoformat() }}">
+      <input type="hidden" name="duty" value="{{ pending_assign.duty.value }}">
+      <input type="hidden" name="person_id" value="{{ pending_assign.person.id }}">
+      <input type="hidden" name="confirm" value="1">
+      <button type="submit" class="btn">Confirm and assign</button>
+    </form>
+    <a href="{{ url_for('duty.roster', month=month) }}">Cancel</a>
+  </div>
+</div>
+{% endif %}
+
 {# Weekday-only grid (owner 2026-07-27): COS and CDO/S are working-day duties,
    so weekends are absent from the table entirely; public holidays and blocked
    days stay visible as greyed rows so the gap is explained, not silently
-   missing. #}
+   missing.
+
+   Assignment happens IN the cell: each open slot carries its own one-field
+   form, priority-ordered so the top option is the natural pick. The options
+   read the UNFILTERED pool (decision (ee)) and the ⚠ marks are a hint only —
+   duty_service.assign re-checks and owns the confirm step. #}
 <section class="card table-wrap">
   <h2>Month grid</h2>
   <table class="list">
@@ -39,6 +71,24 @@
                 {% if (row.person_id, d.date) in adjacency_marks %}<span class="chip">&#9888; adjacent</span>{% endif %}
               {% else %}
                 — <strong>blank</strong> &#9888;
+              {% endif %}
+              {% if policy.can_manage_roster(current_user) %}
+              <form method="post" action="{{ url_for('duty.assign') }}" class="cell-assign">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
+                <input type="hidden" name="duty" value="{{ duty.value }}">
+                {# The holder is NOT preselected: this select is an action, not
+                   a state display, so an accidental focus-and-blur posts
+                   nothing. #}
+                <select name="person_id" required data-autosubmit aria-label="{{ duty.label }} for {{ d.date.strftime('%d %b') }}">
+                  <option value="" disabled selected>{% if row %}— change —{% else %}— assign —{% endif %}</option>
+                  {% for p, last in view.assignable_priority[duty] %}
+                  <option value="{{ p.id }}">{% if (p.id, d.date) in view.unavailable %}&#9888; {% endif %}{{ p.rank.value }} {{ p.display_name }} — {{ priority.gap(last, today) }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+              </form>
               {% endif %}
             </td>
           {% endfor %}
@@ -96,56 +146,12 @@
   </div>
   <p class="muted">Generates the whole month. Manual picks are kept &mdash; only auto-planned slots are replanned.</p>
 </section>
-
-<section class="card">
-  <h2>Manual assignment</h2>
-  <form method="post" action="{{ url_for('duty.assign') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="month" value="{{ month }}">
-    <label>Date <input type="date" name="date" required min="{{ view.first.isoformat() }}" max="{{ view.last.isoformat() }}"></label>
-    <label>Duty
-      <select name="duty">
-        {% for duty in Duty %}<option value="{{ duty.value }}">{{ duty.label }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Person
-      <select name="person_id">
-        {% for p in roster_people %}<option value="{{ p.id }}">{{ p.rank.value }} {{ p.display_name }}</option>{% endfor %}
-      </select>
-    </label>
-    <button type="submit" class="btn">Assign</button>
-  </form>
-
-  {# The override decision comes AFTER the conflict is known: the assign POST
-     comes back here with the reasons rather than redirecting to a flash. #}
-  {% if pending_assign %}
-  <div class="flash flash-error" style="margin-top:1rem">
-    <p><strong>{{ pending_assign.person.rank.value }} {{ pending_assign.person.display_name }}</strong>
-       on {{ pending_assign.duty.label }}, {{ pending_assign.day.strftime("%a %d %b") }} —
-       not assigned yet:</p>
-    <ul>
-      {% for reason in pending_assign.reasons %}<li>{{ reason }}</li>{% endfor %}
-    </ul>
-    <div style="display:flex; gap:1rem; align-items:center">
-      <form method="post" action="{{ url_for('duty.assign') }}" class="inline-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="month" value="{{ month }}">
-        <input type="hidden" name="date" value="{{ pending_assign.day.isoformat() }}">
-        <input type="hidden" name="duty" value="{{ pending_assign.duty.value }}">
-        <input type="hidden" name="person_id" value="{{ pending_assign.person.id }}">
-        <input type="hidden" name="confirm" value="1">
-        <button type="submit" class="btn">Confirm and assign</button>
-      </form>
-      <a href="{{ url_for('duty.roster', month=month) }}">Cancel</a>
-    </div>
-  </div>
-  {% endif %}
-</section>
 {% endif %}
 
 {# Pools panel — ALWAYS rendered (owner 2026-07-24: at the bottom, grid first):
    an accidentally empty or tiny pool (the 3SG-PS gap is real) must be visible
-   on day one. #}
+   on day one. It lists the AUTO-PICK pool in priority order, so the panel and
+   the generator describe the same rotation; top of the list does it next. #}
 {% for duty in Duty %}
 <section class="card">
   <h2>{{ duty.label }} pool ({{ view.pools[duty]|length }})</h2>
@@ -153,8 +159,8 @@
     <p class="flash flash-error">&#9888; {{ duty.label }} pool is empty or tiny — the eligibility rule, not the app, may be the problem.</p>
   {% endif %}
   <ul class="toollist">
-    {% for p in view.pools[duty] %}
-      <li><span>{{ p.rank.value }} {{ p.display_name }}</span></li>
+    {% for p, last in view.priority[duty] %}
+      <li><span>{{ p.rank.value }} {{ p.display_name }}</span><span class="chip plain">{{ priority.gap(last, today) }}</span></li>
     {% endfor %}
   </ul>
 </section>

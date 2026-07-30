@@ -1,0 +1,10 @@
+{# The ONE owner of a priority chip's words. The duty roster and the TU manning
+   builder both import this, so "who is owed the next turn" cannot be described
+   two different ways on two pages. `last` is the person's most recent turn
+   (None = never); a date after `today` is a turn already on the books. #}
+{% macro gap(last, today) -%}
+  {%- if last is none -%}never
+  {%- elif last > today -%}sched {{ last.strftime("%d %b") }}
+  {%- else -%}{{ (today - last).days }}d ago
+  {%- endif -%}
+{%- endmacro %}

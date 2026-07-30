@@ -98,6 +98,27 @@ body {
 
 .inline-form { display: inline; margin: 0; }
 
+/* In-place assignment inside a table cell: the select must never widen the
+   duty grid's column, so it is capped and ellipsised rather than sized to its
+   longest option. */
+.cell-assign {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  max-width: 16rem;
+}
+
+.cell-assign select {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.cell-assign .btn { width: auto; margin: 0; padding: 0.2rem 0.7rem; font-size: 0.85rem; }
+
 /* ---------- Grouped nav dropdowns (UI refresh) ---------- */
 
 .navgroup { position: relative; }

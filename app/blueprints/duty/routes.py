@@ -48,13 +48,16 @@ def _render_roster(month, *, pending_assign=None):
     """The roster page, from the GET and from an assign that hit a warning —
     one builder, so the conflict card renders over the very page the user was
     looking at."""
+    # The priority chips date FROM today: the reference date is passed into the
+    # template, never read inside a domain function.
+    today = today_sgt()
     view = duty_service.month_view(month)
-    # The dropdown reads the UNFILTERED pools: a platoon excused the COS pool is
-    # warned about on assign, not hidden (decision (ee)). Name lookup adds the
-    # current holders on top — an excused (or since-exempted) person can hold a
-    # slot, and a flag line must name them rather than print a bare id.
-    assignable = {p.id: p for duty in Duty for p in view.assignable_pools[duty]}
-    people_by_id = dict(assignable)
+    # The per-cell dropdowns read the UNFILTERED pools (view.assignable_priority):
+    # a platoon excused the COS pool is warned about on assign, not hidden
+    # (decision (ee)). Name lookup adds the current holders on top — an excused
+    # (or since-exempted) person can hold a slot, and a flag line must name them
+    # rather than print a bare id.
+    people_by_id = {p.id: p for duty in Duty for p in view.assignable_pools[duty]}
     people_by_id.update({row.person_id: row.person for row in view.rows})
     adjacency_marks = {
         (person_id, d) for person_id, d1, d2 in view.violations.adjacency for d in (d1, d2)
@@ -70,14 +73,14 @@ def _render_roster(month, *, pending_assign=None):
         month=month,
         view=view,
         Duty=Duty,
-        roster_people=sorted(assignable.values(), key=parade_sort_key),
         people_by_id=people_by_id,
         adjacency_marks=adjacency_marks,
         adjacency_rows=adjacency_rows,
         pending_assign=pending_assign,
         prev_month=(view.first - timedelta(days=1)).strftime("%Y-%m"),
         next_month=(view.last + timedelta(days=1)).strftime("%Y-%m"),
-        today_month=today_sgt().strftime("%Y-%m"),
+        today=today,
+        today_month=today.strftime("%Y-%m"),
     )
 
 

@@ -21,6 +21,25 @@ document.addEventListener("click", (event) => {
   });
 });
 
+// In-place assignment selects (duty grid cells, TU manning slot rows). Delegated
+// so one listener covers a whole month grid's worth of cells. The client
+// validates NOTHING — the server owns eligibility, the availability warning and
+// its confirm card, and re-renders the truth either way; this only saves the
+// click on the button beside the select. That button is the no-JS path, so it
+// is hidden here rather than in CSS: no script, no hiding.
+document.addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-autosubmit]");
+  if (!select || !select.value) return;
+  const form = select.closest("form");
+  if (form) form.submit();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("[data-autosubmit-fallback]").forEach((button) => {
+    button.hidden = true;
+  });
+});
+
 // In-message drag recategorization (P10.5). Delegated so it works on all three
 // parade pages. The client does NO count math: a drop only fills the hidden
 // #override-form (person id + target category) and submits it — the server

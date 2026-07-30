@@ -5,8 +5,9 @@ wiring, rights (view-for-all vs manage-for-PS), and the hard-block-vs-warn
 split are pinned through actual responses, mirroring the parade page suites.
 """
 import re
-from datetime import date
+from datetime import date, timedelta
 
+from app.domain.dates import today_sgt
 from app.domain.types import (
     Appointment, DayPart, Duty, LeaveType, PlatoonCategory, Rank, RequestStatus,
 )
@@ -113,11 +114,31 @@ def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
     assert "/duty/roster/block" not in html
 
 
-def test_manual_assign_select_is_parade_ordered(app, client, make_person):
-    # UI-22: the assign dropdown was the last alphabetical people list. Parade
-    # order now: PC, P2IC (3WO above LTA — the parade hoist, not the legal
-    # RANK_ORDER), PS, Det Comd, Opr. The names alphabetize in a different order
-    # entirely, so a regression to display_name fails here.
+def cell_select(html, day, duty=Duty.COS):
+    """The one grid cell's assign form for (day, duty), as markup. Every hop is
+    guarded against `</form>` so the match can never straddle two cells."""
+    inside = r"(?:(?!</form>).)*?"
+    form = re.search(
+        r'<form method="post" action="/duty/roster/assign" class="cell-assign">'
+        + inside + r'name="date" value="%s"' % day.isoformat()
+        + inside + r'name="duty" value="%s"' % duty.value
+        + r"(?:(?!</form>).)*</form>",
+        html, re.S,
+    )
+    assert form is not None, f"no cell form for {day} {duty.value}"
+    return form.group(0)
+
+
+def cell_options(html, day, duty=Duty.COS):
+    return re.findall(r'<option value="\d+">([^<]+)</option>', cell_select(html, day, duty))
+
+
+def test_cell_dropdown_options_are_priority_then_parade_ordered(app, client, make_person):
+    # Nobody has done a duty, so every option ties on "never" and the ranking
+    # falls back to pool position — which is parade order: PC, P2IC (3WO above
+    # LTA — the parade hoist, not the legal RANK_ORDER), PS, Det Comd, Opr. The
+    # names alphabetize in a different order entirely, so a regression to
+    # display_name fails here.
     make_person(username="ord_pc", display_name="Yankee Pc", rank=Rank.LTA,
                 appointment=Appointment.PC, platoon=1)
     make_person(username="ord_p2ic_wo", display_name="Bravo P2ic", rank=Rank.THREE_WO,
@@ -133,15 +154,89 @@ def test_manual_assign_select_is_parade_ordered(app, client, make_person):
     login(client, "ord_ps")
 
     html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
-    select = re.search(r'<select name="person_id">.*?</select>', html, re.S).group(0)
-    assert re.findall(r'<option value="\d+">([^<]+)</option>', select) == [
-        "LTA Yankee Pc",
-        "3WO Bravo P2ic",
-        "LTA Alpha P2ic",
-        "2SG Delta Ps",
-        "3SG Zulu Det",
-        "PTE Charlie Opr",
+    # Each duty's cell offers only that duty's pool, never the whole roster.
+    assert cell_options(html, date(2026, 8, 5)) == [
+        "3SG Zulu Det — never",
+        "PTE Charlie Opr — never",
     ]
+    assert "— assign —" in cell_select(html, date(2026, 8, 5))
+    assert cell_options(html, date(2026, 8, 5), Duty.CDOS) == [
+        "LTA Yankee Pc — never",
+        "3WO Bravo P2ic — never",
+        "LTA Alpha P2ic — never",
+        "2SG Delta Ps — never",
+    ]
+    # The flat "Manual assignment" card the cells replaced is gone.
+    assert "<h2>Manual assignment</h2>" not in html
+
+
+def test_cell_dropdowns_are_for_managers_only(app, client, make_person):
+    make_full_cast(make_person)
+    login(client, "opr1")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert "cell-assign" not in html
+    assert 'name="person_id"' not in html
+    # ...but the read-only grid and the priority panels still render for them.
+    assert "COS pool" in html and "Mon 03 Aug" in html
+
+
+def test_priority_panel_ranks_by_longest_since_the_last_duty(app, client, make_person):
+    make_person(username="det_a", display_name="Alpha Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="det_b", display_name="Bravo Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="opr_c", display_name="Charlie Opr", rank=Rank.PTE,
+                appointment=Appointment.OPR, platoon=1)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    today = today_sgt()
+    plant_assignment(app, "det_a", today - timedelta(days=30), Duty.COS)
+    plant_assignment(app, "det_b", today - timedelta(days=3), Duty.COS)
+    login(client, "ps2")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    pool_block = re.search(r"<h2>COS pool \(3\)</h2>.*?</ul>", html, re.S).group(0)
+    names = re.findall(r"<li><span>([^<]+)</span>", pool_block)
+    chips = re.findall(r'<span class="chip plain">([^<]+)</span>', pool_block)
+    # Never-done first, then oldest; the chip says how long it has been.
+    assert names == ["PTE Charlie Opr", "3SG Alpha Det", "3SG Bravo Det"]
+    assert chips == ["never", "30d ago", "3d ago"]
+
+
+def test_a_scheduled_future_duty_sinks_a_man_and_reads_as_scheduled(app, client, make_person):
+    make_person(username="det_a", display_name="Alpha Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="det_b", display_name="Bravo Det", rank=Rank.THREE_SG,
+                appointment=Appointment.DET_COMD, platoon=1)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
+    today = today_sgt()
+    plant_assignment(app, "det_a", today - timedelta(days=60), Duty.COS)
+    ahead = today + timedelta(days=9)
+    plant_assignment(app, "det_b", ahead, Duty.COS)
+    login(client, "ps2")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    pool_block = re.search(r"<h2>COS pool \(2\)</h2>.*?</ul>", html, re.S).group(0)
+    assert re.findall(r"<li><span>([^<]+)</span>", pool_block) == [
+        "3SG Alpha Det", "3SG Bravo Det",
+    ]
+    assert re.findall(r'<span class="chip plain">([^<]+)</span>', pool_block) == [
+        "60d ago", f"sched {ahead.strftime('%d %b')}",
+    ]
+
+
+def test_an_unavailable_person_is_marked_in_that_date_s_dropdown_only(
+    app, client, make_person
+):
+    make_full_cast(make_person)
+    away = date(2026, 8, 5)
+    plant_leave(app, "det1", away)
+    login(client, "ps2")
+
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert cell_options(html, away) == ["&#9888; 3SG Det1 — never", "CPL Opr1 — never"]
+    # The mark is per DATE: the next day's cell offers the same man unmarked.
+    assert cell_options(html, date(2026, 8, 6)) == ["3SG Det1 — never", "CPL Opr1 — never"]
 
 
 def test_roster_mutations_403_for_opr(app, client, make_person):
@@ -285,6 +380,9 @@ def test_assign_unavailable_asks_to_confirm_on_the_page(app, client, make_person
     assert resp.status_code == 200
     assert "covering absence or duty that day" in html
     assert "Confirm and assign" in html
+    # The card sits ABOVE the grid: the warning is read without scrolling back
+    # up past 21 rows of cells to the one that was just clicked.
+    assert html.index("Confirm and assign") < html.index("<h2>Month grid</h2>")
     with app.app_context():
         assert db.session.query(DutyAssignment).count() == 0
 
@@ -359,13 +457,11 @@ def test_excused_platoon_out_of_the_pool_panel_but_in_the_assign_dropdown(
     pool_block = re.search(r"<h2>COS pool \(1\)</h2>.*?</ul>", html, re.S).group(0)
     assert "Alpha Det" in pool_block
     assert "Bravo Opr" not in pool_block
-    # ...but the dropdown reads the UNFILTERED pool: allowed with a warning, not
-    # hidden. Still parade-ordered (PS, Det Comd, Opr).
-    select = re.search(r'<select name="person_id">.*?</select>', html, re.S).group(0)
-    assert re.findall(r'<option value="\d+">([^<]+)</option>', select) == [
-        "2SG Delta Ps",
-        "3SG Alpha Det",
-        "CPL Bravo Opr",
+    # ...but every cell dropdown reads the UNFILTERED pool: allowed with a
+    # warning, not hidden.
+    assert cell_options(html, date(2026, 8, 5)) == [
+        "3SG Alpha Det — never",
+        "CPL Bravo Opr — never",
     ]
 
 
