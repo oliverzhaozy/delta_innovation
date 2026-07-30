@@ -258,6 +258,27 @@ ALLOWED_OVERRIDE_TARGETS: dict = {
     ParadeVariant.COS_MESSAGE: frozenset(OverrideCategory) - {OverrideCategory.OTHERS_IN_CAMP},
 }
 
+# Which targets a keyer may annotate with a note (owner revision 2026-07-30):
+# exactly the five ABSENT categories, because a note IS the dated absence suffix
+# docs/PARADE_FORMATS.md defines and only those lines carry one. A note on
+# CURRENT STRENGTH / OTHERS IN CAMP / STAY OUT has no format to render into, so
+# the route refuses it rather than inventing a suffix the document never uses.
+NOTED_OVERRIDE_TARGETS: frozenset = frozenset({
+    OverrideCategory.LEAVE,
+    OverrideCategory.OFF_OIL,
+    OverrideCategory.MC,
+    OverrideCategory.ON_COURSE,
+    OverrideCategory.OTHERS,
+})
+
+# The subset whose suffix leads with a reason ("SIG COURSE: …", "HL: …") — the
+# other three noted categories name the reason in their own header, so a typed
+# reason there is dropped rather than printed twice.
+REASONED_OVERRIDE_TARGETS: frozenset = frozenset({
+    OverrideCategory.ON_COURSE,
+    OverrideCategory.OTHERS,
+})
+
 
 class RoSection(str, enum.Enum):
     """The six standing 'Matters' sections of the RO, in document order

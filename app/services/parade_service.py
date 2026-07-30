@@ -13,7 +13,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.domain import parade as parade_domain
 from app.domain.dates import now_sgt
-from app.domain.types import ParadeVariant
+from app.domain.types import REASONED_OVERRIDE_TARGETS, ParadeVariant
 from app.extensions import db
 from app.models import ParadeOverride
 from app.services import presence_service
@@ -23,7 +23,10 @@ from app.services import presence_service
 # when the engine refused the document — then `imbalance` carries the reason.
 # has_overrides: whether any stored drag-and-drop override exists for this
 # (date, variant) — drives the page's "Moves active" badge + Reset.
-BuiltDoc = namedtuple("BuiltDoc", "pairs doc text imbalance has_overrides")
+# overrides: the very {person_id: OverrideMove} map applied to the doc, so the
+# page can show a note editor beside exactly the lines a keyer moved without
+# re-reading the table (one fetch, one truth).
+BuiltDoc = namedtuple("BuiltDoc", "pairs doc text imbalance has_overrides overrides")
 
 
 def build_doc(day, variant, *, cos_display=None) -> BuiltDoc:
@@ -66,18 +69,39 @@ def build_doc(day, variant, *, cos_display=None) -> BuiltDoc:
     except parade_domain.ParadeImbalance as exc:
         return BuiltDoc(
             pairs=pairs, doc=None, text=None, imbalance=str(exc),
-            has_overrides=bool(overrides),
+            has_overrides=bool(overrides), overrides=overrides,
         )
     return BuiltDoc(
         pairs=pairs, doc=doc, text=text, imbalance=None,
-        has_overrides=bool(overrides),
+        has_overrides=bool(overrides), overrides=overrides,
     )
 
 
 # --- drag-and-drop overrides (P8.2, reinstated P10.3) -----------------------
 
+def _note_for(row):
+    """The AbsenceNote a stored override row carries, or None for a bare line.
+
+    The reason is kept only for a REASONED target: the other noted categories
+    print the reason in their own header, so quoting it again would double it.
+    The route already refuses to STORE a reason on those targets; dropping it
+    again here is the render-side guarantee, so no row — hand-written, legacy, or
+    left behind by a future write path — can print a suffix the format forbids.
+    """
+    if row.note_start is None:
+        return None
+    reason = (
+        row.note_reason
+        if row.target_category in REASONED_OVERRIDE_TARGETS
+        else None
+    )
+    return parade_domain.AbsenceNote(
+        reason=reason, start=row.note_start, end=row.note_end
+    )
+
+
 def _overrides_for(day, variant) -> dict:
-    """{person_id: OverrideCategory} for one document. build_doc reads this and
+    """{person_id: OverrideMove} for one document. build_doc reads this and
     hands it to apply_overrides; a stale entry (person no longer in the doc) is
     harmlessly skipped there, so no cleanup is needed on roster changes."""
     rows = (
@@ -85,7 +109,12 @@ def _overrides_for(day, variant) -> dict:
         .filter(ParadeOverride.date == day, ParadeOverride.variant == variant)
         .all()
     )
-    return {row.person_id: row.target_category for row in rows}
+    return {
+        row.person_id: parade_domain.OverrideMove(
+            target=row.target_category, note=_note_for(row)
+        )
+        for row in rows
+    }
 
 
 def set_override(day, variant, person_id, target, *, created_by_id):
@@ -95,12 +124,19 @@ def set_override(day, variant, person_id, target, *, created_by_id):
     of the same person on the same (date, variant) updates the target in place
     rather than a check-then-act SELECT-then-INSERT/UPDATE (no TOCTOU race). The
     caller commits; this only stages the statement.
+
+    A re-drag CLEARS any note on the slot: the old note described the old target
+    ("HL: 270726 - 280726" under OTHERS says nothing about MC), so carrying it
+    across would print a suffix nobody typed for that category. The keyer retypes.
     """
     stmt = sqlite_insert(ParadeOverride).values(
         date=day,
         variant=variant,
         person_id=person_id,
         target_category=target,
+        note_reason=None,
+        note_start=None,
+        note_end=None,
         created_by_id=created_by_id,
         created_at=now_sgt(),
     )
@@ -108,11 +144,37 @@ def set_override(day, variant, person_id, target, *, created_by_id):
         index_elements=["date", "variant", "person_id"],
         set_={
             "target_category": target,
+            "note_reason": None,
+            "note_start": None,
+            "note_end": None,
             "created_by_id": created_by_id,
             "created_at": now_sgt(),
         },
     )
     db.session.execute(stmt)
+
+
+def set_override_note(day, variant, person_id, *, reason, start, end) -> bool:
+    """Write the keyer's note onto an EXISTING override slot; False when there is
+    no such row (nothing was dragged there, so there is no line to annotate).
+
+    A plain conditional UPDATE, not an upsert: a note is an annotation ON a move,
+    never a move of its own. All three values None clears the note and the line
+    goes back to bare. The caller commits.
+    """
+    updated = (
+        db.session.query(ParadeOverride)
+        .filter(
+            ParadeOverride.date == day,
+            ParadeOverride.variant == variant,
+            ParadeOverride.person_id == person_id,
+        )
+        .update(
+            {"note_reason": reason, "note_start": start, "note_end": end},
+            synchronize_session=False,
+        )
+    )
+    return bool(updated)
 
 
 def clear_overrides(day, variant) -> int:

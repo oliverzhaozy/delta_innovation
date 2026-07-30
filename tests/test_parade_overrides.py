@@ -5,9 +5,11 @@ real ParadeDoc/CosDoc, then apply_overrides moves people between categories. The
 existing byte-exact goldens (test_morning_parade / test_roll_call /
 test_cos_message) are the regression gate for the rendered output; this file pins
 the override semantics themselves — including decision D4, where CURRENT_STRENGTH
-on the COS message means "remove the line", not "move it to a bucket".
+on the COS message means "remove the line", not "move it to a bucket", and the
+keyer-typed note an OverrideMove may carry (owner revision 2026-07-30), which
+renders through the same one suffix formatter a derived absence uses.
 """
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -96,7 +98,7 @@ def _cos_doc():
 
 def test_morning_into_others_in_camp_has_no_reason_parenthesis():
     doc = _morning_doc()
-    moved = parade.apply_overrides(doc, {1: OverrideCategory.OTHERS_IN_CAMP})
+    moved = parade.apply_overrides(doc, {1: parade.OverrideMove(OverrideCategory.OTHERS_IN_CAMP)})
     assert "PTE AARON GOH" in moved.others_in_camp
     # A dragged-in OTHERS IN CAMP line is bare — the "(REASON)" suffix is a
     # keyer annotation, never synthesised by a drag.
@@ -107,7 +109,7 @@ def test_reason_suffix_dropped_when_dragged_out_of_others_in_camp():
     doc = _morning_doc()
     # Oliver Zhao sits in OTHERS IN CAMP as "3SG OLIVER ZHAO (BDO)".
     assert "3SG OLIVER ZHAO (BDO)" in doc.others_in_camp
-    moved = parade.apply_overrides(doc, {3: OverrideCategory.MC})
+    moved = parade.apply_overrides(doc, {3: parade.OverrideMove(OverrideCategory.MC)})
     assert "3SG OLIVER ZHAO" in moved.mc
     assert "(BDO)" not in "".join(moved.mc)
     # Source doc untouched — apply_overrides returns a fresh frozen copy.
@@ -120,7 +122,7 @@ def test_absence_date_suffix_dropped_when_dragged_out():
     doc = _morning_doc()
     # Ravi sits in MC as "3SG RAVI KUMAR (060726)" — his row's own range.
     assert "3SG RAVI KUMAR (060726)" in doc.mc
-    moved = parade.apply_overrides(doc, {5: OverrideCategory.CURRENT_STRENGTH})
+    moved = parade.apply_overrides(doc, {5: parade.OverrideMove(OverrideCategory.CURRENT_STRENGTH)})
     assert "3SG RAVI KUMAR" in moved.current_strength
     assert all("RAVI KUMAR" not in line for line in moved.mc)
 
@@ -129,7 +131,7 @@ def test_drag_into_an_absent_category_synthesises_no_dates():
     # Aaron is simply present: there is no backing row, so the drag must not
     # invent a range for the MC line it creates.
     doc = _morning_doc()
-    moved = parade.apply_overrides(doc, {1: OverrideCategory.MC})
+    moved = parade.apply_overrides(doc, {1: parade.OverrideMove(OverrideCategory.MC)})
     assert "PTE AARON GOH" in moved.mc
     assert "PTE AARON GOH (" not in "".join(moved.mc)
 
@@ -137,10 +139,10 @@ def test_drag_into_an_absent_category_synthesises_no_dates():
 def test_roll_call_stay_out_round_trip():
     doc = _roll_call_doc()
     assert "PTE AARON GOH" in doc.current_strength
-    out = parade.apply_overrides(doc, {1: OverrideCategory.STAY_OUT})
+    out = parade.apply_overrides(doc, {1: parade.OverrideMove(OverrideCategory.STAY_OUT)})
     assert "PTE AARON GOH" in out.stay_out
     assert all("AARON GOH" not in line for line in out.current_strength)
-    back = parade.apply_overrides(out, {1: OverrideCategory.CURRENT_STRENGTH})
+    back = parade.apply_overrides(out, {1: parade.OverrideMove(OverrideCategory.CURRENT_STRENGTH)})
     assert "PTE AARON GOH" in back.current_strength
     assert all("AARON GOH" not in line for line in back.stay_out)
 
@@ -148,7 +150,7 @@ def test_roll_call_stay_out_round_trip():
 def test_cos_move_uses_people_tuples():
     doc = _cos_doc()
     assert "CPT OSCAR ONG" in doc.stay_out
-    moved = parade.apply_overrides(doc, {3: OverrideCategory.LEAVE})
+    moved = parade.apply_overrides(doc, {3: parade.OverrideMove(OverrideCategory.LEAVE)})
     assert "CPT OSCAR ONG" in moved.leave
     assert all("OSCAR ONG" not in line for line in moved.stay_out)
     # The parallel person tuple moved in lockstep with the line tuple.
@@ -160,7 +162,7 @@ def test_cos_current_strength_target_removes_person_from_message():
     # Decision D4: Message 1 lists only people with something to report, so
     # "present" is not a bucket there — dragging onto it drops the line entirely.
     doc = _cos_doc()
-    moved = parade.apply_overrides(doc, {5: OverrideCategory.CURRENT_STRENGTH})
+    moved = parade.apply_overrides(doc, {5: parade.OverrideMove(OverrideCategory.CURRENT_STRENGTH)})
     rendered = parade.render_cos(moved)
     assert "RAVI KUMAR" not in rendered
     assert moved.mc == () and moved.mc_people == ()
@@ -174,7 +176,7 @@ def test_cos_current_strength_target_removes_person_from_message():
 
 def test_unknown_person_id_silently_skipped():
     doc = _morning_doc()
-    moved = parade.apply_overrides(doc, {999: OverrideCategory.MC})
+    moved = parade.apply_overrides(doc, {999: parade.OverrideMove(OverrideCategory.MC)})
     # A stale override (person no longer in the doc) self-heals: no error, and
     # every category matches the original.
     for key in parade._PARADE_CATEGORIES:
@@ -185,7 +187,7 @@ def test_same_bucket_override_is_noop():
     doc = _morning_doc()
     # Aaron is already CURRENT STRENGTH; a drag onto his own category changes
     # nothing but still validates.
-    moved = parade.apply_overrides(doc, {1: OverrideCategory.CURRENT_STRENGTH})
+    moved = parade.apply_overrides(doc, {1: parade.OverrideMove(OverrideCategory.CURRENT_STRENGTH)})
     assert moved.current_strength == doc.current_strength
 
 
@@ -205,7 +207,7 @@ def test_disallowed_target_raises_value_error(doc_factory, variant, bad_target):
         for p in getattr(doc, key + "_people")
     )
     with pytest.raises(ValueError):
-        parade.apply_overrides(doc, {a_person_id: bad_target})
+        parade.apply_overrides(doc, {a_person_id: parade.OverrideMove(bad_target)})
 
 
 def test_cos_message_allows_current_strength_as_a_target():
@@ -233,7 +235,7 @@ def test_insertion_lands_at_parade_sort_position():
         (person("PTE Plat Two", id=5, platoon=2), absent(status_row(StatusType.MC))),
     ]
     doc = parade.categorize(DAY, pairs, "morning")
-    moved = parade.apply_overrides(doc, {5: OverrideCategory.CURRENT_STRENGTH})
+    moved = parade.apply_overrides(doc, {5: parade.OverrideMove(OverrideCategory.CURRENT_STRENGTH)})
     assert [p.id for p in moved.current_strength_people] == [10, 2, 5, 8]
     assert moved.current_strength[2] == "PTE PLAT TWO"
 
@@ -241,6 +243,71 @@ def test_insertion_lands_at_parade_sort_position():
 def test_moved_document_still_reassembles_from_its_sections():
     # sheet_sections (P10.2) is the one line source; an overridden doc must
     # describe itself as faithfully as a raw one.
-    doc = parade.apply_overrides(_morning_doc(), {1: OverrideCategory.MC})
+    doc = parade.apply_overrides(_morning_doc(), {1: parade.OverrideMove(OverrideCategory.MC)})
+    sections = parade.sheet_sections(doc)
+    assert "\n\n".join(s.text for s in sections) == parade.render_morning(doc)
+
+
+# --- keyer-typed notes on a moved line (owner revision 2026-07-30) -----------
+
+def note(reason=None, start=DAY, end=DAY):
+    return parade.AbsenceNote(reason=reason, start=start, end=end)
+
+
+def test_noted_move_renders_the_typed_date_range():
+    doc = _morning_doc()
+    moved = parade.apply_overrides(
+        doc,
+        {1: parade.OverrideMove(
+            OverrideCategory.MC, note(end=DAY + timedelta(days=2))
+        )},
+    )
+    # MC names its own reason, so the typed suffix is the dates alone — the same
+    # shape a derived MC line carries.
+    assert "PTE AARON GOH (060726 - 080726)" in moved.mc
+
+
+def test_noted_move_onto_a_reasoned_target_leads_with_the_reason():
+    doc = _morning_doc()
+    moved = parade.apply_overrides(
+        doc, {1: parade.OverrideMove(OverrideCategory.OTHERS, note(reason="HL"))}
+    )
+    assert "PTE AARON GOH (HL: 060726)" in moved.others
+
+
+def test_dates_only_note_on_a_reasoned_target_prints_the_dates_alone():
+    # A reason is allowed on ON COURSE/OTHERS, never required: nothing typed for
+    # it collapses to the dates-only form rather than printing an empty prefix.
+    doc = _morning_doc()
+    moved = parade.apply_overrides(
+        doc, {1: parade.OverrideMove(OverrideCategory.ON_COURSE, note())}
+    )
+    assert "PTE AARON GOH (060726)" in moved.on_course
+
+
+def test_note_is_ignored_on_a_target_with_no_suffix_format():
+    # CURRENT STRENGTH / OTHERS IN CAMP / STAY OUT lines are bare by format
+    # (PARADE_FORMATS), so a note reaching one is dropped, not invented into a
+    # suffix the document never prints.
+    doc = _morning_doc()
+    moved = parade.apply_overrides(
+        doc,
+        {5: parade.OverrideMove(
+            OverrideCategory.CURRENT_STRENGTH, note(reason="HL")
+        )},
+    )
+    assert "3SG RAVI KUMAR" in moved.current_strength
+    assert all(n is None for n in moved.current_strength_notes)
+
+
+def test_noted_move_reaches_the_sheet_entry_and_still_reassembles():
+    doc = parade.apply_overrides(
+        _morning_doc(), {1: parade.OverrideMove(OverrideCategory.MC, note())}
+    )
+    section = next(s for s in parade.sheet_sections(doc) if s.key == "mc")
+    entry = next(e for e in section.entries if e.person_id == 1)
+    assert entry.note == "060726"
+    assert f"{entry.body} ({entry.note})" == entry.text
+    # And the noted line folds back into the copyable text like any other.
     sections = parade.sheet_sections(doc)
     assert "\n\n".join(s.text for s in sections) == parade.render_morning(doc)
