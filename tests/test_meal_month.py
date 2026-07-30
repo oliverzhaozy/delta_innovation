@@ -1,8 +1,8 @@
-"""The meal-indent month grid (owner decision (bb), 2026-07-29): one expected
-number per day = max(day_in_camp, overnight), derived through the same
-compute_for the day view uses — never a second derivation.
+"""The meal-indent month grid (owner decision (bb) 2026-07-29, revised by (cc)
+2026-07-30): one expected number per day = the morning(D) day count, derived
+through the same compute_for the day view uses — never a second derivation.
 
-A day whose parade documents are out of balance carries `None` (rendered "—")
+A day whose parade document is out of balance carries `None` (rendered "—")
 so one refused day cannot hide the whole month.
 """
 from datetime import date
@@ -32,15 +32,15 @@ def _seed(make_person):
                 stay_out=True)
 
 
-def test_month_grid_cell_carries_expected_max_of_both_counters(app, make_person):
+def test_month_grid_cell_carries_the_day_count(app, make_person):
     _seed(make_person)
     with app.app_context():
-        counts, imbalance = meal_service.compute_for(DAY)
+        expected, imbalance = meal_service.compute_for(DAY)
         assert imbalance is None
-        assert (counts.day_in_camp, counts.overnight) == (2, 1)
         cell = _cell(meal_service.month_context(YM), DAY)
     assert cell["in_month"] is True
-    assert cell["expected"] == max(counts.day_in_camp, counts.overnight) == 2
+    # Both NSFs are in camp by day; the opted-out regular S4 never counts.
+    assert cell["expected"] == expected == 2
 
 
 def test_padding_cells_carry_no_number(app, make_person):

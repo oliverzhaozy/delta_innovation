@@ -1,11 +1,11 @@
-"""Meal-indent counters for the S4 page (owner decision (j) 2026-07-07,
-revised by (bb) 2026-07-29): derive morning(D) and roll_call(D+1) through
+"""Meal-indent day counter for the S4 page (owner decision (j) 2026-07-07,
+revised by (bb) 2026-07-29 and (cc) 2026-07-30): derive morning(D) through
 parade_service.build_doc — the ONE document pipeline (pre-flight addendum A2),
-so the counters can never disagree with the parade pages — and hand both docs
-to the pure domain compute.
+so the count can never disagree with the parade pages — and hand the doc to the
+pure domain compute.
 """
 import calendar as stdlib_calendar
-from datetime import date, timedelta
+from datetime import date
 
 from app.domain import meals as meals_domain
 from app.domain.dates import adjacent_ym, parse_ym, today_sgt
@@ -14,23 +14,21 @@ from app.services import parade_service
 
 
 def compute_for(day):
-    """(MealPresence, imbalance) for day D. If either doc is refused by the
-    engine the counters are refused too — a wrong indent number is worse than
+    """(expected, imbalance) for day D. If the document is refused by the
+    engine the count is refused too — a wrong indent number is worse than
     none (same posture as the parade pages)."""
     morning = parade_service.build_doc(day, ParadeVariant.MORNING)
-    rc_next = parade_service.build_doc(day + timedelta(days=1), ParadeVariant.ROLL_CALL)
-    imbalance = morning.imbalance or rc_next.imbalance
-    if imbalance:
-        return None, imbalance
-    return meals_domain.meal_presence(morning.doc, rc_next.doc), None
+    if morning.imbalance:
+        return None, morning.imbalance
+    return meals_domain.day_in_camp(morning.doc), None
 
 
 def month_context(ym_raw):
     """Template context for the meal-indent month grid — one expected number
-    per in-month day, `None` where that day's documents are out of balance so
+    per in-month day, `None` where that day's document is out of balance so
     one refused day shows "—" instead of hiding the whole month.
 
-    ~62 build_doc calls per view at 36 people; deliberately uncached — this app
+    ~31 build_doc calls per view at 36 people; deliberately uncached — this app
     has no cache layer by rule, and the page is S4-only and infrequent.
     """
     today = today_sgt()
@@ -42,10 +40,7 @@ def month_context(ym_raw):
             # Adjacent-month padding cells carry no number (same cut as the
             # calendar grid) — and cost no build_doc.
             in_month = day.month == month_num and day.year == year
-            expected = None
-            if in_month:
-                counts, imbalance = compute_for(day)
-                expected = None if imbalance else counts.expected
+            expected = compute_for(day)[0] if in_month else None
             cells.append({"date": day, "in_month": in_month, "expected": expected})
         weeks.append(cells)
     return {

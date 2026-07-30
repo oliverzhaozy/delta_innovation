@@ -15,34 +15,22 @@
   </div>
 </section>
 
-{% if missing_duties %}
-  <p class="flash flash-error">No confirmed duty for this night:
-    {% for d in missing_duties %}{{ d.label }}{% if not loop.last %}, {% endif %}{% endfor %}
-    — this document counts nobody as on duty.</p>
-{% endif %}
-
 {% if imbalance %}
 <section class="card">
   <p class="error">Cannot compute &mdash; a parade document for these dates is out of balance; check keyed data.</p>
 </section>
 {% else %}
 <section class="card">
-  <h2>Expected: <strong id="meal-expected">{{ counts.expected }}</strong></h2>
-  <ul class="toollist">
-    <li><span>In camp during the day</span><strong id="meal-day">{{ counts.day_in_camp }}</strong></li>
-    <li><span>Staying tonight ({{ day.strftime("%d %b") }} &rarr; {{ next_day.strftime("%d %b") }})</span><strong id="meal-overnight">{{ counts.overnight }}</strong></li>
-  </ul>
-  <p class="muted">Expected = the larger of the two.</p>
+  <h2>Expected: <strong id="meal-expected">{{ expected }}</strong></h2>
 </section>
 {% endif %}
 
 <section class="card">
-  <h2>How these numbers are derived</h2>
+  <h2>How this number is derived</h2>
   {# Assumptions in the open, so a wrong one is challenged by the person who'd
-     know. Decision (bb), owner-confirmed 2026-07-29, revises (j). #}
+     know. Decision (cc), owner-confirmed 2026-07-30, revises (bb). #}
   <ul class="toollist">
-    <li>Day count = morning parade ({{ day.strftime("%d %b") }}) PRESENT IN CAMP.</li>
-    <li>Overnight = roll call ({{ next_day.strftime("%d %b") }}) CURRENT STRENGTH &mdash; tonight's stayers are tomorrow's breakfast.</li>
+    <li>Expected = morning parade ({{ day.strftime("%d %b") }}) PRESENT IN CAMP.</li>
     <li>Counted = every NSF, plus regulars marked as counted for meal indents in People admin.</li>
   </ul>
 </section>

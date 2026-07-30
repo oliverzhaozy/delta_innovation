@@ -1,8 +1,8 @@
-"""The S4 meal-indent pages after owner decisions (j) (2026-07-07) and (bb)
-(2026-07-29): a month grid of one expected number per day, and a day view with
-the two presence counters behind it — nothing more. The per-meal counts and the
-manual ± (P3b.5/P3b.6 as originally built) were removed by decision (j); the
-/meals/adjust route must be GONE, not just hidden.
+"""The S4 meal-indent pages after owner decisions (j) (2026-07-07), (bb)
+(2026-07-29) and (cc) (2026-07-30): a month grid of one expected number per
+day, and a day view showing that number and how it is derived — nothing more.
+The per-meal counts and the manual ± (P3b.5/P3b.6 as originally built) were
+removed by decision (j); the /meals/adjust route must be GONE, not just hidden.
 """
 from datetime import date
 
@@ -40,19 +40,15 @@ def test_adjust_route_is_gone(app, client, make_person):
     assert client.post("/meals/adjust", data={"date": DAY.isoformat()}).status_code == 404
 
 
-def test_counters_render_engine_derived_numbers(app, client, make_person):
+def test_counter_renders_engine_derived_number(app, client, make_person):
     _s4(make_person)
     _two_nsfs(make_person)
     login(client, "s4_guy")
 
     page = client.get(f"/meals/day?date={DAY.isoformat()}")
     assert page.status_code == 200
-    # Day: both NSFs are in camp by day (stay-out dissolves at morning parade);
-    # the regular S4 has not opted in, so he is never counted.
-    assert b'id="meal-day">2<' in page.data
-    # Overnight: only the stay-in NSF remains for the night D -> D+1.
-    assert b'id="meal-overnight">1<' in page.data
-    # The one number S4 indents for: the larger of the two.
+    # Both NSFs are in camp by day (stay-out dissolves at morning parade); the
+    # regular S4 has not opted in, so he is never counted.
     assert b'id="meal-expected">2<' in page.data
 
 

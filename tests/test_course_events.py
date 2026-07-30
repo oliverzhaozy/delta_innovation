@@ -6,7 +6,7 @@ every DATE the event covers (clock times ignored — owner decision 3). These te
 pin the day rule, the precedence position (a keyed status beats a derived course,
 a course beats stay-out), the category mapping, and the fact that every downstream
 consumer of the shared fetch inherits it: the away panel, duty availability, the
-duty absent-holder flag, manning conflicts, and the meal-indent counters. The
+duty absent-holder flag, manning conflicts, and the meal-indent count. The
 month-calendar NSF OFF/LEAVE layer must NOT: it filters on source == "leave".
 """
 from datetime import date, datetime, timedelta
@@ -328,7 +328,7 @@ def test_manning_conflict_is_flagged_for_a_course(app, make_person):
         assert any("On course" in r for r in reasons)
 
 
-def test_nsf_meal_counts_drop_when_an_nsf_goes_on_course(app, make_person):
+def test_nsf_meal_count_drops_when_an_nsf_goes_on_course(app, make_person):
     make_person(username="crs_m1", display_name="Meal One")
     make_person(username="crs_m2", display_name="Meal Two")
     with app.app_context():
@@ -339,5 +339,4 @@ def test_nsf_meal_counts_drop_when_an_nsf_goes_on_course(app, make_person):
     with app.app_context():
         after, imbalance = meal_service.compute_for(DAY)
         assert imbalance is None
-        assert after.day_in_camp == before.day_in_camp - 1
-        assert after.overnight == before.overnight - 1
+        assert after == before - 1

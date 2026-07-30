@@ -166,8 +166,8 @@ def test_cos_current_strength_override_drops_the_line(app, make_person):
 
 def test_meals_pin_morning_override_drops_indent_by_one(app, make_person):
     # Owner decision 6: overrides apply inside build_doc, the one pipeline, so
-    # the S4 meal counters inherit a drag. Moving a present NSF out of CURRENT
-    # STRENGTH on the morning doc drops that day's in-camp indent by one.
+    # the S4 meal count inherits a drag. Moving a present NSF out of CURRENT
+    # STRENGTH on the morning doc drops that day's indent by one.
     make_person(username="ov_meal1", display_name="Meal One")
     make_person(username="ov_meal2", display_name="Meal Two")
     with app.app_context():
@@ -182,6 +182,4 @@ def test_meals_pin_morning_override_drops_indent_by_one(app, make_person):
 
         after, after_imb = meal_service.compute_for(TODAY)
         assert after_imb is None
-        assert after.day_in_camp == base.day_in_camp - 1
-        # The night counter (roll_call D+1, a different date+variant) is untouched.
-        assert after.overnight == base.overnight
+        assert after == base - 1

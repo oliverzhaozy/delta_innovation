@@ -1,7 +1,10 @@
-"""P4.7 — duties feed presence, parades, and meals through the one build_doc
-pipeline. The A3 trap pinned here: the adapter row handed to the engine covers
-the RESOLUTION day (duty_day is only the fetch key), so the roll call labeled D
+"""P4.7 — duties feed presence and parades through the one build_doc pipeline.
+The A3 trap pinned here: the adapter row handed to the engine covers the
+RESOLUTION day (duty_day is only the fetch key), so the roll call labeled D
 really counts the duty of D−1 on day D.
+
+Meals dropped out of this pipe on 2026-07-30 (decision (cc)): the indent is the
+morning(D) day count alone, so no duty assignment reaches it.
 """
 import re
 from datetime import date, timedelta
@@ -14,7 +17,7 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import DutyAssignment, LeaveRequest, Person
-from app.services import meal_service, parade_service, presence_service
+from app.services import parade_service, presence_service
 from tests.conftest import login
 
 D = date(2026, 8, 10)  # a Monday
@@ -132,43 +135,16 @@ def test_morning_and_cos_read_duty_of_own_day(app, make_person):
         assert "Cos Guy" not in built.text
 
 
-def test_meals_counters_follow_the_same_pipe(app, make_person):
-    # A1's two pins, through meal_service.compute_for. The holder is a stay-out
-    # NSF: without a duty he is not in any night's current strength.
-    make_stay_out_opr(make_person)
-    plant_duty(app, "cos_guy", D, duty=Duty.CDOS)
-
-    with app.app_context():
-        counts, imbalance = meal_service.compute_for(D)
-        assert imbalance is None
-        # overnight(D) reads roll_call(D+1) = the night D→D+1: counted exactly once.
-        assert counts.overnight == 1
-        counts, _imbalance = meal_service.compute_for(D - timedelta(days=1))
-        # overnight(D-1) reads roll_call(D): his duty hasn't started that night.
-        assert counts.overnight == 0
-
-    plant_leave(app, "cos_guy", D, D + timedelta(days=1))
-    with app.app_context():
-        counts, imbalance = meal_service.compute_for(D)
-        assert imbalance is None
-        # Leave > duty, and nobody re-adds him downstream (A1's exact bug).
-        assert counts.overnight == 0
-
-
 # --- missing-duty page chrome (A7) --------------------------------------------------
 
 NOTICE = "No confirmed duty for this night"
 
 
-def notice_duties(html):
-    """The duty labels named in the notice, or None when no notice rendered."""
-    match = re.search(NOTICE + r":\s*(.*?)\s*—", html, re.S)
-    return match.group(1) if match else None
-
-
 def test_roll_call_page_has_no_missing_duty_notice(app, client, make_person):
-    # UI-20 (owner directive 2026-07-11): the roll-call page no longer shows
-    # the missing-duty notice — that chrome now lives on the meals page only.
+    # UI-20 (owner directive 2026-07-11) took the missing-duty notice off the
+    # roll-call page, leaving it on the meals page; decision (cc) (2026-07-30)
+    # removed it there too, so the notice exists nowhere — pinned here because
+    # a duty-less night is exactly where it used to appear.
     make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.PS, platoon=2)
     make_stay_out_opr(make_person)
     login(client, "ps2")
@@ -177,30 +153,3 @@ def test_roll_call_page_has_no_missing_duty_notice(app, client, make_person):
     assert NOTICE not in page
     # The document itself still renders on a duty-less night.
     assert re.search(r'<pre id="[^"]*"[^>]*>(.*?)</pre>', page, re.S)
-
-
-def test_meals_page_notice(app, client, make_person):
-    make_person(username="s4", is_admin=True)
-    make_stay_out_opr(make_person)
-    login(client, "s4")
-
-    # Meals for day D cover the night D→D+1 — one day later than roll_call(D).
-    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
-    assert notice_duties(html) == "COS, CDO/S"
-
-    plant_duty(app, "cos_guy", D)
-    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
-    assert notice_duties(html) == "CDO/S"
-
-
-def test_meals_notice_never_names_a_covered_duty(app, client, make_person):
-    # The meals notice is derived chrome: once every duty for the night is
-    # filled, it disappears entirely rather than rendering an empty shell.
-    make_person(username="s4b", is_admin=True)
-    make_stay_out_opr(make_person)
-    login(client, "s4b")
-
-    plant_duty(app, "cos_guy", D, duty=Duty.COS)
-    plant_duty(app, "cos_guy", D, duty=Duty.CDOS)
-    html = client.get(f"/meals/day?date={D.isoformat()}").get_data(as_text=True)
-    assert NOTICE not in html

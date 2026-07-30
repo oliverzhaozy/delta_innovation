@@ -3,10 +3,9 @@
 One PS runs a real month: generate over a forced blank -> manual assign over a
 warning, confirmed on the page that names it -> a requester's leave over a
 live duty is endorsed and approved (the OC saw the duty panel; nothing was
-blocked, nothing reassigned, the roster flags it) -> the stay-out duty holder
-lands in the night's CURRENT STRENGTH and the meal counter counts him ->
-cos_of_day resolves the holder -> and blocking a day takes the duty, and its
-keying rights, away with it.
+blocked, nothing reassigned, the roster flags it) -> cos_of_day resolves the
+holder -> and blocking a day takes the duty, and its keying rights, away with
+it.
 """
 from datetime import timedelta
 
@@ -17,7 +16,7 @@ from app.domain.types import (
 )
 from app.extensions import db
 from app.models import DutyAssignment, LeaveRequest, Person
-from app.services import duty_service, ledger_service, meal_service
+from app.services import duty_service, ledger_service
 from tests.conftest import login
 
 
@@ -145,8 +144,11 @@ def test_phase4_end_to_end(app, client, make_person):
         assert row.person_id == _pid(app, "opr_a")
         assert clash_id in duty_service.month_view(month).absent_flags
 
-    # --- 6. The stay-out CDO/S holder is counted present for his night -------
+    # --- 6. cos_of_day resolves the COS of any date --------------------------
+    _switch(client, "ps_boss")
     with app.app_context():
+        # An arbitrary live duty date: one the PS holds CDO/S on, skipping the
+        # blocked and clash days this walk already disturbed.
         excluded = {blank_day, clash_day}
         ps_nights = {
             r.date for r in db.session.query(DutyAssignment).filter_by(
@@ -156,17 +158,7 @@ def test_phase4_end_to_end(app, client, make_person):
         pd = next(
             d for d in iter_days(first, last - timedelta(days=1))
             if d in ps_nights and d not in excluded
-            and (d + timedelta(days=1)) not in excluded
         )
-        counts, imbalance = meal_service.compute_for(pd)
-        assert imbalance is None
-        # NSFs that night: the two stay-in oprs + the stay-out PS on CDO/S duty
-        # (DUTY overrides stay-out) — without the duty pipe this would be 2.
-        assert counts.overnight == 3
-
-    # --- 7. cos_of_day resolves the COS of any date --------------------------
-    _switch(client, "ps_boss")
-    with app.app_context():
         cos_holder_id = (
             db.session.query(DutyAssignment.person_id)
             .filter_by(date=pd, duty=Duty.COS)
@@ -177,7 +169,7 @@ def test_phase4_end_to_end(app, client, make_person):
         # the RO's COS line — pinned here for an arbitrary phase date.
         assert duty_service.cos_of_day(pd).id == cos_holder_id
 
-    # --- 8. Blocking a day removes its duty, and the keying rights with it ---
+    # --- 7. Blocking a day removes its duty, and the keying rights with it ---
     # The rights window is today/tomorrow, and only a duty day inside THIS
     # month can carry a COS at all now that rosters are weekday-only — a
     # Saturday window has none, which is the same rule seen from the other side.

@@ -4,7 +4,7 @@ One S3 keys everything a real evening needs, then every Phase-3 surface is
 checked against the SAME derivation: S3 keys an MC and a regular's out-of-camp
 status -> COS message (compiled D-1) categorizes both -> roll call balances ->
 FP quick-add moves a man to OTHERS IN CAMP -> morning parade shows both
-absences -> the meal-indent counters read the same derivation (decisions j/bb) -> and
+absences -> the meal-indent count reads the same derivation (decisions j/cc) -> and
 the ledger is untouched, because keying parade data never moves a balance.
 """
 from datetime import timedelta
@@ -77,18 +77,16 @@ def test_phase3_end_to_end(app, client, make_person):
     page = client.get("/parade/morning")
     assert b"ETHAN SIOW (BDO)" in page.data
 
-    # --- NSF counters read the SAME derivation (decision j) ------------------
-    # Hand-derived: day = s3, opr_in (in camp, just not at FP), opr_out
-    # (dissolves by day) = 3 NSFs; overnight D->D+1 = s3, opr_in (quick-add was
-    # single-day) = 2 NSFs. Cross-checked against the service so the page and
-    # the derivation can never be asserted apart.
+    # --- The NSF count reads the SAME derivation (decisions j/cc) ------------
+    # Hand-derived: s3, opr_in (in camp, just not at FP), opr_out (stay-out
+    # dissolves by day) = 3 NSFs. Cross-checked against the service so the page
+    # and the derivation can never be asserted apart.
     with app.app_context():
-        counts, imbalance = meal_service.compute_for(D)
+        expected, imbalance = meal_service.compute_for(D)
         assert imbalance is None
-        assert (counts.day_in_camp, counts.overnight) == (3, 2)
+        assert expected == 3
     page = client.get(f"/meals/day?date={D.isoformat()}")
-    assert b'id="meal-day">3<' in page.data
-    assert b'id="meal-overnight">2<' in page.data
+    assert b'id="meal-expected">3<' in page.data
 
     # --- Morning parade agrees ------------------------------------------------
     absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]

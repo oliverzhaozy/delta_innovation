@@ -1,9 +1,10 @@
 """Meals domain (P3b.5, reworked by owner decision (j) 2026-07-07, revised by
-(bb) 2026-07-29) + the ParadeDoc person-list extension that makes it possible.
+(bb) 2026-07-29 and (cc) 2026-07-30) + the ParadeDoc person-list extension that
+makes it possible.
 
-The compute is exactly two counters per day — people in camp by day (from
-morning(D)) and people staying the night D->D+1 (from roll_call(D+1)) — over
-every NSF plus the regulars who opt in (decision (bb)). The earlier per-meal
+The compute is exactly one counter per day — the people in camp at morning(D)
+— over every NSF plus the regulars who opt in (decision (bb)). Decision (cc)
+removed the second counter that read roll_call(D+1); the earlier per-meal
 compute with manual adjustments was removed by decision (j).
 
 Pure unit tests with duck-typed fakes (same style as test_roll_call /
@@ -19,14 +20,13 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain import parade
-from app.domain.meals import MealPresence, meal_presence
+from app.domain.meals import day_in_camp
 from app.domain.presence import PresenceState, Resolution, resolve
 from app.domain.types import (
     CourseAbsenceType, DayPart, LeaveType, Meal, Rank, Service, StatusType,
 )
 
 D = date(2026, 7, 6)      # the day meals are computed for
-NEXT = D + timedelta(days=1)
 DAY = D                   # alias used by the parade-people section
 
 
@@ -177,20 +177,19 @@ def test_meal_enum_members_and_labels():
 
 
 # =========================================================================
-# Fixture week — meal presence counters by persona (decisions (j)/(bb))
+# Fixture day — the meal counter by persona (decisions (j)/(bb)/(cc))
 # =========================================================================
 #
-# Roster (each row carries the rows fed to resolve() for BOTH D and D+1):
+# Roster (each row carries the rows fed to resolve() for day D):
 #   A  stay-out NSF          — books out every night
 #   B  stay-in NSF           — present around the clock
-#   C  MC NSF                — MC covering D-2..D+3 (covers D and D+1)
+#   C  MC NSF                — MC covering D-2..D+3 (covers D)
 #   E  PM-off stay-in NSF    — OFF, PM day-part, single day D only
 #   F  regular (stay-out)    — no opt-in, so never counted
 #   G  in-camp-status NSF    — single-day OTHER in_camp (e.g. BDO), day D only
 #
-# The two documents that feed the two counters:
-#   day_in_camp(D) = morning(D)     PRESENT IN CAMP (A + K), counted people only
-#   overnight(D)   = roll_call(D+1) CURRENT STRENGTH (night D -> D+1), ditto
+# The one document that feeds the counter (decision (cc)):
+#   day_in_camp(D) = morning(D) PRESENT IN CAMP, counted people only
 
 A = person("3SG Stayout Nsf", service=Service.NSF, stay_out=True, id=1)
 B = person("3SG Stayin Nsf", service=Service.NSF, stay_out=False, id=2)
@@ -216,10 +215,8 @@ def _pairs_for(day):
     return [(p, resolve(p, day, **ROWS[p.id])) for p in ROSTER]
 
 
-def _docs():
-    morning = parade.categorize(D, _pairs_for(D), "morning")
-    roll_next = parade.categorize(NEXT, _pairs_for(NEXT), "roll_call")
-    return morning, roll_next
+def _morning_doc():
+    return parade.categorize(D, _pairs_for(D), "morning")
 
 
 def test_day_count_is_nsfs_present_in_camp_by_day():
@@ -227,39 +224,26 @@ def test_day_count_is_nsfs_present_in_camp_by_day():
     # present at morning parade, decision i), G (in-camp status -> OTHERS IN
     # CAMP). C is on MC; F is present but an opted-out regular. Counted: A, B,
     # E, G.
-    morning, roll_next = _docs()
-    assert meal_presence(morning, roll_next).day_in_camp == 4
+    assert day_in_camp(_morning_doc()) == 4
 
 
-def test_overnight_count_is_nsfs_staying_the_night():
-    # roll_call(D+1) CURRENT STRENGTH: B and E stay (E's PM-off is single-day D,
-    # so it does not cover D+1; G's status likewise). A books out, C's MC covers
-    # D+1, F is an opted-out regular (stay-out by rule anyway).
-    morning, roll_next = _docs()
-    assert meal_presence(morning, roll_next).overnight == 3  # B, E, G
-
-
-def _counts_for(*people):
+def _count_for(*people):
     morning = parade.categorize(D, [(p, resolve(p, D)) for p in people], "morning")
-    roll_next = parade.categorize(NEXT, [(p, resolve(p, NEXT)) for p in people], "roll_call")
-    return meal_presence(morning, roll_next)
+    return day_in_camp(morning)
 
 
 def test_regular_without_opt_in_is_not_counted():
-    assert _counts_for(F) == MealPresence(day_in_camp=0, overnight=0)
+    assert _count_for(F) == 0
 
 
-def test_opted_in_regular_is_counted_in_both_counters():
+def test_opted_in_regular_is_counted():
     # Decision (bb): the regulars who eat in camp tick the flag and land in the
     # indent. Presence is unchanged by the flag — a regular is stay-out by rule
-    # (presence.py:155), so they show up in the day counter always and in the
-    # overnight one only when the engine puts them in camp for the night.
+    # (presence.py:155), which dissolves by day, so an opted-in regular is in
+    # the day's count.
     opted_in = person("CPT Eats In", service=Service.REGULAR, stay_out=False,
                       meals_opt_in=True, id=90)
-    assert _counts_for(opted_in) == MealPresence(day_in_camp=1, overnight=0)
-    morning = parade.categorize(D, [(opted_in, present())], "morning")
-    roll_next = parade.categorize(NEXT, [(opted_in, present())], "roll_call")
-    assert meal_presence(morning, roll_next) == MealPresence(day_in_camp=1, overnight=1)
+    assert _count_for(opted_in) == 1
 
 
 def test_nsf_is_counted_regardless_of_the_flag():
@@ -267,25 +251,14 @@ def test_nsf_is_counted_regardless_of_the_flag():
     # keyer can never accidentally drop an NSF from an indent).
     flagged = person("3SG Flagged Nsf", service=Service.NSF, meals_opt_in=True, id=91)
     unflagged = person("3SG Plain Nsf", service=Service.NSF, meals_opt_in=False, id=92)
-    assert _counts_for(flagged) == _counts_for(unflagged) == MealPresence(1, 1)
+    assert _count_for(flagged) == _count_for(unflagged) == 1
 
 
-@pytest.mark.parametrize(
-    "day_in_camp, overnight, expected",
-    [(4, 3, 4), (2, 5, 5), (3, 3, 3)],
-)
-def test_expected_is_the_larger_of_the_two_counters(day_in_camp, overnight, expected):
-    assert MealPresence(day_in_camp=day_in_camp, overnight=overnight).expected == expected
-
-
-def test_counters_are_engine_derived_not_roster_arithmetic():
-    # The counters read the categorized docs, never the roster: an MC NSF is on
-    # the roster all week but appears in neither number.
-    morning, roll_next = _docs()
-    counts = meal_presence(morning, roll_next)
+def test_counter_is_engine_derived_not_roster_arithmetic():
+    # The counter reads the categorized doc, never the roster: an MC NSF is on
+    # the roster all week but appears in no number.
     total_nsfs = sum(1 for p in ROSTER if p.service is Service.NSF)
-    assert counts.day_in_camp < total_nsfs
-    assert counts.overnight < total_nsfs
+    assert day_in_camp(_morning_doc()) < total_nsfs
 
 
 # =========================================================================
