@@ -396,6 +396,9 @@ h2 {
 
 .day-nav-today:hover { background: var(--accent); color: #fff; }
 
+/* Chip row under the date — .day-nav-center stacks, chips sit side by side. */
+.day-nav-chips { display: flex; gap: 0.4rem; }
+
 /* ---------- Cards & lists ---------- */
 
 .card {

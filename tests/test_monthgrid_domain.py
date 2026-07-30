@@ -6,7 +6,14 @@ occupies on a given week, and which lane the bar lands on.
 """
 from datetime import date, timedelta
 
-from app.domain.monthgrid import merge_off_runs, overflow_by_column, pack_lanes, week_segment
+from app.domain.monthgrid import (
+    floors_under,
+    lane_tops,
+    merge_off_runs,
+    overflow_by_column,
+    pack_lanes,
+    week_segment,
+)
 from app.domain.types import DayPart
 
 
@@ -144,6 +151,40 @@ def test_the_longer_bar_wins_the_top_lane_at_an_equal_start():
 def test_a_bar_reuses_a_lane_freed_earlier_in_the_week():
     # (1,2) and (3,2) are disjoint, so both sit on lane 0 under the (1,5) bar.
     assert pack_lanes([(1, 5), (1, 2), (3, 2)]) == [0, 1, 1]
+
+
+# ---------- stacking one band flush under another ----------
+
+def test_lane_tops_reports_the_highest_lane_per_covered_column():
+    placements = [(1, 3), (2, 1), (2, 1)]
+    lanes = pack_lanes(placements)
+    assert lanes == [0, 1, 2]
+    assert lane_tops(placements, lanes) == {1: 0, 2: 2, 3: 0}
+
+
+def test_floors_follow_each_bars_own_columns_not_the_weeks_tallest():
+    # Column 2 stacks 3 bars, column 5 only 1: a bar on column 5 floors at 1,
+    # not under the whole band's 3 lanes — the flush-to-top rule (UI-23 fix).
+    tops = {2: 2, 5: 0}
+    assert floors_under([(5, 1), (2, 1), (6, 1)], tops=tops) == [1, 3, 0]
+
+
+def test_a_bar_spanning_a_tall_and_a_quiet_day_floors_under_the_tall_one():
+    assert floors_under([(2, 4)], tops={2: 2, 3: 0}) == [3]
+
+
+def test_floored_bars_still_step_down_when_they_collide():
+    floors = floors_under([(2, 1), (2, 1)], tops={2: 1})
+    assert floors == [2, 2]
+    assert pack_lanes([(2, 1), (2, 1)], floors=floors) == [2, 3]
+
+
+def test_floored_and_unfloored_bars_pack_without_colliding():
+    # The (4,1) bar floors at 2 under its column's events; the disjoint (1,2)
+    # bar has no events over it and stays flush on lane 0.
+    placements = [(1, 2), (4, 1)]
+    floors = floors_under(placements, tops={4: 1})
+    assert pack_lanes(placements, floors=floors) == [0, 2]
 
 
 # ---------- the capped OFF/LEAVE band ----------

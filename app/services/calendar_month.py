@@ -8,7 +8,9 @@ contiguous OFF/LEAVE run becomes one spanning bar per week (UI-23), so nothing
 is duplicated across the days it covers. `app.domain.monthgrid` owns the
 geometry; this module only decides which rows exist and which band they sit in.
 Grid rows within a week: row 1 is the day-number head, the lanes follow from
-row 2 (events band on top, OFF/LEAVE band under it), then a filler row.
+row 2 (events band on top, OFF/LEAVE band under it), then a filler row. The
+OFF/LEAVE band floors PER COLUMN — a chip packs flush under the events of the
+days it covers, not under the week's tallest event stack.
 """
 import calendar as stdlib_calendar
 from datetime import date, datetime, time
@@ -72,38 +74,44 @@ def _week_context(*, event_spans, off_runs, week_days):
     """One week row: its 7 cells, plus every bar already placed on a grid row.
 
     The two bands keep the day cell's old top-to-bottom order — events above
-    OFF/LEAVE. The events band is uncapped; the OFF/LEAVE band shows at most
-    `OFF_LEAVE_CHIP_LIMIT` lanes and folds whatever is pushed past them into one
-    row of per-day "+N more" chips.
+    OFF/LEAVE — but per column, not per week: an OFF/LEAVE chip floors under
+    the events of the days IT covers, so a quiet day's chips hug that day's
+    last event instead of reserving rows for the week's tallest stack. The
+    events band is uncapped; the OFF/LEAVE band shows at most
+    `OFF_LEAVE_CHIP_LIMIT` lanes and folds whatever is pushed past them into
+    per-day "+N more" chips, each flush under the last bar of its column.
     """
     event_placed = _place(event_spans, week_days)
-    event_lanes = monthgrid.pack_lanes([segment.col_span for _, segment in event_placed])
-    event_lane_count = max(event_lanes) + 1 if event_lanes else 0
+    event_placements = [segment.col_span for _, segment in event_placed]
+    event_lanes = monthgrid.pack_lanes(event_placements)
 
     off_placed = _place(off_runs, week_days)
     off_placements = [segment.col_span for _, segment in off_placed]
-    off_lanes = monthgrid.pack_lanes(off_placements)
+    # Band-relative lanes decide only WHICH runs the cap drops; the shown runs
+    # are re-packed against the event tops for their display rows.
+    band_lanes = monthgrid.pack_lanes(off_placements)
     overflow = monthgrid.overflow_by_column(
-        off_placements, off_lanes, lane_limit=OFF_LEAVE_CHIP_LIMIT
+        off_placements, band_lanes, lane_limit=OFF_LEAVE_CHIP_LIMIT
     )
-    shown_off_lanes = [lane for lane in off_lanes if lane < OFF_LEAVE_CHIP_LIMIT]
-    off_lane_count = max(shown_off_lanes) + 1 if shown_off_lanes else 0
+    shown_off = [
+        placed
+        for placed, lane in zip(off_placed, band_lanes)
+        if lane < OFF_LEAVE_CHIP_LIMIT
+    ]
+    shown_placements = [segment.col_span for _, segment in shown_off]
+    event_tops = monthgrid.lane_tops(event_placements, event_lanes)
+    off_lanes = monthgrid.pack_lanes(
+        shown_placements, floors=monthgrid.floors_under(shown_placements, tops=event_tops)
+    )
 
     bars = []
     for (event, segment), lane in zip(event_placed, event_lanes):
         bars.append(_bar(kind="event", obj=event, segment=segment, row=FIRST_LANE_ROW + lane))
-    for (row, segment), lane in zip(off_placed, off_lanes):
-        if lane >= OFF_LEAVE_CHIP_LIMIT:
-            continue
-        bars.append(
-            _bar(
-                kind="off",
-                obj=row,
-                segment=segment,
-                row=FIRST_LANE_ROW + event_lane_count + lane,
-            )
-        )
-    more_row = FIRST_LANE_ROW + event_lane_count + off_lane_count
+    for (row, segment), lane in zip(shown_off, off_lanes):
+        bars.append(_bar(kind="off", obj=row, segment=segment, row=FIRST_LANE_ROW + lane))
+    all_tops = monthgrid.lane_tops(
+        event_placements + shown_placements, event_lanes + off_lanes
+    )
     for column in sorted(overflow):
         bars.append(
             {
@@ -111,13 +119,13 @@ def _week_context(*, event_spans, off_runs, week_days):
                 "count": overflow[column],
                 "col": column,
                 "span": 1,
-                "row": more_row,
+                "row": FIRST_LANE_ROW + all_tops.get(column, -1) + 1,
                 "clip_left": False,
                 "clip_right": False,
             }
         )
 
-    lanes = event_lane_count + off_lane_count + (1 if overflow else 0)
+    lanes = max((bar["row"] - FIRST_LANE_ROW + 1 for bar in bars), default=0)
     return {
         "cells": [{"date": day, "in_month": in_month} for day, in_month in week_days],
         "segments": bars,

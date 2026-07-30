@@ -140,6 +140,22 @@ def test_a_fourth_concurrent_off_run_collapses_into_a_per_day_more_chip(app, cli
     assert resp.data.count(b"chip cal-off") == 4
 
 
+def test_off_chip_sits_flush_under_its_own_days_events(app, client, make_person):
+    # Wed 8 Jul stacks three events (rows 2-4) but Thu 9 has only one (row 2):
+    # Thu's OFF chip floors under ITS day's events (row 3), not under the
+    # week's tallest stack — no phantom gap rows in the quiet cell.
+    make_person(username="mv_flush_guy", platoon=1)
+    login(client, make_person(**make_pc("mv_flush_pc")))
+    for n in range(3):
+        create_event(client, "TP", f"Wed thing {n}", "2026-07-08T08:00", "2026-07-08T17:00")
+    create_event(client, "TP", "Thu thing", "2026-07-09T08:00", "2026-07-09T17:00")
+    plant_leave(app, "mv_flush_guy", date(2026, 7, 9))
+
+    resp = client.get("/calendar/month?ym=2026-07")
+    assert resp.status_code == 200
+    assert b'cal-off" style="grid-column: 4 / span 1; grid-row: 3"' in resp.data
+
+
 def test_regular_leave_is_not_in_the_nsf_off_leave_layer(app, client, make_person):
     from app.domain.types import Service
 

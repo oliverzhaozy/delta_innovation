@@ -94,13 +94,18 @@ def week_segment(*, start, end, week_days):
     )
 
 
-def pack_lanes(placements):
+def pack_lanes(placements, *, floors=None):
     """Lane (0-based row within a band) for each `(col, span)` placement.
 
     Greedy interval packing: widest-first at each starting column, each bar
     taking the lowest lane whose columns are still free. Returns a list parallel
     to `placements`, so the caller keeps its own ordering. The sort is stable,
     so equal (col, span) bars keep input order and the lanes are deterministic.
+
+    `floors` (parallel to `placements`) is each bar's lowest permitted lane —
+    how a band stacks flush under another band's bars in its OWN columns rather
+    than under the whole week's tallest stack. Bars only collide with bars of
+    the same call; keeping clear of the other band is entirely the floor's job.
     """
     order = sorted(range(len(placements)), key=lambda i: (placements[i][0], -placements[i][1]))
     lanes = [0] * len(placements)
@@ -108,14 +113,41 @@ def pack_lanes(placements):
     for index in order:
         col, span = placements[index]
         columns = set(range(col, col + span))
-        lane = 0
+        lane = floors[index] if floors is not None else 0
         while lane < len(taken) and taken[lane] & columns:
             lane += 1
-        if lane == len(taken):
+        while len(taken) <= lane:
             taken.append(set())
         taken[lane] |= columns
         lanes[index] = lane
     return lanes
+
+
+def lane_tops(placements, lanes):
+    """Highest occupied lane per column, as `{column: lane}`.
+
+    Columns no bar covers are absent — a caller stacking under the result
+    treats a missing column as free from lane 0.
+    """
+    tops = {}
+    for (col, span), lane in zip(placements, lanes):
+        for column in range(col, col + span):
+            tops[column] = max(tops.get(column, -1), lane)
+    return tops
+
+
+def floors_under(placements, *, tops):
+    """Lowest lane each `(col, span)` placement may take to sit BELOW every
+    lane in `tops` (a `lane_tops` result) across the columns it covers.
+
+    A bar is one grid row, so a run crossing a tall day and a quiet day still
+    floors under the tall day's stack — but a bar touching only quiet columns
+    floors at 0, which is what keeps it flush to the top of its cell.
+    """
+    return [
+        1 + max(tops.get(column, -1) for column in range(col, col + span))
+        for col, span in placements
+    ]
 
 
 def overflow_by_column(placements, lanes, *, lane_limit):
