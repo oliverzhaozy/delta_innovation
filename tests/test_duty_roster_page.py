@@ -112,6 +112,7 @@ def test_roster_page_viewable_by_opr_without_buttons(app, client, make_person):
     assert "COS pool" in html and "CDO/S pool" in html
     assert "/duty/roster/generate" not in html
     assert "/duty/roster/block" not in html
+    assert "/duty/roster/clear" not in html
 
 
 def cell_select(html, day, duty=Duty.COS):
@@ -181,6 +182,23 @@ def test_cell_dropdowns_are_for_managers_only(app, client, make_person):
     assert "COS pool" in html and "Mon 03 Aug" in html
 
 
+def test_cell_pickers_are_folded_behind_the_pencil_for_managers_only(
+    app, client, make_person
+):
+    # Owner 2026-07-31: the holder reads as plain text; the picker only exists
+    # inside the disclosure, and a viewer gets neither.
+    make_full_cast(make_person)
+    login(client, "ps2")
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert '<details class="cell-edit">' in html
+    assert html.count('<details class="cell-edit">') == html.count('class="cell-assign"')
+
+    client.post("/logout")
+    login(client, "opr1")
+    html = client.get(f"/duty/roster?month={AUG}").get_data(as_text=True)
+    assert '<details class="cell-edit">' not in html
+
+
 def test_priority_panel_ranks_by_longest_since_the_last_duty(app, client, make_person):
     make_person(username="det_a", display_name="Alpha Det", rank=Rank.THREE_SG,
                 appointment=Appointment.DET_COMD, platoon=1)
@@ -243,7 +261,7 @@ def test_roster_mutations_403_for_opr(app, client, make_person):
     make_full_cast(make_person)
     login(client, "opr1")
 
-    for endpoint in ("generate", "assign", "block", "unblock"):
+    for endpoint in ("generate", "clear", "assign", "block", "unblock"):
         resp = client.post(f"/duty/roster/{endpoint}", data={"month": AUG})
         assert resp.status_code == 403, endpoint
 
@@ -278,6 +296,28 @@ def test_generate_writes_live_rows_with_no_state_badge(app, client, make_person)
         # Live on write (owner 2026-07-27): nothing stands between generation
         # and the documents that read these rows.
         assert duty_service.duties_on(date(2026, 8, 3))
+
+
+def test_clear_month_removes_all_assignments_including_manual(app, client, make_person):
+    # Clear is the "start the month over" action (owner 2026-07-31): unlike
+    # generate, it takes the manual picks too. Blocked days are a separate
+    # keyed fact and survive.
+    make_full_cast(make_person)
+    plant_assignment(app, "det1", date(2026, 8, 5), Duty.COS, is_manual=True)
+    login(client, "ps2")
+    client.post("/duty/roster/generate", data={"month": AUG}, follow_redirects=True)
+    client.post("/duty/roster/block", data={"month": AUG, "date": "2026-08-18"},
+                follow_redirects=True)
+    with app.app_context():
+        planted = db.session.query(DutyAssignment).count()
+        assert planted > 1
+
+    resp = client.post("/duty/roster/clear", data={"month": AUG}, follow_redirects=True)
+    assert resp.status_code == 200
+    assert f"Removed {planted} assignment(s) for {AUG}." in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.query(DutyAssignment).count() == 0
+        assert db.session.query(DutyBlockedDay).count() == 1
 
 
 def test_grid_shows_holiday_and_blocked_rows(app, client, make_person):

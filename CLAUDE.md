@@ -31,6 +31,10 @@ Default to fanning out subagents whenever a task has independent parts — separ
 - Do NOT parallelize what is genuinely sequential (dependent edits, migration chains) or trivial (one-file fixes) — more agents on dependent work is waste, not speed.
 - This is a standing directive: do not ask for re-confirmation each session.
 
+## UI changes (owner directive, 2026-07-31)
+
+Any task that adds or modifies UI (Jinja templates, `styles.css`, `app.js` presentation code) MUST invoke the `frontend-design:frontend-design` skill before writing markup or styles. Standing directive: do not ask for re-confirmation each session.
+
 ## What this is
 
 A Flask web app replacing TimeTree as the single source of truth for a ~36-person Singapore army company's manpower admin (leave, parade states, duty rosters, RO, TU manning, meal counts). The two governing ideas:

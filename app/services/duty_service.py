@@ -249,6 +249,22 @@ def generate_month(month: str, actor):
     db.session.commit()
 
 
+def clear_month(month: str) -> int:
+    """Delete EVERY assignment in the month — manual picks included — and return
+    how many rows went. The deliberate opposite of `generate_month`, which spares
+    manual rows: this is the "start the month over" action, so a survivor would
+    be the surprise. Blocked days are a separate keyed fact and are untouched.
+    """
+    first, last = month_bounds(month)
+    removed = (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.date >= first, DutyAssignment.date <= last)
+        .delete()
+    )
+    db.session.commit()
+    return removed
+
+
 class IneligibleAssignment(Exception):
     """Rule violation — a PC can never hold COS, and a weekend/holiday/blocked
     date carries no duty at all. Hard block, 4xx, never a warning."""

@@ -329,6 +329,33 @@ def test_generate_replaces_only_auto_rows(app, make_person):
         assert total == len(second_run)
 
 
+def test_clear_month_deletes_manual_and_auto_rows_and_keeps_blocks(app, make_person):
+    # The deliberate opposite of generate_month: clear takes the manual picks
+    # too, and leaves the keyed blocked days alone.
+    make_duty_cast(make_person)
+    plant_block(app, date(2026, 8, 18), pid(app, "det1"))
+    plant_assignment(app, pid(app, "det1"), date(2026, 8, 5), Duty.COS, is_manual=True)
+    plant_assignment(app, pid(app, "det1"), date(2026, 9, 2), Duty.COS, is_manual=True)
+
+    with app.app_context():
+        duty_service.generate_month(AUG, get_person("det1"))
+        before = db.session.query(DutyAssignment).count()
+
+        removed = duty_service.clear_month(AUG)
+
+        first, last = duty_service.month_bounds(AUG)
+        survivors = (
+            db.session.query(DutyAssignment)
+            .filter(DutyAssignment.date >= first, DutyAssignment.date <= last)
+            .all()
+        )
+        assert survivors == []
+        # September's manual row is outside the month and is not touched.
+        assert db.session.query(DutyAssignment).count() == 1
+        assert removed == before - 1
+        assert db.session.query(DutyBlockedDay).count() == 1
+
+
 # --- duty_days: the one owner of "which dates carry a duty" ---------------------
 
 SAT = date(2026, 8, 15)

@@ -73,22 +73,27 @@
                 — <strong>blank</strong> &#9888;
               {% endif %}
               {% if policy.can_manage_roster(current_user) %}
-              <form method="post" action="{{ url_for('duty.assign') }}" class="cell-assign">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="month" value="{{ month }}">
-                <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
-                <input type="hidden" name="duty" value="{{ duty.value }}">
-                {# The holder is NOT preselected: this select is an action, not
-                   a state display, so an accidental focus-and-blur posts
-                   nothing. #}
-                <select name="person_id" required data-autosubmit aria-label="{{ duty.label }} for {{ d.date.strftime('%d %b') }}">
-                  <option value="" disabled selected>{% if row %}— change —{% else %}— assign —{% endif %}</option>
-                  {% for p, last in view.assignable_priority[duty] %}
-                  <option value="{{ p.id }}">{% if (p.id, d.date) in view.unavailable %}&#9888; {% endif %}{{ p.rank.value }} {{ p.display_name }} — {{ priority.gap(last, today) }}</option>
-                  {% endfor %}
-                </select>
-                <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
-              </form>
+              {# The picker is folded away behind the ✎: a 21-row grid of open
+                 selects reads as a form, not as a roster. #}
+              <details class="cell-edit">
+                <summary aria-label="Change {{ duty.label }} for {{ d.date.strftime('%d %b') }}">&#9998;</summary>
+                <form method="post" action="{{ url_for('duty.assign') }}" class="cell-assign">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="month" value="{{ month }}">
+                  <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
+                  <input type="hidden" name="duty" value="{{ duty.value }}">
+                  {# The holder is NOT preselected: this select is an action, not
+                     a state display, so an accidental focus-and-blur posts
+                     nothing. #}
+                  <select name="person_id" required data-autosubmit aria-label="{{ duty.label }} for {{ d.date.strftime('%d %b') }}">
+                    <option value="" disabled selected>{% if row %}— change —{% else %}— assign —{% endif %}</option>
+                    {% for p, last in view.assignable_priority[duty] %}
+                    <option value="{{ p.id }}">{% if (p.id, d.date) in view.unavailable %}&#9888; {% endif %}{{ p.rank.value }} {{ p.display_name }} — {{ priority.gap(last, today) }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+                </form>
+              </details>
               {% endif %}
             </td>
           {% endfor %}
@@ -100,14 +105,14 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="month" value="{{ month }}">
               <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
-              <button type="submit" class="btn secondary">Unblock</button>
+              <button type="submit" class="linklike">Unblock</button>
             </form>
           {% elif not d.holiday_name %}
             <form method="post" action="{{ url_for('duty.block') }}" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="month" value="{{ month }}">
               <input type="hidden" name="date" value="{{ d.date.isoformat() }}">
-              <button type="submit" class="btn secondary">Block</button>
+              <button type="submit" class="linklike">Block</button>
             </form>
           {% endif %}
         </td>
@@ -120,15 +125,16 @@
 
 <section class="card">
   <h2>Flags</h2>
-  {% if not view.violations.blanks and not view.violations.adjacency and not view.violations.spread %}
-    <p class="muted">No blanks, adjacent duty days, or spread breaches.</p>
+  {# Spread stays computed (domain/roster.violations, and the assign confirm
+     names it) but is not displayed: a max−min > 1 gap over a 21-day month is
+     the normal state of a small pool, so the line fired constantly and taught
+     the reader to ignore the whole card. #}
+  {% if not view.violations.blanks and not view.violations.adjacency %}
+    <p class="muted">No blanks or adjacent duty days.</p>
   {% endif %}
   {% if view.violations.blanks %}
     <p>&#9888; {{ view.violations.blanks|length }} blank slot(s) — marked in the grid.</p>
   {% endif %}
-  {% for duty, pair in view.violations.spread.items() %}
-    <p>&#9888; {{ duty.label }} spread: min {{ pair[0] }}, max {{ pair[1] }}</p>
-  {% endfor %}
   {% for person_id, d1, d2 in adjacency_rows %}
     <p>&#9888; {{ people_by_id[person_id].display_name if person_id in people_by_id else "Person #" ~ person_id }}: {{ d1.strftime("%d %b") }} &amp; {{ d2.strftime("%d %b") }} adjacent</p>
   {% endfor %}
@@ -143,8 +149,14 @@
       <input type="hidden" name="month" value="{{ month }}">
       <button type="submit" class="btn">Generate</button>
     </form>
+    <form method="post" action="{{ url_for('duty.clear') }}" class="inline-form"
+          onsubmit="return confirm('Remove every duty assignment in {{ month }}, including manual picks?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="month" value="{{ month }}">
+      <button type="submit" class="btn danger">Clear month</button>
+    </form>
   </div>
-  <p class="muted">Generates the whole month. Manual picks are kept &mdash; only auto-planned slots are replanned.</p>
+  <p class="muted">Manual picks are kept &mdash; only auto-planned slots are replanned.</p>
 </section>
 {% endif %}
 

@@ -99,6 +99,15 @@ def generate():
     return redirect(url_for("duty.roster", month=month))
 
 
+@bp.route("/roster/clear", methods=["POST"])
+@require(policy.can_manage_roster)
+def clear():
+    month = _parse_month(request.form.get("month", ""))
+    removed = duty_service.clear_month(month)
+    flash(f"Removed {removed} assignment(s) for {month}.", "success")
+    return redirect(url_for("duty.roster", month=month))
+
+
 @bp.route("/roster/assign", methods=["POST"])
 @require(policy.can_manage_roster)
 def assign():

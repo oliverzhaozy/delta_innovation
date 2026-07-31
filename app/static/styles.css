@@ -119,6 +119,49 @@ body {
 
 .cell-assign .btn { width: auto; margin: 0; padding: 0.2rem 0.7rem; font-size: 0.85rem; }
 
+/* Click-to-edit disclosure (owner 2026-07-31): a holder reads as plain text
+   until the ✎ is opened, so a 21-row grid stops looking like a form. Native
+   <details> keeps it keyboard-reachable with no JS; the padding is the ≥24px
+   touch target the glyph itself does not give. */
+details.cell-edit summary {
+  list-style: none;
+  display: inline-block;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+details.cell-edit summary::-webkit-details-marker { display: none; }
+
+details.cell-edit summary:hover,
+details.cell-edit[open] summary {
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+
+details.cell-edit summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+details.cell-edit[open] { margin-top: 0.15rem; }
+
+details.cell-edit .cell-assign { margin-top: 0.35rem; }
+
+/* The manning remove button shares the open panel with the picker: block, so
+   it sits under the select instead of crowding it. */
+details.cell-edit .linklike {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 /* ---------- Grouped nav dropdowns (UI refresh) ---------- */
 
 .navgroup { position: relative; }
