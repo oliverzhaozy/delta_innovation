@@ -1,9 +1,14 @@
-"""Pure event helpers (UI-9): per-calendar label resolution and the all-day
-time convention. No Flask/DB imports — pytest exercises these without HTTP.
+"""Pure event helpers (UI-9): per-calendar label resolution, the all-day time
+convention and the day-detail panel's time line. No Flask/DB imports — pytest
+exercises these without HTTP.
 """
 from datetime import datetime, time
 
 from app.domain.types import ArcticLabel, Calendar, TpLabel
+
+# The panel's label for an entry that occupies a whole day. One constant, so an
+# OFF/LEAVE line and an all-day event line can never read differently.
+ALL_DAY_DISPLAY = "All-day"
 
 
 def label_class_for(calendar):
@@ -41,3 +46,40 @@ def event_days(start_dt, end_dt):
     which days are covered.
     """
     return start_dt.date(), end_dt.date()
+
+
+def is_all_day(start_dt, end_dt):
+    """True if the event carries the `all_day_bounds` shape.
+
+    There is no stored all-day flag — the times ARE the flag, so this is the one
+    place the shape is recognised. Anything else is a timed event, including a
+    00:00→23:00 one: it stops short of the convention's end instant.
+    """
+    return (start_dt, end_dt) == all_day_bounds(*event_days(start_dt, end_dt))
+
+
+def _clock(moment):
+    # 12-hour, no leading zero. Built by hand because `%-I` is a glibc extension
+    # the Windows dev box does not have.
+    return f"{moment.hour % 12 or 12}:{moment.minute:02d} {'AM' if moment.hour < 12 else 'PM'}"
+
+
+def day_time_display(start_dt, end_dt, day):
+    """The one-line time label the day-detail panel shows for `day`.
+
+    `day` is one of the DATES the event covers (`event_days`). An all-day event
+    reads "All-day" on every one of them, and so does any middle day of a timed
+    multi-day event — a bar crossing a day occupies all of it. A timed event
+    confined to one day shows both ends; the first and last day of a timed
+    multi-day event show whichever end falls on them.
+    """
+    if is_all_day(start_dt, end_dt):
+        return ALL_DAY_DISPLAY
+    first, last = event_days(start_dt, end_dt)
+    if first == last:
+        return f"{_clock(start_dt)} – {_clock(end_dt)}"
+    if day == first:
+        return _clock(start_dt)
+    if day == last:
+        return _clock(end_dt)
+    return ALL_DAY_DISPLAY

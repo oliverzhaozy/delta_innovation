@@ -153,6 +153,14 @@ def test_a_bar_reuses_a_lane_freed_earlier_in_the_week():
     assert pack_lanes([(1, 5), (1, 2), (3, 2)]) == [0, 1, 1]
 
 
+def test_single_day_bars_fill_the_lane_a_later_starting_bar_leaves_free():
+    # The Mon 10 - Sun 16 Aug 2026 week the owner screenshotted: a full-week bar
+    # ("LX - CTC"), a Tue-Sun bar ("BRONCO COURSE") and two Mon-only events.
+    # Monday's lane 1 is free because the Tue-Sun bar starts in column 2, so the
+    # Mon-only bars take lanes 1 and 2 — no hole under the full-week bar.
+    assert pack_lanes([(1, 7), (2, 6), (1, 1), (1, 1)]) == [0, 1, 1, 2]
+
+
 # ---------- stacking one band flush under another ----------
 
 def test_lane_tops_reports_the_highest_lane_per_covered_column():

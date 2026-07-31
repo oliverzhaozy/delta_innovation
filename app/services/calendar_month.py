@@ -11,23 +11,38 @@ Grid rows within a week: row 1 is the day-number head, the lanes follow from
 row 2 (events band on top, OFF/LEAVE band under it), then a filler row. The
 OFF/LEAVE band floors PER COLUMN — a chip packs flush under the events of the
 days it covers, not under the week's tallest event stack.
+
+ONE cap (UI-24) then applies to the whole stack rather than to either band: the
+bars past it are dropped and folded into per-day "+N" badges, so a busy week
+stays phone-height whichever layer filled it. The same context also carries
+`day_entries` — the full, uncapped per-day list the day-detail panel opens —
+built from the SAME clipped event spans the bars come from, so nothing the grid
+hides can go missing from the panel.
 """
 import calendar as stdlib_calendar
 from datetime import date, datetime, time
 
 from app.domain import monthgrid, policy
-from app.domain.dates import adjacent_ym, parse_ym, today_sgt
+from app.domain.dates import adjacent_ym, iter_days, parse_ym, today_sgt
+from app.domain.events import ALL_DAY_DISPLAY, day_time_display, event_days, is_all_day
 from app.domain.types import Calendar
 from app.extensions import db
 from app.models import Event
 from app.services import presence_service
 
-# How many lanes of OFF/LEAVE bars a week shows before collapsing the rest into
-# per-day "+N more" chips — the phone-width cap that keeps the grid readable.
-OFF_LEAVE_CHIP_LIMIT = 3
+# How many lanes of bars a week shows before the rest collapse into per-day "+N"
+# badges — the phone-width cap that keeps the grid readable. ONE cap over the
+# whole stack (events + OFF/LEAVE), not one per band. An overflowing column puts
+# its badge flush under its last shown bar, so a week is at most
+# TOTAL_LANE_LIMIT + 1 rows of bars tall.
+TOTAL_LANE_LIMIT = 5
 
 # Row 1 of a week grid is the day-number head, so the first lane is row 2.
 FIRST_LANE_ROW = 2
+
+# The client-side layer-toggle key the OFF/LEAVE layer's chips and panel entries
+# share; events get theirs from `_cal_key`.
+OFF_CAL_KEY = "off"
 
 
 def _month_bounds(year, month):
@@ -45,6 +60,13 @@ def _dedupe_by_person(rows):
         seen.add(row.person_id)
         out.append(row)
     return out
+
+
+def _cal_key(event):
+    """The client-side layer-toggle key an event's chip, its "+N" contribution
+    and its panel entry all share — one owner, so a badge count can never
+    disagree with the chips the same toggle hides."""
+    return "arctic" if event.calendar is Calendar.ARCTIC else "tp"
 
 
 def _bar(*, kind, obj, segment, row):
@@ -70,16 +92,20 @@ def _place(intervals, week_days):
     return placed
 
 
-def _week_context(*, event_spans, off_runs, week_days):
+def _week_context(*, event_spans, off_runs, week_days, today):
     """One week row: its 7 cells, plus every bar already placed on a grid row.
 
     The two bands keep the day cell's old top-to-bottom order — events above
     OFF/LEAVE — but per column, not per week: an OFF/LEAVE chip floors under
     the events of the days IT covers, so a quiet day's chips hug that day's
-    last event instead of reserving rows for the week's tallest stack. The
-    events band is uncapped; the OFF/LEAVE band shows at most
-    `OFF_LEAVE_CHIP_LIMIT` lanes and folds whatever is pushed past them into
-    per-day "+N more" chips, each flush under the last bar of its column.
+    last event instead of reserving rows for the week's tallest stack.
+
+    Then ONE cap applies to the packed stack, band-blind (UI-24): a bar landing
+    on lane `TOTAL_LANE_LIMIT` or past it is dropped, whichever band it came
+    from, and every DAY it covered counts it into that day's "+N" badge. The
+    badge sits flush under its column's last SHOWN bar and carries both the
+    total and a per-toggle-key breakdown, so hiding a layer client-side can
+    re-count it without another request.
     """
     event_placed = _place(event_spans, week_days)
     event_placements = [segment.col_span for _, segment in event_placed]
@@ -87,39 +113,57 @@ def _week_context(*, event_spans, off_runs, week_days):
 
     off_placed = _place(off_runs, week_days)
     off_placements = [segment.col_span for _, segment in off_placed]
-    # Band-relative lanes decide only WHICH runs the cap drops; the shown runs
-    # are re-packed against the event tops for their display rows.
-    band_lanes = monthgrid.pack_lanes(off_placements)
-    overflow = monthgrid.overflow_by_column(
-        off_placements, band_lanes, lane_limit=OFF_LEAVE_CHIP_LIMIT
-    )
-    shown_off = [
-        placed
-        for placed, lane in zip(off_placed, band_lanes)
-        if lane < OFF_LEAVE_CHIP_LIMIT
-    ]
-    shown_placements = [segment.col_span for _, segment in shown_off]
-    event_tops = monthgrid.lane_tops(event_placements, event_lanes)
     off_lanes = monthgrid.pack_lanes(
-        shown_placements, floors=monthgrid.floors_under(shown_placements, tops=event_tops)
+        off_placements,
+        floors=monthgrid.floors_under(
+            off_placements, tops=monthgrid.lane_tops(event_placements, event_lanes)
+        ),
     )
 
+    placed = [
+        ("event", event, segment, lane, _cal_key(event))
+        for (event, segment), lane in zip(event_placed, event_lanes)
+    ] + [
+        ("off", row, segment, lane, OFF_CAL_KEY)
+        for (row, segment), lane in zip(off_placed, off_lanes)
+    ]
+
     bars = []
-    for (event, segment), lane in zip(event_placed, event_lanes):
-        bars.append(_bar(kind="event", obj=event, segment=segment, row=FIRST_LANE_ROW + lane))
-    for (row, segment), lane in zip(shown_off, off_lanes):
-        bars.append(_bar(kind="off", obj=row, segment=segment, row=FIRST_LANE_ROW + lane))
-    all_tops = monthgrid.lane_tops(
-        event_placements + shown_placements, event_lanes + off_lanes
-    )
-    for column in sorted(overflow):
+    shown_placements = []
+    shown_lanes = []
+    by_key = {}
+    for kind, obj, segment, lane, cal_key in placed:
+        key_placements, key_lanes = by_key.setdefault(cal_key, ([], []))
+        key_placements.append(segment.col_span)
+        key_lanes.append(lane)
+        if lane >= TOTAL_LANE_LIMIT:
+            continue
+        bars.append(_bar(kind=kind, obj=obj, segment=segment, row=FIRST_LANE_ROW + lane))
+        shown_placements.append(segment.col_span)
+        shown_lanes.append(lane)
+
+    # `overflow_by_column` stays the one owner of "which days a dropped bar is
+    # counted into"; the split is just calling it once per toggle key, so the
+    # breakdown and the total can't be derived two different ways.
+    counts_by_column = {}
+    for cal_key, (key_placements, key_lanes) in by_key.items():
+        dropped = monthgrid.overflow_by_column(
+            key_placements, key_lanes, lane_limit=TOTAL_LANE_LIMIT
+        )
+        for column, count in dropped.items():
+            counts_by_column.setdefault(column, {})[cal_key] = count
+
+    shown_tops = monthgrid.lane_tops(shown_placements, shown_lanes)
+    for column in sorted(counts_by_column):
+        counts = counts_by_column[column]
         bars.append(
             {
                 "kind": "more",
-                "count": overflow[column],
+                "count": sum(counts.values()),
+                "counts": counts,
                 "col": column,
                 "span": 1,
-                "row": FIRST_LANE_ROW + all_tops.get(column, -1) + 1,
+                "row": FIRST_LANE_ROW + shown_tops.get(column, -1) + 1,
                 "clip_left": False,
                 "clip_right": False,
             }
@@ -127,11 +171,63 @@ def _week_context(*, event_spans, off_runs, week_days):
 
     lanes = max((bar["row"] - FIRST_LANE_ROW + 1 for bar in bars), default=0)
     return {
-        "cells": [{"date": day, "in_month": in_month} for day, in_month in week_days],
+        # `is_today` is in-month only: a padding cell is the NEIGHBOURING month's
+        # day, already muted, and ringing it would claim this month contains it.
+        "cells": [
+            {"date": day, "in_month": in_month, "is_today": in_month and day == today}
+            for day, in_month in week_days
+        ],
         "segments": bars,
         # The CSS repeat(var(--lanes), ...) needs a track even on an empty week.
+        # A badge can only ever sit one lane below the cap, so this stays <= 6.
         "lane_count": max(lanes, 1),
     }
+
+
+def _entry(*, kind, cal_key, obj, time_display):
+    """One day-detail panel line. `obj` is the live Event / AbsenceRow so the
+    template reuses the display expressions the chips already use."""
+    return {"kind": kind, "cal_key": cal_key, "obj": obj, "time_display": time_display}
+
+
+def _day_entries(*, event_spans, off_by_day, month_start, month_end_inclusive):
+    """Ordered panel entries for EVERY day of the month, keyed by date.
+
+    Every day gets a key, quiet ones included — clicking any cell opens the
+    panel, and an empty list is what "nothing on" looks like. Events walk the
+    same month-clipped spans the BARS are drawn from, so the panel and the grid
+    can never disagree about which days an event covers.
+
+    Order within a day follows the grid's bands and TimeTree's panel: entries
+    that own the whole day first — all-day and multi-day events, then the
+    OFF/LEAVE people — and the day's timed events after them, by start time.
+    """
+    days = list(iter_days(month_start, month_end_inclusive))
+    all_day = {day: [] for day in days}
+    off = {day: [] for day in days}
+    timed = {day: [] for day in days}
+
+    for event, first, last in event_spans:
+        event_first, event_last = event_days(event.start_dt, event.end_dt)
+        whole_day = event_first != event_last or is_all_day(event.start_dt, event.end_dt)
+        for day in iter_days(first, last):
+            entry = _entry(
+                kind="event",
+                cal_key=_cal_key(event),
+                obj=event,
+                time_display=day_time_display(event.start_dt, event.end_dt, day),
+            )
+            (all_day if whole_day else timed)[day].append(entry)
+
+    for day, rows in off_by_day.items():
+        off[day] = [
+            _entry(kind="off", cal_key=OFF_CAL_KEY, obj=row, time_display=ALL_DAY_DISPLAY)
+            for row in rows
+        ]
+
+    for entries in timed.values():
+        entries.sort(key=lambda entry: entry["obj"].start_dt)
+    return {day: all_day[day] + off[day] + timed[day] for day in days}
 
 
 def build_month_context(user, ym_raw):
@@ -175,18 +271,25 @@ def build_month_context(user, ym_raw):
     # a person may hold overlapping approved requests, but the grid shows people
     # (like the away board), not rows. Order is preserved (already platoon → name).
     off_leave_by_day = presence_service.nsf_leave_between(month_start, month_end_inclusive)
+    # Deduped ONCE: the bars' runs and the panel's lines are the same people in
+    # the same order, so neither can show a person the other drops.
+    off_by_day = {day: _dedupe_by_person(rows) for day, rows in off_leave_by_day.items()}
     off_runs = [
-        (run.row, run.start, run.end)
-        for run in monthgrid.merge_off_runs(
-            {day: _dedupe_by_person(rows) for day, rows in off_leave_by_day.items()}
-        )
+        (run.row, run.start, run.end) for run in monthgrid.merge_off_runs(off_by_day)
     ]
 
     weeks = []
     for week in stdlib_calendar.Calendar(firstweekday=0).monthdatescalendar(year, month_num):
         # Adjacent-month padding cells carry no bars at all (TECH_PLAN cut).
         week_days = [(d, d.month == month_num and d.year == year) for d in week]
-        weeks.append(_week_context(event_spans=event_spans, off_runs=off_runs, week_days=week_days))
+        weeks.append(
+            _week_context(
+                event_spans=event_spans,
+                off_runs=off_runs,
+                week_days=week_days,
+                today=today,
+            )
+        )
 
     return {
         "month_start": month_start,
@@ -196,4 +299,11 @@ def build_month_context(user, ym_raw):
         "next_ym": "%04d-%02d" % adjacent_ym(year, month_num, 1),
         "today_ym": "%04d-%02d" % (today.year, today.month),
         "show_arctic": show_arctic,
+        # Uncapped: the badges hide bars from the GRID, never from the panel.
+        "day_entries": _day_entries(
+            event_spans=event_spans,
+            off_by_day=off_by_day,
+            month_start=month_start,
+            month_end_inclusive=month_end_inclusive,
+        ),
     }

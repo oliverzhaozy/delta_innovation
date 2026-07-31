@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from app.domain.dates import today_sgt
@@ -125,10 +126,11 @@ def test_four_contiguous_off_days_are_one_spanning_bar(app, client, make_person)
     assert b"grid-column: 1 / span 4" in resp.data
 
 
-def test_a_fourth_concurrent_off_run_collapses_into_a_per_day_more_chip(app, client, make_person):
-    # The OFF/LEAVE band is capped at 3 lanes per week; the fourth run is dropped
+def test_the_run_past_the_lane_cap_collapses_into_a_per_day_more_chip(app, client, make_person):
+    # UI-24: one cap of TOTAL_LANE_LIMIT lanes covers the whole week stack, so
+    # with no events in the week the sixth concurrent OFF run is the one dropped
     # from the bars and counted into that day's "+N more" chip instead.
-    for n in range(4):
+    for n in range(6):
         make_person(username=f"mv_cap_{n}", platoon=1)
         plant_leave(app, f"mv_cap_{n}", date(2026, 7, 8))
     login(client, make_person(username="mv_cap_viewer"))
@@ -136,8 +138,8 @@ def test_a_fourth_concurrent_off_run_collapses_into_a_per_day_more_chip(app, cli
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
     assert b"+1 more" in resp.data
-    # 3 name bars + the "+1 more" chip, which carries the same cal-off class.
-    assert resp.data.count(b"chip cal-off") == 4
+    # 5 name bars + the "+1 more" chip, which carries the same cal-off class.
+    assert resp.data.count(b"chip cal-off") == 6
 
 
 def test_off_chip_sits_flush_under_its_own_days_events(app, client, make_person):
@@ -154,6 +156,42 @@ def test_off_chip_sits_flush_under_its_own_days_events(app, client, make_person)
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
     assert b'cal-off" style="grid-column: 4 / span 1; grid-row: 3"' in resp.data
+
+
+def placements_by_text(html):
+    """Every bar's `grid-column …; grid-row …` string, keyed by its visible text.
+
+    A title crossing week rows draws one bar per row, so the values are lists.
+    """
+    found = {}
+    for style, text in re.findall(r'style="(grid-[^"]+)"[^>]*>([^<]*)</(?:a|span)>', html):
+        found.setdefault(text.strip(), []).append(style)
+    return found
+
+
+def test_single_day_bars_stack_flush_under_a_full_week_bar(app, client, make_person):
+    # Regression pin for the gap the owner screenshotted (Mon 10 - Sun 16 Aug
+    # 2026): a full-week bar, a Tue-Sun bar, two Mon-only events and one Mon-only
+    # OFF run. Monday's lane 1 is free — the Tue-Sun bar starts in column 2 — so
+    # the Mon-only entries take rows 3, 4 and 5 with no empty row above them.
+    make_person(username="mv_hole_guy", platoon=1)
+    login(client, make_person(**make_pc("mv_hole_pc")))
+    create_event(client, "TP", "LX - CTC", "2026-08-06T08:00", "2026-08-17T17:00")
+    create_event(client, "TP", "BRONCO COURSE", "2026-08-11T08:00", "2026-08-21T17:00")
+    create_event(client, "TP", "CSM Technet", "2026-08-15T08:00", "2026-08-16T17:00")
+    create_event(client, "TP", "CDSO", "2026-08-15T08:00", "2026-08-15T17:00")
+    create_event(client, "TP", "National Day", "2026-08-10T00:00", "2026-08-10T23:59")
+    create_event(client, "TP", "Wolf PT", "2026-08-10T08:00", "2026-08-10T17:00")
+    plant_leave(app, "mv_hole_guy", date(2026, 8, 10))
+
+    resp = client.get("/calendar/month?ym=2026-08")
+    assert resp.status_code == 200
+    placements = placements_by_text(resp.data.decode())
+    assert "grid-column: 1 / span 7; grid-row: 2" in placements["LX - CTC"]
+    assert "grid-column: 2 / span 6; grid-row: 3" in placements["BRONCO COURSE"]
+    assert placements["National Day"] == ["grid-column: 1 / span 1; grid-row: 3"]
+    assert placements["Wolf PT"] == ["grid-column: 1 / span 1; grid-row: 4"]
+    assert placements["PTE Mv Hole Guy OFF"] == ["grid-column: 1 / span 1; grid-row: 5"]
 
 
 def test_regular_leave_is_not_in_the_nsf_off_leave_layer(app, client, make_person):
