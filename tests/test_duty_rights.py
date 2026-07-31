@@ -78,13 +78,12 @@ def plant_cos(app, username, day, *, duty=Duty.COS):
 
 def keying_status(client):
     """A routed probe of `@require(duty_service.can_key_parade_today)`: the
-    override reset on today's morning document. Granted -> 302 back to the page
-    (resetting nothing when nothing was dragged), refused -> 403. The MC page is
-    no longer a probe — it is self-service and carries no keying gate at all.
+    empty "Not joining FP" bulk remove on today's morning page. Granted -> 302
+    back to the page (removing nothing, flashing the empty selection), refused
+    -> 403. Neither the MC page (self-service since 2026-07-31) nor the override
+    routes (open to every logged-in user since 2026-07-31) can serve as a probe.
     """
-    return client.post(
-        "/parade/override/reset", data={"variant": "morning"}
-    ).status_code
+    return client.post("/parade/morning/fp/remove").status_code
 
 
 def test_cos_today_can_key(app, client, make_person):

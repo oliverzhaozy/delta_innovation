@@ -2,8 +2,9 @@
 
 Route tests assert through the RENDERED text only (the server re-render is the
 one truth; the client does no count math): a keyer's move rebalances the <pre>,
-a non-keyer is refused, disallowed/off-roster targets flash and write nothing,
-and the COS override is stored against tomorrow's date. The in-message drag
+any logged-in user may move (owner decision 2026-07-31), disallowed/off-roster
+targets flash and write nothing, and the COS override is stored against
+tomorrow's date. The in-message drag
 markup those endpoints back is pinned separately in test_parade_sheet_page.py.
 """
 from datetime import timedelta
@@ -48,7 +49,7 @@ def test_keyer_move_reflected_in_rendered_text(app, client, make_person):
         assert row.target_category is OverrideCategory.MC
 
 
-def test_non_keyer_gets_403_and_writes_nothing(app, client, make_person):
+def test_any_logged_in_user_can_move(app, client, make_person):
     make_person(username="ov_plain")  # OPR NSF, not a keyer
     make_person(username="ov_t2")
     login(client, "ov_plain")
@@ -58,9 +59,9 @@ def test_non_keyer_gets_403_and_writes_nothing(app, client, make_person):
         "/parade/override",
         data={"variant": "morning", "person_id": str(tpid), "target": "mc"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 302
     with app.app_context():
-        assert db.session.query(ParadeOverride).count() == 0
+        assert db.session.query(ParadeOverride).count() == 1
 
 
 def test_morning_stay_out_target_rejected(app, client, make_person):

@@ -217,17 +217,16 @@ def test_keyer_sees_the_sheet_form_and_modal(app, client, make_person):
     assert 'role="dialog"' in html
 
 
-def test_non_keyer_sees_a_plain_visible_pre_and_nothing_draggable(app, client, make_person):
+def test_plain_user_sees_sheet_but_no_fp_form(app, client, make_person):
+    # Owner decision 2026-07-31: the drag sheet is open to every logged-in user.
+    # The FP quick-add beneath it is the keyer-gated part, and stays hidden.
     _cast(make_person)
     make_person(username="sh_plain", display_name="Plain One")  # OPR NSF, no keying
     login(client, "sh_plain")
     html = client.get("/parade/morning").get_data(as_text=True)
-    assert 'id="paradetext" hidden' not in html
-    assert 'id="paradetext" style=' in html
-    assert "data-drag-person" not in html
-    assert "data-drop-category" not in html
-    assert 'id="override-form"' not in html
-    assert 'id="drag-confirm"' not in html
+    assert 'id="sheet-live"' in html
+    assert 'id="override-form"' in html
+    assert "Not joining FP" not in html
     with app.app_context():
         built = parade_service.build_doc(TODAY, ParadeVariant.MORNING)
     assert _pre_text(html, "paradetext") == built.text

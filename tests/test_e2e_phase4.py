@@ -32,13 +32,12 @@ def _switch(client, username):
 
 
 def _keying_status(client):
-    # A routed probe of the COS's parade-keying rights: the override reset on
-    # today's morning document (302 when granted, resetting nothing when nothing
-    # was dragged; 403 when refused). The MC page is self-service since
-    # 2026-07-31 and no longer gated, so it cannot serve as the probe.
-    return client.post(
-        "/parade/override/reset", data={"variant": "morning"}
-    ).status_code
+    # A routed probe of the COS's parade-keying rights: the empty "Not joining
+    # FP" bulk remove on today's morning page (302 when granted, removing
+    # nothing; 403 when refused). The MC page (self-service) and the override
+    # routes (open to every logged-in user, 2026-07-31) are no longer gated, so
+    # neither can serve as the probe.
+    return client.post("/parade/morning/fp/remove").status_code
 
 
 def test_phase4_end_to_end(app, client, make_person):

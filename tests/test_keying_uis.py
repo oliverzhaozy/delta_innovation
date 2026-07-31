@@ -73,7 +73,8 @@ def _person(appointment=Appointment.OPR, company_role=None, is_admin=False):
 def test_can_key_parade_is_ps_s3_or_admin():
     # is_cos_of_day=False is the honest spelling of "no duty today" (P4.8);
     # the duty-granted path is pinned in test_duty_rights.py. This predicate no
-    # longer gates the MC page — it still gates morning keying, FP and overrides.
+    # longer gates the MC page, nor the drag overrides (open to every logged-in
+    # user, 2026-07-31) — it still gates morning keying and the FP quick-add.
     assert policy.can_key_parade(_person(Appointment.PS), is_cos_of_day=False)
     assert policy.can_key_parade(
         _person(Appointment.OPR, company_role=CompanyRole.S3), is_cos_of_day=False

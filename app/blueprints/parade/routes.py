@@ -176,13 +176,13 @@ def morning():
     # worse than none (plan).
     built = parade_service.build_doc(day, ParadeVariant.MORNING)
     conflicts = _conflict_lines(built.pairs)
-    can_adjust = duty_service.can_key_parade_today(current_user)
+    can_key = duty_service.can_key_parade_today(current_user)
 
     fp_form = None
     fp_rows = ()
     picker_groups = ()
     command_ids = frozenset()
-    if can_adjust:
+    if can_key:
         fp_form = FpBulkAddForm()
         _set_fp_people_choices(fp_form)
         fp_rows = _fp_rows(day)
@@ -200,7 +200,9 @@ def morning():
         fp_rows=fp_rows,
         picker_groups=picker_groups,
         command_ids=command_ids,
-        can_adjust=can_adjust,
+        # Drag overrides are open to every logged-in user (owner decision
+        # 2026-07-31); the FP quick-add above stays keyer-gated.
+        can_adjust=True,
         has_overrides=built.has_overrides,
         sections=_sections_for(built),
         conflict_notes=_conflict_notes(built.pairs),
@@ -331,7 +333,7 @@ def cos_message():
         text=built.text,
         imbalance=built.imbalance,
         conflicts=conflicts,
-        can_adjust=duty_service.can_key_parade_today(current_user),
+        can_adjust=True,
         has_overrides=built.has_overrides,
         sections=_sections_for(built),
         conflict_notes=_conflict_notes(built.pairs),
@@ -365,7 +367,7 @@ def roll_call():
         imbalance=built.imbalance,
         conflicts=conflicts,
         absent_holders=absent_holders,
-        can_adjust=duty_service.can_key_parade_today(current_user),
+        can_adjust=True,
         has_overrides=built.has_overrides,
         sections=_sections_for(built),
         conflict_notes=_conflict_notes(built.pairs),
@@ -375,10 +377,11 @@ def roll_call():
 # --- Drag-and-drop overrides (recategorize one person on one document) --------
 
 @bp.route("/override", methods=["POST"])
-@require(duty_service.can_key_parade_today)
+@login_required
 def override():
-    # Same keying gate as every other parade write. The variant/date come from
-    # the shared _variant_day owner; the target and person are validated HERE
+    # Any logged-in user may move a line (owner decision 2026-07-31) — unlike
+    # every other parade write, which stays keyer-gated. The variant/date come
+    # from the shared _variant_day owner; the target and person are validated HERE
     # against the variant's allowed categories and today's active roster, so a
     # tampered or stale POST can never store an off-roster person or a category
     # that variant forbids (apply_overrides would raise on the latter).
@@ -409,7 +412,7 @@ def override():
 
 
 @bp.route("/override/reset", methods=["POST"])
-@require(duty_service.can_key_parade_today)
+@login_required
 def override_reset():
     variant, day = _variant_day(request.form.get("variant", ""))
     count = parade_service.clear_overrides(day, variant)
