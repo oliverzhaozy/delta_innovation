@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Declare MC{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Declare MC</h1>
+  <p class="muted">Declare your own MC — date-ranged, auto-fills every parade it covers. (On course comes from the TP calendar, not from here.)</p>
+</div>
+
+<p><a class="btn" href="{{ url_for('parade.mc_new') }}">Declare MC</a></p>
+
+<section class="card">
+  <h2>Active + upcoming{% if not rows %} — none{% endif %}</h2>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr>
+          <th>Person</th><th>Dates</th><th>Remarks</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {# Everyone sees every MC; only the declarer gets the edit/end controls —
+           the same object-level rule the routes enforce, shown rather than
+           offered and then 403'd. #}
+        {% set is_mine = row.person_id == current_user.id %}
+        <tr>
+          <td>
+            {%- if is_mine -%}
+            <a href="{{ url_for('parade.mc_edit', entry_id=row.id) }}">{{ row.person.rank.value }} {{ row.person.display_name }}</a>
+            {%- else -%}
+            {{ row.person.rank.value }} {{ row.person.display_name }}
+            {%- endif -%}
+          </td>
+          <td>{{ row.start_date.strftime('%d %b') }}{% if row.start_date != row.end_date %} – {{ row.end_date.strftime('%d %b') }}{% endif %}</td>
+          <td>{{ row.remarks or "" }}</td>
+          <td>
+            {% if is_mine and row.start_date <= today <= row.end_date %}
+            <form action="{{ url_for('parade.mc_end_today', entry_id=row.id) }}" method="post" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="linklike">End today</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No MCs declared.</p>
+  {% endif %}
+</section>
+{% endblock %}

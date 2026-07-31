@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app.authz import require
 from app.blueprints.parade import bp
-from app.blueprints.parade.forms import FpBulkAddForm, StatusEntryForm
+from app.blueprints.parade.forms import FpBulkAddForm, McDeclarationForm
 from app.domain import participants, presence
 from app.domain.dates import today_sgt
 from app.domain.parade import parade_line, parade_sort_key, sheet_sections
@@ -16,7 +16,6 @@ from app.domain.types import (
     OverrideCategory,
     ParadeVariant,
     ParticipantCategory,
-    STATUS_IN_CAMP_DEFAULT,
     StatusType,
 )
 from app.extensions import db
@@ -56,18 +55,10 @@ def _variant_redirect(variant, cos_name=None):
 
 
 def _set_fp_people_choices(form):
-    # Same request-time reasoning as _set_status_person_choices below: the
-    # picker's person checkboxes must validate against today's active roster,
-    # so an inactive/unknown id fails as a clean field error, never a write.
-    form.people.choices = [
-        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
-    ]
-
-
-def _set_status_person_choices(form):
     # Request-time roster, not class-level, same reasoning as calendar's
-    # _set_people_choices — who's active changes day to day.
-    form.person_id.choices = [
+    # _set_people_choices: the picker's person checkboxes must validate against
+    # today's roster, so an unknown id fails as a clean field error, never a write.
+    form.people.choices = [
         (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
     ]
 
@@ -427,93 +418,90 @@ def override_reset():
     return _variant_redirect(variant, request.form.get("cos_name", ""))
 
 
-# --- Statuses (MC/other) ------------------------------------------------------
+# --- Declare MC ---------------------------------------------------------------
+# MC is self-declared and self-managed (owner decision 2026-07-31): every logged-in
+# user sees the whole list but writes only their own row, so no keying gate applies
+# here. The COS still keys everything else on the parade pages above.
 
-def _resolve_in_camp(type_value, in_camp_choice):
-    if in_camp_choice == "IN":
-        return True
-    if in_camp_choice == "OUT":
-        return False
-    return STATUS_IN_CAMP_DEFAULT[StatusType(type_value)]  # DEFAULT
+def _own_mc(entry_id):
+    """The one row an MC route may act on, or an abort.
+
+    404 for an OTHER row: an FP quick-add is managed on the morning page, so it
+    is not addressable here at all. 403 for someone else's MC: it exists, it is
+    simply not theirs to touch (FABLE-BEHAVIOR's object-level check — the route
+    gate proves who they are, never that this row is theirs).
+    """
+    row = db.session.get(StatusEntry, entry_id) or abort(404)
+    if row.type is not StatusType.MC:
+        abort(404)
+    if row.person_id != current_user.id:
+        abort(403)
+    return row
 
 
-@bp.route("/statuses")
-@require(duty_service.can_key_parade_today)
-def statuses_list():
+@bp.route("/mc")
+@login_required
+def mc_list():
     today = today_sgt()
     rows = (
         db.session.query(StatusEntry)
-        .filter(StatusEntry.end_date >= today)
+        .filter(StatusEntry.type == StatusType.MC, StatusEntry.end_date >= today)
         .all()
     )
-    # Parade order major so a person's entries sit together where the keyer
+    # Parade order major so a person's entries sit together where a reader
     # expects to find them; their own rows stay chronological beneath.
     rows.sort(key=lambda row: (parade_sort_key(row.person), row.start_date, row.id))
-    return render_template("parade/statuses.html", rows=rows, today=today)
+    return render_template("parade/mc_list.html", rows=rows, today=today)
 
 
-@bp.route("/statuses/new", methods=["GET", "POST"])
-@require(duty_service.can_key_parade_today)
-def status_new():
-    form = StatusEntryForm()
-    _set_status_person_choices(form)
+@bp.route("/mc/new", methods=["GET", "POST"])
+@login_required
+def mc_new():
+    form = McDeclarationForm()
     if form.validate_on_submit():
         row = StatusEntry(
-            person_id=form.person_id.data,
-            type=StatusType(form.type.data),
+            person_id=current_user.id,
+            type=StatusType.MC,
             start_date=form.start_date.data,
             end_date=form.end_date.data,
-            day_part=DayPart(form.day_part.data),
-            in_camp=_resolve_in_camp(form.type.data, form.in_camp.data),
+            day_part=DayPart.FULL,
+            in_camp=False,
             remarks=(form.remarks.data or "").strip() or None,
             created_by_id=current_user.id,
         )
         db.session.add(row)
         db.session.commit()
-        flash("Status keyed.", "success")
-        return redirect(url_for("parade.statuses_list"))
-    return render_template("parade/status_form.html", form=form, row=None)
+        flash("MC declared.", "success")
+        return redirect(url_for("parade.mc_list"))
+    return render_template("parade/mc_form.html", form=form, row=None)
 
 
-@bp.route("/statuses/<int:entry_id>/edit", methods=["GET", "POST"])
-@require(duty_service.can_key_parade_today)
-def status_edit(entry_id):
-    row = db.session.get(StatusEntry, entry_id) or abort(404)
-    form = StatusEntryForm(obj=row)
-    _set_status_person_choices(form)
-    if not form.is_submitted():
-        # obj= fills plain columns (person_id/start_date/end_date/remarks)
-        # straight away; enum-backed fields need their .value re-coerced
-        # (same pattern as admin/person_edit). in_camp prefills to the
-        # explicit stored value, never DEFAULT — the row is the truth.
-        form.type.data = row.type.value
-        form.day_part.data = row.day_part.value
-        form.in_camp.data = "IN" if row.in_camp else "OUT"
+@bp.route("/mc/<int:entry_id>/edit", methods=["GET", "POST"])
+@login_required
+def mc_edit(entry_id):
+    row = _own_mc(entry_id)
+    form = McDeclarationForm(obj=row)
     if form.validate_on_submit():
-        row.person_id = form.person_id.data
-        row.type = StatusType(form.type.data)
         row.start_date = form.start_date.data
         row.end_date = form.end_date.data
-        row.day_part = DayPart(form.day_part.data)
-        row.in_camp = _resolve_in_camp(form.type.data, form.in_camp.data)
         row.remarks = (form.remarks.data or "").strip() or None
         db.session.commit()
         flash("Saved.", "success")
-        return redirect(url_for("parade.statuses_list"))
-    return render_template("parade/status_form.html", form=form, row=row)
+        return redirect(url_for("parade.mc_list"))
+    return render_template("parade/mc_form.html", form=form, row=row)
 
 
-@bp.route("/statuses/<int:entry_id>/end-today", methods=["POST"])
-@require(duty_service.can_key_parade_today)
-def status_end_today(entry_id):
-    row = db.session.get(StatusEntry, entry_id) or abort(404)
+@bp.route("/mc/<int:entry_id>/end-today", methods=["POST"])
+@login_required
+def mc_end_today(entry_id):
+    row = _own_mc(entry_id)
     today = today_sgt()
     if not (row.start_date <= today <= row.end_date):
-        # Decision (e): the COS adds/ends/overrides, never re-keys — a future
-        # entry isn't "ending today", it hasn't started being true yet.
+        # Decision (e): an entry is added, ended or overridden, never re-keyed —
+        # a future entry isn't "ending today", it hasn't started being true yet.
         flash("Only entries covering today can be ended today.", "error")
-        return redirect(url_for("parade.statuses_list"))
+        return redirect(url_for("parade.mc_list"))
     row.end_date = today
     db.session.commit()
     flash("Ended today — it will no longer cover tomorrow.", "success")
-    return redirect(url_for("parade.statuses_list"))
+    return redirect(url_for("parade.mc_list"))

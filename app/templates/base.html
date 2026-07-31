@@ -27,9 +27,8 @@
           <summary>Parade</summary>
           <div class="navmenu">
             <a href="{{ url_for('parade.cos_message') }}">Parade state</a>
-            {% if can_key_parade_today(current_user) %}
-              <a href="{{ url_for('parade.statuses_list') }}">Statuses</a>
-            {% endif %}
+            {# Ungated: MC is self-declared, so everyone needs the link. #}
+            <a href="{{ url_for('parade.mc_list') }}">Declare MC</a>
           </div>
         </details>
         <details class="navgroup" {% if section == "duty" %}data-here{% endif %}>

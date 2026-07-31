@@ -8,11 +8,14 @@ def _values(enum_cls):
 
 
 class StatusEntry(db.Model):
-    """COS-keyed date-ranged exception (MC/other).
+    """Date-ranged presence exception (MC/other).
 
     No ledger effect — this is a presence input for the Phase 3 parade engine,
     not a leave type. `in_camp` is per-row, not derived from `type`: the same
-    type can be keyed either way (STATUS_IN_CAMP_DEFAULT is a form default).
+    type can be keyed either way. Two writers, each fixing its own shape (owner
+    decision 2026-07-31): the Declare MC page, where a person declares their own
+    MC (out of camp, FULL days), and the morning page's not-joining-FP quick-add,
+    which is the only source of OTHER rows (in camp, one day).
     """
 
     __tablename__ = "status_entry"

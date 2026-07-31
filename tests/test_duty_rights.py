@@ -76,6 +76,17 @@ def plant_cos(app, username, day, *, duty=Duty.COS):
         return row.id
 
 
+def keying_status(client):
+    """A routed probe of `@require(duty_service.can_key_parade_today)`: the
+    override reset on today's morning document. Granted -> 302 back to the page
+    (resetting nothing when nothing was dragged), refused -> 403. The MC page is
+    no longer a probe — it is self-service and carries no keying gate at all.
+    """
+    return client.post(
+        "/parade/override/reset", data={"variant": "morning"}
+    ).status_code
+
+
 def test_cos_today_can_key(app, client, make_person):
     make_opr(make_person)
     plant_cos(app, "opr1", today_sgt())
@@ -84,7 +95,7 @@ def test_cos_today_can_key(app, client, make_person):
     with app.app_context():
         person = db.session.query(Person).filter_by(username="opr1").one()
         assert duty_service.can_key_parade_today(person) is True
-    assert client.get("/parade/statuses").status_code == 200
+    assert keying_status(client) == 302
 
 
 def test_tomorrows_cos_can_key_today(app, client, make_person):
@@ -93,7 +104,7 @@ def test_tomorrows_cos_can_key_today(app, client, make_person):
     plant_cos(app, "opr1", today_sgt() + timedelta(days=1))
     login(client, "opr1")
 
-    assert client.get("/parade/statuses").status_code == 200
+    assert keying_status(client) == 302
 
 
 def test_deposed_or_expired_cos_loses_rights(app, client, make_person):
@@ -101,15 +112,15 @@ def test_deposed_or_expired_cos_loses_rights(app, client, make_person):
     row_id = plant_cos(app, "opr1", today_sgt() - timedelta(days=1))
     login(client, "opr1")
     # Yesterday's COS gets nothing.
-    assert client.get("/parade/statuses").status_code == 403
+    assert keying_status(client) == 403
 
     row_id = plant_cos(app, "opr1", today_sgt())
-    assert client.get("/parade/statuses").status_code == 200
+    assert keying_status(client) == 302
     with app.app_context():
         db.session.delete(db.session.get(DutyAssignment, row_id))
         db.session.commit()
     # Deposed: the rights disappear with the assignment.
-    assert client.get("/parade/statuses").status_code == 403
+    assert keying_status(client) == 403
 
 
 def test_cdos_gets_no_parade_keying(app, client, make_person):
@@ -117,7 +128,7 @@ def test_cdos_gets_no_parade_keying(app, client, make_person):
     plant_cos(app, "ps2", today_sgt(), duty=Duty.CDOS)
     login(client, "ps2")
     # CDO/S edits the RO (P5) — different duty, different surface.
-    assert client.get("/parade/statuses").status_code == 403
+    assert keying_status(client) == 403
 
 
 def test_cos_of_day_and_cdos_of_day(app, make_person):

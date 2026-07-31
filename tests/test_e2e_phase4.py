@@ -31,6 +31,16 @@ def _switch(client, username):
     login(client, username)
 
 
+def _keying_status(client):
+    # A routed probe of the COS's parade-keying rights: the override reset on
+    # today's morning document (302 when granted, resetting nothing when nothing
+    # was dragged; 403 when refused). The MC page is self-service since
+    # 2026-07-31 and no longer gated, so it cannot serve as the probe.
+    return client.post(
+        "/parade/override/reset", data={"variant": "morning"}
+    ).status_code
+
+
 def test_phase4_end_to_end(app, client, make_person):
     # --- 1. Seed: PS (CDOS pool of one, stay-out NSF), OC, PC, two-man COS pool
     make_person(username="ps_boss", rank=Rank.TWO_SG, appointment=Appointment.PS,
@@ -189,7 +199,7 @@ def test_phase4_end_to_end(app, client, make_person):
     if window:
         holder_username = holders[window[0]]
         _switch(client, holder_username)
-        assert client.get("/parade/statuses").status_code == 200
+        assert _keying_status(client) == 302
 
         _switch(client, "ps_boss")
         for day in window:  # the whole two-day window
@@ -198,7 +208,7 @@ def test_phase4_end_to_end(app, client, make_person):
             }, follow_redirects=True)
             assert "Blocked" in resp.get_data(as_text=True)
         _switch(client, holder_username)
-        assert client.get("/parade/statuses").status_code == 403
+        assert _keying_status(client) == 403
 
         # Unblocking gives the day back as an EMPTY slot — the removed holder
         # is gone for good, so the rights stay gone until someone is assigned.
@@ -208,8 +218,8 @@ def test_phase4_end_to_end(app, client, make_person):
         }, follow_redirects=True).get_data(as_text=True)
         assert "Unblocked" in html and "blank" in html
         _switch(client, holder_username)
-        assert client.get("/parade/statuses").status_code == 403
+        assert _keying_status(client) == 403
     else:
         # A weekend window: nobody holds a COS, so no NSF can key.
         _switch(client, "opr_a")
-        assert client.get("/parade/statuses").status_code == 403
+        assert _keying_status(client) == 403

@@ -186,14 +186,6 @@ class StatusType(str, enum.Enum):
         }[self.value]
 
 
-# Convenience default for the P3a.5 keying form, not a rule: any row can
-# override it (e.g. an in-camp "not joining FP" OTHER).
-STATUS_IN_CAMP_DEFAULT: dict[StatusType, bool] = {
-    StatusType.MC: False,
-    StatusType.OTHER: False,
-}
-
-
 class CourseAbsenceType(str, enum.Enum):
     """The kind marker on a synthesized course-cover row (P9.4). A course absence
     has no table of its own — it is derived from TP calendar events labelled

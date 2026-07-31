@@ -1,46 +1,24 @@
 from flask_wtf import FlaskForm
-from wtforms import DateField, SelectField, SelectMultipleField, StringField
+from wtforms import DateField, SelectMultipleField, StringField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
-from app.domain.types import DayPart, ParticipantCategory, StatusType
-
-# Field name is `person_id` (not `person`) so obj= prefill on edit binds
-# straight to the FK column, exactly like the enum-backed fields below need
-# their .value re-coerced (mirrors admin/person_edit's pattern).
-DAY_PART_CHOICES = [("FULL", "Full day(s)"), ("AM", "AM only"), ("PM", "PM only")]
-
-# The 3-way in-camp select: DEFAULT resolves server-side against
-# STATUS_IN_CAMP_DEFAULT[type]; IN/OUT are explicit overrides. Zero JS
-# (TECH_PLAN P3a cut list) — the whole resolution is one dict lookup in the route.
-IN_CAMP_CHOICES = [
-    ("DEFAULT", "Default for type"),
-    ("IN", "In camp"),
-    ("OUT", "Out of camp"),
-]
+from app.domain.types import ParticipantCategory
 
 
-class StatusEntryForm(FlaskForm):
-    person_id = SelectField("Person", coerce=int)
-    type = SelectField("Type", choices=[(t.value, t.label) for t in StatusType])
+class McDeclarationForm(FlaskForm):
+    """Self-declared MC (owner decision 2026-07-31): dates and an optional
+    remark, nothing else. Who it is for is `current_user` in the route, and
+    type/day part/in camp are fixed (MC / FULL / out of camp) — a form field
+    for any of them would be a field with exactly one legal answer.
+    """
+
     start_date = DateField("From", validators=[DataRequired()])
     end_date = DateField("To", validators=[DataRequired()])
-    day_part = SelectField("Day part", choices=DAY_PART_CHOICES, default="FULL")
-    in_camp = SelectField("In camp", choices=IN_CAMP_CHOICES, default="DEFAULT")
     remarks = StringField("Remarks (optional)", validators=[Optional(), Length(max=300)])
 
     def validate_end_date(self, field):
         if self.start_date.data and field.data and field.data < self.start_date.data:
             raise ValidationError("End date is before start date.")
-
-    def validate_day_part(self, field):
-        # Mirrors LeaveRequestForm: a half-day entry only makes sense for one day.
-        if (
-            field.data != DayPart.FULL.value
-            and self.start_date.data
-            and self.end_date.data
-            and self.start_date.data != self.end_date.data
-        ):
-            raise ValidationError("A half-day entry must be a single day.")
 
 
 class FpBulkAddForm(FlaskForm):

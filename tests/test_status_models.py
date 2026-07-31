@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.domain.types import DayPart, STATUS_IN_CAMP_DEFAULT, StatusType
+from app.domain.types import DayPart, StatusType
 from app.extensions import db
 from app.models import Person, StatusEntry
 
@@ -26,16 +26,6 @@ def test_status_type_enum_members_and_labels():
     assert [t.value for t in StatusType] == ["MC", "OTHER"]
     assert StatusType.MC.label == "MC"
     assert StatusType.OTHER.label == "Other"
-
-
-def test_status_in_camp_default_pinned_and_total():
-    assert STATUS_IN_CAMP_DEFAULT == {
-        StatusType.MC: False,
-        StatusType.OTHER: False,
-    }
-    # Totality: every enum member must have a default, so a new member
-    # without one breaks this test rather than silently defaulting.
-    assert set(STATUS_IN_CAMP_DEFAULT) == set(StatusType)
 
 
 # --- StatusEntry ---------------------------------------------------------

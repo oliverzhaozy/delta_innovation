@@ -1,11 +1,12 @@
 """P3b.7 — the Phase 3 end-to-end walk, via the test client only.
 
-One S3 keys everything a real evening needs, then every Phase-3 surface is
-checked against the SAME derivation: S3 keys an MC and a regular's out-of-camp
-status -> COS message (compiled D-1) categorizes both -> roll call balances ->
-FP quick-add moves a man to OTHERS IN CAMP -> morning parade shows both
-absences -> the meal-indent count reads the same derivation (decisions j/cc) -> and
-the ledger is untouched, because keying parade data never moves a balance.
+A real evening's inputs land from both writers, then every Phase-3 surface is
+checked against the SAME derivation: an NSF and a regular each declare their own
+MC (owner decision 2026-07-31) -> COS message (compiled D-1) categorizes both ->
+roll call balances -> the S3's FP quick-add moves a man to OTHERS IN CAMP ->
+morning parade shows both absences -> the meal-indent count reads the same
+derivation (decisions j/cc) -> and the ledger is untouched, because parade data
+never moves a balance.
 """
 from datetime import timedelta
 
@@ -38,31 +39,27 @@ def test_phase3_end_to_end(app, client, make_person):
     make_person(username="opr_in", rank=Rank.CFC, display_name="Ethan Siow")
     make_person(username="opr_out", rank=Rank.CPL, stay_out=True, display_name="Wayne Loo")
     make_person(username="opr_mc", display_name="Caleb Zhuo")
-    login(client, "s3_keyer")
 
-    # --- S3 keys an MC and the regular OC's out-of-camp status (both D..NEXT) --
-    resp = client.post("/parade/statuses/new", data={
-        "person_id": str(_pid(app, "opr_mc")), "type": "MC",
-        "start_date": D.isoformat(), "end_date": NEXT.isoformat(),
-        "day_part": "FULL", "in_camp": "DEFAULT", "remarks": "",
-    })
-    assert resp.status_code == 302
-    # The COS page is compiled for tomorrow (NEXT), so the regular's status is
-    # keyed to cover D..NEXT — it must show on both today's morning and
-    # tomorrow's COS message. A regular has no in-app leave (P9.3, ARCTIC FOE
-    # owns that), so an out-of-camp status is what takes one off the parade.
-    resp = client.post("/parade/statuses/new", data={
-        "person_id": str(_pid(app, "oc_boss")), "type": "OTHER",
-        "start_date": D.isoformat(), "end_date": NEXT.isoformat(),
-        "day_part": "FULL", "in_camp": "OUT", "remarks": "Overseas",
-    })
-    assert resp.status_code == 302
+    # --- Each man declares his OWN MC, both covering D..NEXT ------------------
+    # The COS page is compiled for tomorrow (NEXT), so both declarations cover
+    # D..NEXT — they must show on today's morning AND tomorrow's COS message.
+    # A regular has no in-app leave (P9.3, ARCTIC FOE owns that), so a declared
+    # MC is what takes one off the parade.
+    for username in ("opr_mc", "oc_boss"):
+        login(client, username)
+        resp = client.post("/parade/mc/new", data={
+            "start_date": D.isoformat(), "end_date": NEXT.isoformat(), "remarks": "",
+        })
+        assert resp.status_code == 302
+        client.post("/logout")
+
+    login(client, "s3_keyer")
 
     # --- COS message (fixed to tomorrow, NEXT) -------------------------------
     page = client.get("/parade/cos-message")
     assert page.status_code == 200
     assert b"CALEB ZHUO" in page.data          # MC category (covers NEXT)
-    assert b"MARCUS LEONG" in page.data        # regular's keyed status (covers NEXT)
+    assert b"MARCUS LEONG" in page.data        # regular's declared MC (covers NEXT)
 
     # --- Roll call (fixed to today, D) balances ------------------------------
     page = client.get("/parade/roll-call")
@@ -91,8 +88,8 @@ def test_phase3_end_to_end(app, client, make_person):
     # --- Morning parade agrees ------------------------------------------------
     absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]
     assert b"CALEB ZHUO" in absent    # MC
-    assert b"MARCUS LEONG" in absent  # regular's keyed out-of-camp status
+    assert b"MARCUS LEONG" in absent  # regular's declared MC
 
-    # --- Keying parade data never touches a balance ---------------------------
+    # --- Parade data never touches a balance ---------------------------------
     with app.app_context():
         assert db.session.query(LedgerEntry).count() == 0
