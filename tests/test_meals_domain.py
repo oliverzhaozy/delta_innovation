@@ -195,7 +195,7 @@ A = person("3SG Stayout Nsf", service=Service.NSF, stay_out=True, id=1)
 B = person("3SG Stayin Nsf", service=Service.NSF, stay_out=False, id=2)
 C = person("3SG Mc Nsf", service=Service.NSF, stay_out=False, id=3)
 E = person("3SG Pmoff Nsf", service=Service.NSF, stay_out=False, id=4)
-F = person("CPT Regular Guy", service=Service.REGULAR, stay_out=False, id=5)
+F = person("CPT Regular Guy", service=Service.REGULAR, stay_out=True, id=5)
 G = person("3SG Bdo Nsf", service=Service.NSF, stay_out=False, id=6)
 
 ROSTER = [A, B, C, E, F, G]
@@ -238,9 +238,9 @@ def test_regular_without_opt_in_is_not_counted():
 
 def test_opted_in_regular_is_counted():
     # Decision (bb): the regulars who eat in camp tick the flag and land in the
-    # indent. Presence is unchanged by the flag — a regular is stay-out by rule
-    # (presence.py:155), which dissolves by day, so an opted-in regular is in
-    # the day's count.
+    # indent. Presence is unchanged by the meals flag — whether the person is
+    # PRESENT (stay_out unset) or STAY_OUT dissolving by day, an opted-in
+    # regular is in the day's count.
     opted_in = person("CPT Eats In", service=Service.REGULAR, stay_out=False,
                       meals_opt_in=True, id=90)
     assert _count_for(opted_in) == 1

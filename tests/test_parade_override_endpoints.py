@@ -153,7 +153,8 @@ def test_cos_drag_to_current_strength_removes_line_and_reset_restores(app, clien
     # Decision D4 end to end: on Message 1 "present" is not a bucket, so the
     # keyer dragging a regular onto it drops the line from the message.
     make_person(username="ov_kd4", is_admin=True)
-    make_person(username="ov_td4", display_name="Drop Me", service=Service.REGULAR)
+    make_person(username="ov_td4", display_name="Drop Me", service=Service.REGULAR,
+                stay_out=True)
     login(client, "ov_kd4")
     tpid = _pid(app, "ov_td4")
 

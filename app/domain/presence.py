@@ -22,7 +22,9 @@ Precedence (highest wins), matching TECH_PLAN's parade precedence rule:
       > out-of-camp status                (MC / other…)
       > course                            (derived from the TP calendar)
       > duty
-      > stay-out                          (stay_out flag OR REGULAR service)
+      > stay-out                          (stay_out flag — the ONE source;
+                                           REVISED 2026-07-31: service no
+                                           longer forces stay-out)
       > present
 
 A keyed status outranks a derived course: the COS keyed the MC deliberately, the
@@ -42,7 +44,7 @@ sees it; nothing a covering row says is ever silently dropped.
 import enum
 from dataclasses import dataclass
 
-from app.domain.types import DayPart, Service
+from app.domain.types import DayPart
 
 
 class PresenceState(str, enum.Enum):
@@ -143,8 +145,9 @@ def resolve(person, day, *, leaves=(), statuses=(), courses=(), duties=()) -> Re
         state = PresenceState.DUTY
         winner = None
         conflicts = ()
-    elif person.stay_out or person.service is Service.REGULAR:
-        # Regulars default to stay-out unless an absence/status/duty overrode.
+    elif person.stay_out:
+        # The stay_out flag is the ONE source of stay-out (owner 2026-07-31);
+        # service never forces it — regulars ship with the flag set in seed data.
         state = PresenceState.STAY_OUT
         winner = None
         conflicts = ()

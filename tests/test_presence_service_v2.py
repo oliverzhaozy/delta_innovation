@@ -232,7 +232,7 @@ def test_presence_inputs_resolves_each_active_person_parade_sorted(app, make_per
     # person, so identity AND ordering are asserted directly — P3a.6 must never
     # have to zip a resolution back to a person by index.
     make_person(username="pi_oc", rank=Rank.CPT, appointment=Appointment.OC, platoon=None,
-                service=Service.REGULAR)  # regular, nothing → STAY_OUT
+                service=Service.REGULAR, stay_out=True)  # flagged, nothing → STAY_OUT
     make_person(username="pi_pc", rank=Rank.TWO_LT, appointment=Appointment.PC, platoon=1,
                 service=Service.NSF)
     make_person(username="pi_opr", rank=Rank.PTE, appointment=Appointment.OPR, platoon=1,

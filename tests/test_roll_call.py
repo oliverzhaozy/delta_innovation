@@ -68,8 +68,8 @@ def pair(p, **rows):
 def _roll_call_roster():
     # Fed in parade order; categorize preserves order within each category.
     return [
-        # a regular and a stay-out NSF → STAY OUT (a night category on roll call)
-        pair(person("CPT Oscar Ong", service=Service.REGULAR, id=1)),
+        # a flagged regular and a stay-out NSF → STAY OUT (a night category)
+        pair(person("CPT Oscar Ong", service=Service.REGULAR, stay_out=True, id=1)),
         pair(person("3SG Ryan Tan", stay_out=True, id=2)),
         # approved LL covering D → LEAVE
         pair(person("CPL Jordan Teo", id=3), leaves=[leave_row(LeaveType.LL)]),
@@ -282,7 +282,7 @@ def test_absent_kind_maps_to_roll_call_category(row, category, suffix):
 def test_roll_call_stay_out_lines_stay_bare():
     # STAY OUT is not an absence — no backing row, so no date range on the line.
     pairs = [
-        pair(person("CPT Oscar Ong", service=Service.REGULAR, id=1)),
+        pair(person("CPT Oscar Ong", service=Service.REGULAR, stay_out=True, id=1)),
         pair(person("3SG Ryan Tan", stay_out=True, id=2)),
     ]
     doc = parade.categorize(DAY, pairs, "roll_call")

@@ -101,7 +101,7 @@ def test_cos_message_shows_regular_under_stay_out(client, make_person):
     login(client, make_person(username="viewer6", display_name="Percy Sim",
                                rank=Rank.THREE_SG))
     make_person(username="reg_guy", display_name="Oscar Ong", rank=Rank.CPT,
-                service=Service.REGULAR)
+                service=Service.REGULAR, stay_out=True)
     resp = client.get("/parade/cos-message")
     assert resp.status_code == 200
     assert b"STAY OUT (1):\n1. CPT OSCAR ONG" in resp.data

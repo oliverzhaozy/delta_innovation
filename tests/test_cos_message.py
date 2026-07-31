@@ -72,9 +72,9 @@ COS = parade.parade_line(person("SSG Ethan Ng"))
 def _cos_roster():
     # Fed in parade order; compute preserves order within each category.
     return [
-        # two regulars → STAY OUT by engine default (no overriding absence)
-        pair(person("CPT Oscar Ong", service=Service.REGULAR, id=1)),
-        pair(person("MSG Michael Tan", service=Service.REGULAR, id=2)),
+        # two flagged stay-out regulars → STAY OUT (no overriding absence)
+        pair(person("CPT Oscar Ong", service=Service.REGULAR, stay_out=True, id=1)),
+        pair(person("MSG Michael Tan", service=Service.REGULAR, stay_out=True, id=2)),
         # approved LL covering D → LEAVE
         pair(person("CPL Jordan Teo", id=3), leaves=[leave_row(LeaveType.LL)]),
         # approved OFF covering D → OFF/OIL
@@ -127,13 +127,14 @@ def test_golden_cos_counts_and_empty_headers():
     assert "OTHERS (0):" in rendered
 
 
-# --- criterion 2: a covering absence overrides the regular stay-out default
+# --- criterion 2: a covering absence overrides the stay-out flag
 
 def test_regular_out_of_camp_status_overrides_stay_out():
-    # A regular defaults to STAY OUT, but an out-of-camp status covering D
-    # wins. (Regulars have no in-app leave since P9.3 — their off/leave lives
-    # in ARCTIC FOE — so a keyed status is the only thing that moves them.)
-    p = person("CPT Oscar Ong", service=Service.REGULAR, id=1)
+    # A flagged stay-out regular would land in STAY OUT, but an out-of-camp
+    # status covering D wins. (Regulars have no in-app leave since P9.3 — their
+    # off/leave lives in ARCTIC FOE — so a keyed status is the only thing that
+    # moves them.)
+    p = person("CPT Oscar Ong", service=Service.REGULAR, stay_out=True, id=1)
     pairs = [pair(p, statuses=[status_row(StatusType.OTHER, in_camp=False)])]
     doc = parade.compute_cos_message(DAY, COS, pairs)
     assert doc.others == ("CPT OSCAR ONG (OTHER: 060726)",)
@@ -206,9 +207,9 @@ def test_absent_kind_maps_to_cos_category(row, category, suffix):
 
 
 def test_cos_stay_out_lines_stay_bare():
-    # STAY OUT is the engine's default for a regular, not an absence: there is
-    # no backing row, so the line must carry no date range.
-    p = person("CPT Oscar Ong", service=Service.REGULAR, id=1)
+    # STAY OUT comes from the person flag, not an absence row: there is no
+    # backing row, so the line must carry no date range.
+    p = person("CPT Oscar Ong", service=Service.REGULAR, stay_out=True, id=1)
     doc = parade.compute_cos_message(DAY, COS, [pair(p)])
     assert doc.stay_out == ("CPT OSCAR ONG",)
 

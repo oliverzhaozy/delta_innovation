@@ -146,8 +146,15 @@ def test_pm_status_is_present_partial():
 
 # --- stay-out / present defaults (criterion 3) ---------------------------
 
-def test_regular_defaults_to_stay_out():
+def test_regular_without_flag_is_present():
+    # The stay_out flag is the ONE source of stay-out (owner 2026-07-31);
+    # service no longer forces it — an unflagged regular parades PRESENT.
     res = presence.resolve(person(service=Service.REGULAR), D)
+    assert res.state is PresenceState.PRESENT
+
+
+def test_regular_stay_out_flag_stays_out():
+    res = presence.resolve(person(service=Service.REGULAR, stay_out=True), D)
     assert res.state is PresenceState.STAY_OUT
 
 
@@ -166,7 +173,7 @@ def test_nsf_default_present():
 def test_stay_out_regular_with_in_camp_briefing_still_stay_out():
     # Subtle case: night documents show STAY OUT; the briefing surfaces only as
     # an in-camp annotation (morning parade OTHERS IN CAMP), never an absence.
-    p = person(service=Service.REGULAR)  # regular → default stay-out
+    p = person(service=Service.REGULAR, stay_out=True)  # flagged stay-out regular
     briefing = status(in_camp=True, kind="briefing")
     res = presence.resolve(p, D, statuses=[briefing])
     assert res.state is PresenceState.STAY_OUT

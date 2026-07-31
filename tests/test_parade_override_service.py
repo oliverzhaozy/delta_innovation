@@ -110,9 +110,10 @@ def test_no_cross_day_or_variant_leakage(app, make_person):
 
 def test_cos_current_strength_override_drops_the_line(app, make_person):
     # D4 through the service: the COS message is built for tomorrow, and a
-    # regular defaults to STAY OUT there — dragging onto "present" removes them.
+    # flagged stay-out regular lands in STAY OUT there — dragging onto
+    # "present" removes them.
     make_person(username="ov_cos_reg", display_name="Regular One",
-                service=Service.REGULAR)
+                service=Service.REGULAR, stay_out=True)
     make_person(username="ov_cos_nsf", display_name="Nsf One")
     tomorrow = TODAY + timedelta(days=1)
     with app.app_context():

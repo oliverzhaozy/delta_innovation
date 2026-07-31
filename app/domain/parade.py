@@ -520,7 +520,7 @@ def render_roll_call(doc: ParadeDoc) -> str:
 
     Same section rhythm as morning (single blank line between sections; title +
     date are one section), but the NIGHT document: STAY OUT is a real NOT-PRESENT
-    category (regulars/stay-outs are away tonight) and OTHERS IN CAMP is ALWAYS
+    category (flagged stay-outs are away tonight) and OTHERS IN CAMP is ALWAYS
     header-only with a literal 0 — in-camp promotion is a morning-only rule, and
     validate() guarantees `others_in_camp` is empty here. Validated first: the
     app refuses to emit a document it knows is unbalanced.
