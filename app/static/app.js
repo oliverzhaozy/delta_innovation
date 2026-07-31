@@ -214,17 +214,21 @@ function initEventForm() {
     // than just de-emphasising it: swap each input to type="date" (the form
     // accepts the resulting date-only value) and back to datetime-local for a
     // timed event, trimming/padding the value so the field stays populated
-    // across the swap.
+    // across the swap. Capture the value BEFORE changing type and restore it
+    // after — a type change (or writing a value in the other type's format)
+    // runs the browser's sanitizer, which silently empties the field.
     const syncAllDay = () => {
       timed.forEach((el) => {
         if (allDay.checked) {
           if (el.type !== "date") {
-            if (el.value) el.value = el.value.slice(0, 10);
+            const kept = el.value.slice(0, 10);
             el.type = "date";
+            el.value = kept;
           }
         } else if (el.type !== "datetime-local") {
+          const kept = el.value;
           el.type = "datetime-local";
-          if (el.value.length === 10) el.value = el.value + "T08:00";
+          el.value = kept.length === 10 ? kept + "T08:00" : kept;
         }
       });
     };
