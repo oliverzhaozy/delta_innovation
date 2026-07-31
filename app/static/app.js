@@ -137,13 +137,19 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeDragConfirm();
+  if (event.key !== "Escape") return;
+  closeDragConfirm();
+  closeDayPanel();
 });
 
 // Calendar layer toggles: each pill hides/shows its colour layer on the month
 // grid, persisted in localStorage so the choice survives month navigation.
 // Purely cosmetic — the server already omits ARCTIC chips for non-command users.
 const CAL_FILTER_KEY = "delta.calFilters";
+const CAL_KEYS = ["tp", "arctic", "off"];
+// Row 1 of a week grid is the day-number head, so lane 0 is row 2. Mirrors
+// calendar_month.FIRST_LANE_ROW; the two must move together.
+const FIRST_LANE_ROW = 2;
 
 function readHiddenCals() {
   try {
@@ -153,16 +159,130 @@ function readHiddenCals() {
   }
 }
 
+function calKeyOf(element) {
+  return CAL_KEYS.find((key) => element.classList.contains("cal-" + key)) || null;
+}
+
+// --- lane geometry, mirroring app/domain/monthgrid.py ---------------------
+// The server packs against EVERY layer, so hiding one leaves its chips' rows
+// standing (occupied by other columns) and the survivors float below a white
+// hole. These three functions re-pack the survivors client-side. With nothing
+// hidden they reproduce the server's rows exactly: a bar the cap dropped always
+// sat on a lane at or past the cap, so it can never have pushed a bar that IS
+// rendered off the lane the server gave it.
+
+function overlaps(columns, col, span) {
+  for (let c = col; c < col + span; c += 1) {
+    if (columns.has(c)) return true;
+  }
+  return false;
+}
+
+// Greedy lowest-free-lane, widest-first at each starting column — pack_lanes.
+function packLanes(items, floors) {
+  const order = items.map((item, index) => index);
+  order.sort((a, b) => items[a].col - items[b].col || items[b].span - items[a].span);
+  const lanes = new Array(items.length).fill(0);
+  const taken = [];
+  order.forEach((index) => {
+    const { col, span } = items[index];
+    let lane = floors ? floors[index] : 0;
+    while (lane < taken.length && overlaps(taken[lane], col, span)) lane += 1;
+    while (taken.length <= lane) taken.push(new Set());
+    for (let c = col; c < col + span; c += 1) taken[lane].add(c);
+    lanes[index] = lane;
+  });
+  return lanes;
+}
+
+// Highest occupied lane per column — lane_tops.
+function laneTops(items, lanes) {
+  const tops = new Map();
+  items.forEach((item, index) => {
+    for (let c = item.col; c < item.col + item.span; c += 1) {
+      tops.set(c, Math.max(tops.has(c) ? tops.get(c) : -1, lanes[index]));
+    }
+  });
+  return tops;
+}
+
+// Lowest lane each item may take to clear `tops` on its columns — floors_under.
+function floorsUnder(items, tops) {
+  return items.map((item) => {
+    let top = -1;
+    for (let c = item.col; c < item.col + item.span; c += 1) {
+      top = Math.max(top, tops.has(c) ? tops.get(c) : -1);
+    }
+    return top + 1;
+  });
+}
+
+function reflowWeek(week, hidden) {
+  // Document order IS the server's packing order for each band, so re-packing
+  // in it keeps the same tie-breaks.
+  const collect = (selector) =>
+    Array.from(week.querySelectorAll(selector))
+      .filter((element) => !hidden.has(calKeyOf(element)))
+      .map((element) => ({
+        element,
+        col: Number(element.dataset.col),
+        span: Number(element.dataset.span),
+      }));
+
+  const events = collect(".chip.cal-tp, .chip.cal-arctic");
+  const offs = collect(".chip.cal-off");
+  const eventLanes = packLanes(events, null);
+  const offLanes = packLanes(offs, floorsUnder(offs, laneTops(events, eventLanes)));
+
+  const bars = events.concat(offs);
+  const barLanes = eventLanes.concat(offLanes);
+  let deepest = -1;
+  bars.forEach((bar, index) => {
+    bar.element.style.gridRow = String(FIRST_LANE_ROW + barLanes[index]);
+    deepest = Math.max(deepest, barLanes[index]);
+  });
+
+  const tops = laneTops(bars, barLanes);
+  week.querySelectorAll(".more-badge").forEach((badge) => {
+    if (badge.classList.contains("is-empty")) return;
+    const col = Number(badge.dataset.col);
+    const lane = (tops.has(col) ? tops.get(col) : -1) + 1;
+    badge.style.gridRow = String(FIRST_LANE_ROW + lane);
+    deepest = Math.max(deepest, lane);
+  });
+  week.style.setProperty("--lanes", String(Math.max(deepest + 1, 1)));
+}
+
+// The server counted the badge against every layer; re-total it for the ones
+// still showing, so a toggle never leaves a "+3" standing for hidden bars.
+function recountBadges(hidden) {
+  document.querySelectorAll(".more-badge").forEach((badge) => {
+    let total = 0;
+    CAL_KEYS.forEach((key) => {
+      if (hidden.has(key)) return;
+      const attribute = "count" + key.charAt(0).toUpperCase() + key.slice(1);
+      total += Number(badge.dataset[attribute] || 0);
+    });
+    badge.textContent = "+" + total;
+    badge.classList.toggle("is-empty", total === 0);
+  });
+}
+
 function applyCalFilters(hidden) {
-  const grid = document.querySelector(".month-grid");
+  const layout = document.querySelector(".cal-layout");
   document.querySelectorAll("[data-cal-toggle]").forEach((button) => {
     const key = button.dataset.calToggle;
     const on = !hidden.has(key);
     button.setAttribute("aria-pressed", on ? "true" : "false");
-    if (grid) grid.classList.toggle("hide-cal-" + key, !on);
+    if (layout) layout.classList.toggle("hide-cal-" + key, !on);
   });
+  if (!layout) return;
+  recountBadges(hidden);
+  layout.querySelectorAll(".month-week").forEach((week) => reflowWeek(week, hidden));
 }
 
+// Also on first paint: a filter persisted from an earlier visit would otherwise
+// render the server's rows with holes where the hidden layer used to sit.
 document.addEventListener("DOMContentLoaded", () => applyCalFilters(readHiddenCals()));
 
 document.addEventListener("click", (event) => {
@@ -174,6 +294,63 @@ document.addEventListener("click", (event) => {
   else hidden.add(key);
   localStorage.setItem(CAL_FILTER_KEY, JSON.stringify([...hidden]));
   applyCalFilters(hidden);
+});
+
+// Day-detail panel: every entry of one day, including the ones the lane cap
+// dropped from the grid. The lists are server-rendered <template>s, so the panel
+// shows the same markup the grid derived rather than a second data shape.
+function dayPanel() {
+  return document.getElementById("day-panel");
+}
+
+function closeDayPanel() {
+  const panel = dayPanel();
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const layout = document.querySelector(".cal-layout");
+  if (layout) layout.classList.remove("is-open");
+  document
+    .querySelectorAll(".month-cell.is-selected")
+    .forEach((cell) => cell.classList.remove("is-selected"));
+}
+
+function openDayPanel(iso) {
+  const panel = dayPanel();
+  const layout = document.querySelector(".cal-layout");
+  const source = document.querySelector('template[data-day="' + iso + '"]');
+  if (!panel || !layout || !source) return;
+  panel.querySelector("[data-panel-title]").textContent = source.dataset.dayTitle;
+  panel.querySelector("[data-panel-body]").replaceChildren(source.content.cloneNode(true));
+  panel.hidden = false;
+  layout.classList.add("is-open");
+  document
+    .querySelectorAll(".month-cell.is-selected")
+    .forEach((cell) => cell.classList.remove("is-selected"));
+  const cell = layout.querySelector('.month-cell[data-date="' + iso + '"]');
+  if (cell) cell.classList.add("is-selected");
+}
+
+function openedDay() {
+  const panel = dayPanel();
+  if (!panel || panel.hidden) return null;
+  const cell = document.querySelector(".month-cell.is-selected");
+  return cell ? cell.dataset.date : null;
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-panel-close]")) {
+    closeDayPanel();
+    return;
+  }
+  const badge = event.target.closest(".more-badge");
+  const cell = badge ? null : event.target.closest(".month-cell[data-date]");
+  if (!badge && !cell) return;
+  // The day's "+" is a link to the new-event form; let it navigate. Event bars
+  // are siblings of the cell, not children, so they never reach here.
+  if (cell && event.target.closest("a")) return;
+  const iso = badge ? badge.dataset.date : cell.dataset.date;
+  if (openedDay() === iso) closeDayPanel();
+  else openDayPanel(iso);
 });
 
 // Event form (UI-9): show only labels belonging to the selected calendar, and

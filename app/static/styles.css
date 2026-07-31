@@ -931,12 +931,32 @@ table.list a:hover { text-decoration: underline; }
 .cal-toggle[aria-pressed="false"] { opacity: 0.55; }
 
 /* Off layers are hidden cosmetically; the chips are still in the DOM (except
-   ARCTIC, which the server omits for non-command users). */
-.month-grid.hide-cal-tp .chip.cal-tp,
-.month-grid.hide-cal-arctic .chip.cal-arctic,
-.month-grid.hide-cal-off .chip.cal-off { display: none; }
+   ARCTIC, which the server omits for non-command users). Scoped to .cal-layout
+   so ONE class hides a layer in both the grid and the day panel — they can't
+   disagree about what "TP off" means. JS re-flows the survivors afterwards, or
+   the hidden chips would leave the dead rows they used to occupy. */
+.cal-layout.hide-cal-tp .chip.cal-tp,
+.cal-layout.hide-cal-tp .day-entry.cal-tp,
+.cal-layout.hide-cal-arctic .chip.cal-arctic,
+.cal-layout.hide-cal-arctic .day-entry.cal-arctic,
+.cal-layout.hide-cal-off .chip.cal-off,
+.cal-layout.hide-cal-off .day-entry.cal-off { display: none; }
 
 /* ---------- Month calendar (Phase 2) ---------- */
+
+/* Grid + docked day panel. The grid takes the space the panel is not using, so
+   closing the panel widens the calendar rather than leaving a hole; min-width:0
+   lets the grid's own scroll container shrink instead of overflowing the page. */
+.cal-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.cal-layout > .card {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 /* Own scroll container, not the page: table.list already reserves
    .table-wrap for this, mirror it so the 7-col grid never widens <body>. */
@@ -1007,6 +1027,30 @@ table.list a:hover { text-decoration: underline; }
 
 .month-cell .day-num.muted { color: var(--faint); font-weight: 500; }
 
+/* Today wears a filled disc rather than a tint: the cell backgrounds already
+   carry the in-month/out-of-month distinction, so the date itself is the only
+   place left that can say "you are here" without competing with the bars. */
+.month-cell.is-today .day-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.18rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--card);
+}
+
+/* Any in-month day opens the panel; the open one keeps a ring so the panel is
+   visibly ABOUT a cell rather than floating free. */
+.month-cell[data-date] { cursor: pointer; }
+
+.month-cell.is-selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-tint);
+}
+
 /* Day-number row with the editor-only "+" create affordance pinned right. Its
    height IS the week grid's first track, so the bars start clear of it. */
 .cell-head {
@@ -1036,9 +1080,9 @@ table.list a:hover { text-decoration: underline; }
   display: block;
   position: relative;
   align-self: center;
-  margin: 0 2px;
+  margin: 0;
   padding: 0.02rem 0.35rem;
-  border-radius: 4px;
+  border-radius: 3px;
   font-size: 0.62rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1053,15 +1097,160 @@ table.list a:hover { text-decoration: underline; }
 
 /* A squared, flush end says the bar continues past the days shown on this row. */
 .month-week .chip.clip-l {
-  margin-left: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
 
 .month-week .chip.clip-r {
-  margin-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+/* The cap's overflow marker. Deliberately NOT chip-shaped: it stands for bars
+   rather than being one, so it stays small, neutral and left-aligned instead of
+   filling its column like the data bars do. */
+.more-badge {
+  display: block;
+  position: relative;
+  align-self: center;
+  justify-self: start;
+  padding: 0.02rem 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.more-badge:hover { background: var(--accent-tint); color: var(--accent); }
+
+.more-badge:focus-visible,
+.day-panel-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Every layer it counted is toggled off — it would read "+0". */
+.more-badge.is-empty { display: none; }
+
+/* ---------- Day-detail panel (UI-24) ---------- */
+
+.day-panel {
+  flex: 0 0 17.5rem;
+  align-self: stretch;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 0.85rem 1rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: day-panel-in 0.16s ease-out;
+}
+
+.day-panel[hidden] { display: none; }
+
+@keyframes day-panel-in {
+  from { opacity: 0; transform: translateX(0.5rem); }
+}
+
+.day-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The condensed stencil face the brand and section heads already use — the
+   panel is a new surface, not a new voice. */
+.day-panel-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.day-panel-close {
+  flex-shrink: 0;
+  padding: 0 0.3rem;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.day-panel-close:hover { color: var(--ink); background: var(--paper); }
+
+.day-entries {
+  display: grid;
+  gap: 0.1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The layer's colour as a spine down the left edge, not a dot or a filled row:
+   it lets a long list be scanned by layer at a glance while leaving the title
+   itself in plain ink, which is what people actually read. */
+.day-entry {
+  display: grid;
+  grid-template-columns: 4.3rem 1fr;
+  gap: 0 0.5rem;
+  padding: 0.32rem 0.4rem 0.32rem 0.55rem;
+  border-left: 3px solid var(--entry-colour, var(--line));
+  border-radius: 0 6px 6px 0;
+}
+
+.day-entry:hover { background: var(--paper); }
+
+.day-entry.cal-tp { --entry-colour: var(--cal-tp); }
+.day-entry.cal-arctic { --entry-colour: var(--cal-arctic); }
+.day-entry.cal-off { --entry-colour: var(--cal-off); }
+
+.entry-time {
+  padding-top: 0.06rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-title {
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+a.entry-title:hover { color: var(--accent); text-decoration: underline; }
+
+/* The label the month bars drop (UI-9) — reuses the .chip.ev-* colours rather
+   than restating 20 hues here. */
+.day-entry .chip {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+}
+
+.day-empty { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .day-panel { animation: none; }
 }
 
 /* Meal indents: the day's expected number IS the cell's body — no lanes to
@@ -1085,6 +1274,32 @@ table.list a:hover { text-decoration: underline; }
    day view can explain which document is off. */
 .meal-num.meal-warn { color: var(--amber-ink); font-weight: 500; }
 
+/* On a phone there is no room to dock beside a 7-column grid, so the panel
+   becomes a bottom sheet — over the grid, within thumb reach, and it never
+   squeezes the calendar it describes. */
+@media (max-width: 39.999rem) {
+  .day-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    flex: none;
+    max-height: 65vh;
+    border-width: 1px 0 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -8px 30px rgba(16, 24, 40, 0.18);
+    animation: day-sheet-in 0.18s ease-out;
+  }
+
+  @keyframes day-sheet-in {
+    from { opacity: 0; transform: translateY(0.75rem); }
+  }
+
+  /* Clear the sheet so the last week row is still reachable behind it. */
+  .cal-layout.is-open { padding-bottom: 60vh; }
+}
+
 /* ---------- Desktop ---------- */
 
 @media (min-width: 40rem) {
@@ -1098,6 +1313,8 @@ table.list a:hover { text-decoration: underline; }
   .month-week { --head-h: 1.75rem; min-height: 6.75rem; }
   .month-cell { padding: 0 0.4rem; }
   .month-cell .day-num { font-size: 0.95rem; }
+  .month-cell.is-today .day-num { min-width: 1.5rem; height: 1.5rem; }
   .month-week .chip { font-size: 0.72rem; padding: 0.08rem 0.45rem; }
+  .more-badge { font-size: 0.7rem; }
   .meal-num { font-size: 1.6rem; }
 }

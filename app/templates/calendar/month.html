@@ -3,6 +3,23 @@
 {# The month grid wants width — opt this page out of the 44rem reading column. #}
 {% block main_class %}wide{% endblock %}
 
+{% macro day_entry(entry) %}
+{#- ONE line format for the day panel. The month bars deliberately drop the
+    label text (UI-9); the panel is the detail surface, so it shows the label
+    chip the grid omits. -#}
+<li class="day-entry cal-{{ entry.cal_key }}">
+  <span class="entry-time">{{ entry.time_display }}</span>
+  {%- if entry.kind == "event" %}
+  <a class="entry-title" href="{{ url_for('calendar.detail', event_id=entry.obj.id) }}">{{ entry.obj.title }}</a>
+  {%- if entry.obj.label_enum %}
+  <span class="chip ev-{{ entry.obj.label_enum.slug }}">{{ entry.obj.label_enum.value }}</span>
+  {%- endif %}
+  {%- else %}
+  <span class="entry-title">{{ entry.obj.person.rank.value }} {{ entry.obj.person.display_name }} {{ entry.obj.label }}{% if entry.obj.day_part.value != 'FULL' %} ({{ entry.obj.day_part.value }}){% endif %}</span>
+  {%- endif %}
+</li>
+{% endmacro %}
+
 {% block content %}
 {% set can_add = policy.can_edit_events(current_user) %}
 <div class="cal-toolbar">
@@ -34,54 +51,87 @@
   </button>
 </div>
 
-<section class="card">
-  <div class="month-grid-wrap">
-    <div class="month-grid">
-      <div class="month-weekdays">
-        {% for label in weekday_labels %}
-        <div class="month-grid-head">{{ label }}</div>
-        {% endfor %}
-      </div>
-      {% for week in weeks %}
-      <div class="month-week" style="--lanes: {{ week.lane_count }}">
-        {# Day cells come first and span every lane row: they are the week's
-           background, so the bars that follow paint on top of them. #}
-        {% for cell in week.cells %}
-        <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}" style="grid-column: {{ loop.index }}">
-          <div class="cell-head">
-            {# Plain text, no link: parade documents are today-fixed and there is
-               no archive to walk back to (P9.2). #}
-            {% if cell.in_month %}
-            <span class="day-num">{{ cell.date.day }}</span>
-            {% if can_add %}
-            <a class="day-add" href="{{ url_for('calendar.new', date=cell.date.isoformat()) }}" title="New event on {{ cell.date.isoformat() }}" aria-label="New event on {{ cell.date.isoformat() }}">+</a>
-            {% endif %}
-            {% else %}
-            <span class="day-num muted">{{ cell.date.day }}</span>
-            {% endif %}
+{# Grid and day panel share one container: the layer-hiding classes live on IT,
+   so the panel obeys the same toggles as the chips for free, and the panel docks
+   beside the grid instead of floating over it. #}
+<div class="cal-layout">
+  <section class="card">
+    <div class="month-grid-wrap">
+      <div class="month-grid">
+        <div class="month-weekdays">
+          {% for label in weekday_labels %}
+          <div class="month-grid-head">{{ label }}</div>
+          {% endfor %}
+        </div>
+        {% for week in weeks %}
+        <div class="month-week" style="--lanes: {{ week.lane_count }}">
+          {# Day cells come first and span every lane row: they are the week's
+             background, so the bars that follow paint on top of them. #}
+          {% for cell in week.cells %}
+          <div class="month-cell{% if not cell.in_month %} month-cell-out{% endif %}{% if cell.is_today %} is-today{% endif %}" style="grid-column: {{ loop.index }}"{% if cell.in_month %} data-date="{{ cell.date.isoformat() }}"{% endif %}>
+            <div class="cell-head">
+              {# Plain text, no link: parade documents are today-fixed and there is
+                 no archive to walk back to (P9.2). #}
+              {% if cell.in_month %}
+              <span class="day-num">{{ cell.date.day }}</span>
+              {% if can_add %}
+              <a class="day-add" href="{{ url_for('calendar.new', date=cell.date.isoformat()) }}" title="New event on {{ cell.date.isoformat() }}" aria-label="New event on {{ cell.date.isoformat() }}">+</a>
+              {% endif %}
+              {% else %}
+              <span class="day-num muted">{{ cell.date.day }}</span>
+              {% endif %}
+            </div>
           </div>
+          {% endfor %}
+          {# One bar per event and per contiguous OFF/LEAVE run per week, spanning
+             its columns. A squared-off end (clip-l/clip-r) is the cue that the bar
+             continues on the neighbouring week row. The inline grid placement is
+             the server's truth and the no-JS render; the data-col/span/row copy is
+             what the layer re-flow re-packs from, so JS never parses a style
+             string. #}
+          {% for seg in week.segments %}
+          {%- set clip = (" clip-l" if seg.clip_left else "") ~ (" clip-r" if seg.clip_right else "") -%}
+          {%- set place = "grid-column: " ~ seg.col ~ " / span " ~ seg.span ~ "; grid-row: " ~ seg.row -%}
+          {% if seg.kind == "event" %}
+          {# cal-* class drives the on/off filter; ev-<slug> still colours the bar
+             by label (UI-9), but the label TEXT is omitted in the grid — the month
+             view shows titles only; the label stays on the panel/list/detail. #}
+          <a class="chip cal-{{ 'arctic' if seg.obj.calendar.value == 'ARCTIC' else 'tp' }}{% if seg.obj.label_enum %} ev-{{ seg.obj.label_enum.slug }}{% endif %}{{ clip }}" style="{{ place }}" data-col="{{ seg.col }}" data-span="{{ seg.span }}" data-row="{{ seg.row }}" href="{{ url_for('calendar.detail', event_id=seg.obj.id) }}">{{ seg.obj.title }}</a>
+          {% elif seg.kind == "off" %}
+          <span class="chip cal-off{{ clip }}" style="{{ place }}" data-col="{{ seg.col }}" data-span="{{ seg.span }}" data-row="{{ seg.row }}">{{ seg.obj.person.rank.value }} {{ seg.obj.person.display_name }} {{ seg.obj.label }}{% if seg.obj.day_part.value != 'FULL' %} ({{ seg.obj.day_part.value }}){% endif %}</span>
+          {% else %}
+          {# The cap's overflow. A button, not a label: the bars it stands for are
+             not in the grid at all, so this is their only keyboard route. #}
+          <button type="button" class="more-badge" style="{{ place }}" data-col="{{ seg.col }}" data-span="{{ seg.span }}" data-row="{{ seg.row }}" data-date="{{ week.cells[seg.col - 1].date.isoformat() }}"{% for key, count in seg.counts.items() %} data-count-{{ key }}="{{ count }}"{% endfor %} aria-label="Show everything on {{ week.cells[seg.col - 1].date.isoformat() }}">+{{ seg.count }}</button>
+          {% endif %}
+          {% endfor %}
         </div>
         {% endfor %}
-        {# One bar per event and per contiguous OFF/LEAVE run per week, spanning
-           its columns. A squared-off end (clip-l/clip-r) is the cue that the bar
-           continues on the neighbouring week row. #}
-        {% for seg in week.segments %}
-        {%- set clip = (" clip-l" if seg.clip_left else "") ~ (" clip-r" if seg.clip_right else "") -%}
-        {%- set place = "grid-column: " ~ seg.col ~ " / span " ~ seg.span ~ "; grid-row: " ~ seg.row -%}
-        {% if seg.kind == "event" %}
-        {# cal-* class drives the on/off filter; ev-<slug> still colours the bar
-           by label (UI-9), but the label TEXT is omitted in the grid — the month
-           view shows titles only; the label stays on the list/detail. #}
-        <a class="chip cal-{{ 'arctic' if seg.obj.calendar.value == 'ARCTIC' else 'tp' }}{% if seg.obj.label_enum %} ev-{{ seg.obj.label_enum.slug }}{% endif %}{{ clip }}" style="{{ place }}" href="{{ url_for('calendar.detail', event_id=seg.obj.id) }}">{{ seg.obj.title }}</a>
-        {% elif seg.kind == "off" %}
-        <span class="chip cal-off{{ clip }}" style="{{ place }}">{{ seg.obj.person.rank.value }} {{ seg.obj.person.display_name }} {{ seg.obj.label }}{% if seg.obj.day_part.value != 'FULL' %} ({{ seg.obj.day_part.value }}){% endif %}</span>
-        {% else %}
-        <span class="chip cal-off more" style="{{ place }}">+{{ seg.count }} more</span>
-        {% endif %}
-        {% endfor %}
       </div>
-      {% endfor %}
     </div>
-  </div>
-</section>
+  </section>
+
+  <aside id="day-panel" class="day-panel" hidden aria-label="Day detail">
+    <div class="day-panel-head">
+      <h2 class="day-panel-title" data-panel-title></h2>
+      <button type="button" class="day-panel-close" data-panel-close aria-label="Close day detail">&times;</button>
+    </div>
+    <div class="day-panel-body" data-panel-body></div>
+  </aside>
+
+  {# One ready-made list per day: the panel clones these, so the lines it shows
+     and the lines the server derived are the same markup — nothing is rebuilt in
+     JS from a second data shape. Uncapped, so a "+N" day loses nothing. #}
+  {% for day, entries in day_entries|dictsort %}
+  <template data-day="{{ day.isoformat() }}" data-day-title="{{ day.strftime('%B') }} {{ day.day }}">
+    {%- if entries %}
+    <ul class="day-entries">
+      {%- for entry in entries %}{{ day_entry(entry) }}{% endfor %}
+    </ul>
+    {%- else %}
+    <p class="day-empty">Nothing on this day.{% if can_add %} <a href="{{ url_for('calendar.new', date=day.isoformat()) }}">Add an event</a>.{% endif %}</p>
+    {%- endif %}
+  </template>
+  {% endfor %}
+</div>
 {% endblock %}

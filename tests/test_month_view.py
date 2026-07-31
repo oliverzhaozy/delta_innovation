@@ -26,6 +26,16 @@ def event_id_for(app, title):
         return db.session.query(Event.id).filter_by(title=title).scalar()
 
 
+def grid_only(resp):
+    """The markup up to the first per-day <template>.
+
+    The panel's day lists repeat an event once per day it covers — that is the
+    point of them — so any assertion about how many BARS a month draws has to
+    stop where the grid stops.
+    """
+    return resp.data.split(b"<template", 1)[0]
+
+
 def plant_leave(app, username, day, status=RequestStatus.APPROVED, end=None):
     with app.app_context():
         pid = db.session.query(Person.id).filter_by(username=username).scalar()
@@ -50,7 +60,7 @@ def test_three_day_event_is_one_spanning_bar_and_links_to_detail(app, client, ma
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
     link = f'href="/calendar/{event_id}"'.encode()
-    assert resp.data.count(link) == 1
+    assert grid_only(resp).count(link) == 1
     assert b"grid-column: 1 / span 3" in resp.data
 
 
@@ -63,7 +73,7 @@ def test_event_crossing_a_week_boundary_gets_one_bar_per_week(app, client, make_
 
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    assert resp.data.count(f'href="/calendar/{event_id}"'.encode()) == 2
+    assert grid_only(resp).count(f'href="/calendar/{event_id}"'.encode()) == 2
     assert b"clip-r" in resp.data and b"clip-l" in resp.data
 
 
@@ -137,9 +147,12 @@ def test_the_run_past_the_lane_cap_collapses_into_a_per_day_more_chip(app, clien
 
     resp = client.get("/calendar/month?ym=2026-07")
     assert resp.status_code == 200
-    assert b"+1 more" in resp.data
-    # 5 name bars + the "+1 more" chip, which carries the same cal-off class.
-    assert resp.data.count(b"chip cal-off") == 6
+    # The badge is a button now, not a chip: it is the only route to the bars
+    # the cap dropped, so it has to be reachable by keyboard.
+    assert b'class="more-badge"' in resp.data
+    assert b'data-count-off="1"' in resp.data
+    assert b">+1</button>" in resp.data
+    assert resp.data.count(b"chip cal-off") == 5
 
 
 def test_off_chip_sits_flush_under_its_own_days_events(app, client, make_person):
@@ -208,6 +221,126 @@ def test_regular_leave_is_not_in_the_nsf_off_leave_layer(app, client, make_perso
 
 # ---------- Criterion 4: absences_on still delegates correctly ----------
 
+# ---------- UI-24: panel markup, today ring, badge attributes ----------
+
+def day_template(html, iso):
+    """The one `<template data-day="…">` block for `iso`."""
+    opening = f'<template data-day="{iso}"'
+    start = html.index(opening)
+    return html[start:html.index("</template>", start)]
+
+
+def test_the_grid_and_the_panel_share_one_layer_toggle_container(client, make_person):
+    # The hide-cal-* classes land on .cal-layout, so one toggle hides a layer in
+    # the grid AND in the panel — they cannot disagree about what "TP off" means.
+    login(client, make_person(username="mv_layout_viewer"))
+    resp = client.get("/calendar/month?ym=2026-07")
+    html = resp.data.decode()
+    assert '<div class="cal-layout">' in html
+    assert '<aside id="day-panel"' in html
+    assert "data-panel-title" in html and "data-panel-body" in html
+    assert "data-panel-close" in html
+
+
+def test_only_in_month_cells_carry_a_date_to_open(client, make_person):
+    # July 2026 opens on Mon 29 Jun and closes on Sun 2 Aug: the padding cells
+    # belong to another month and must not open a panel for it.
+    login(client, make_person(username="mv_datecell_viewer"))
+    grid = client.get("/calendar/month?ym=2026-07").data.decode().split("<template", 1)[0]
+    assert grid.count('data-date="2026-07-') == 31
+    assert 'data-date="2026-06-29"' not in grid
+    assert 'data-date="2026-08-02"' not in grid
+    # The padding cells are still drawn, just not clickable.
+    assert 'class="month-cell month-cell-out"' in grid
+
+
+def test_the_today_ring_appears_only_in_the_month_that_owns_today(client, make_person):
+    login(client, make_person(username="mv_todayring_viewer"))
+    today = today_sgt()
+    current = client.get("/calendar/month?ym=%04d-%02d" % (today.year, today.month))
+    assert current.data.count(b"month-cell is-today") == 1
+
+    # A year on, the same month cannot contain today.
+    other = client.get("/calendar/month?ym=%04d-%02d" % (today.year + 1, today.month))
+    assert b"is-today" not in other.data
+
+
+def test_the_badge_carries_a_per_layer_breakdown_for_the_toggles(app, client, make_person):
+    # Six TP + one ARCTIC event fill the lanes and the OFF run floors under them,
+    # so one bar of each layer is dropped — and the badge says which, so hiding a
+    # layer can re-count itself without another request.
+    make_person(username="mv_badge_guy", platoon=1)
+    login(client, make_person(**make_pc("mv_badge_pc")))
+    for hour in range(8, 14):
+        create_event(client, "TP", f"TP thing {hour}", f"2026-07-08T{hour:02d}:00", "2026-07-08T17:00")
+    create_event(client, "ARCTIC", "Arctic thing", "2026-07-08T14:00", "2026-07-08T17:00")
+    plant_leave(app, "mv_badge_guy", date(2026, 7, 8))
+
+    html = client.get("/calendar/month?ym=2026-07").data.decode()
+    grid = html.split("<template", 1)[0]
+    assert 'data-count-tp="1"' in grid
+    assert 'data-count-arctic="1"' in grid
+    assert 'data-count-off="1"' in grid
+    assert ">+3</button>" in grid
+    # The dropped bars are gone from the grid but never from the panel.
+    assert "Arctic thing" in day_template(html, "2026-07-08")
+
+
+def test_every_bar_repeats_its_grid_row_as_data_for_the_reflow(app, client, make_person):
+    # The client-side re-flow re-packs from data-col/span/row rather than parsing
+    # inline styles, so the two must agree bar for bar.
+    make_person(username="mv_datarow_guy", platoon=1)
+    login(client, make_person(**make_pc("mv_datarow_pc")))
+    create_event(client, "TP", "Wide thing", "2026-07-06T08:00", "2026-07-09T17:00")
+    create_event(client, "TP", "Narrow thing", "2026-07-07T08:00", "2026-07-07T17:00")
+    plant_leave(app, "mv_datarow_guy", date(2026, 7, 7))
+
+    grid = client.get("/calendar/month?ym=2026-07").data.decode().split("<template", 1)[0]
+    bars = re.findall(
+        r'style="grid-column: (\d+) / span (\d+); grid-row: (\d+)" '
+        r'data-col="(\d+)" data-span="(\d+)" data-row="(\d+)"',
+        grid,
+    )
+    assert len(bars) == 3
+    assert all(bar[:3] == bar[3:] for bar in bars)
+
+
+def test_a_days_template_lists_its_events_and_off_people_with_times(app, client, make_person):
+    make_person(username="mv_panel_guy", platoon=1)
+    login(client, make_person(**make_pc("mv_panel_pc")))
+    create_event(client, "TP", "Morning brief", "2026-07-08T09:00", "2026-07-08T12:00")
+    create_event(client, "TP", "Range week", "2026-07-06T08:00", "2026-07-10T17:00")
+    plant_leave(app, "mv_panel_guy", date(2026, 7, 8))
+
+    html = client.get("/calendar/month?ym=2026-07").data.decode()
+    block = day_template(html, "2026-07-08")
+    assert 'data-day-title="July 8"' in block
+    # Whole-day entries lead, the timed one follows — the grid's band order.
+    assert block.index("Range week") < block.index("Mv Panel Guy") < block.index("Morning brief")
+    assert '<li class="day-entry cal-tp">' in block
+    assert '<li class="day-entry cal-off">' in block
+    assert "All-day" in block
+    assert "9:00 AM – 12:00 PM" in block
+    assert "PTE Mv Panel Guy OFF" in block
+
+
+def test_a_quiet_days_template_invites_an_editor_to_add_something(client, make_person):
+    login(client, make_person(**make_pc("mv_empty_pc")))
+    html = client.get("/calendar/month?ym=2026-07").data.decode()
+    block = day_template(html, "2026-07-15")
+    assert 'class="day-empty"' in block
+    assert "Nothing on this day." in block
+    assert "/calendar/new?date=2026-07-15" in block
+
+
+def test_a_viewer_who_cannot_add_events_gets_no_add_invitation(client, make_person):
+    login(client, make_person(username="mv_empty_opr"))
+    html = client.get("/calendar/month?ym=2026-07").data.decode()
+    block = day_template(html, "2026-07-15")
+    assert "Nothing on this day." in block
+    assert "/calendar/new" not in block
+
+
 def test_absences_on_matches_absences_between_single_day(app, make_person):
     make_person(username="mv_delegate_guy", platoon=2)
     day = date(2026, 7, 9)
@@ -230,10 +363,10 @@ def test_event_spanning_month_boundary_appears_in_both_months(app, client, make_
     # Each month draws its own bar, clipped at the month edge: July shows one
     # spanning Thu 30 - Fri 31, August one spanning Sat 1 - Sun 2 (same week row).
     july_resp = client.get("/calendar/month?ym=2026-07")
-    assert july_resp.data.count(link) == 1
+    assert grid_only(july_resp).count(link) == 1
 
     august_resp = client.get("/calendar/month?ym=2026-08")
-    assert august_resp.data.count(link) == 1
+    assert grid_only(august_resp).count(link) == 1
 
 
 # ---------- Criterion 6: default month, ?ym= nav, malformed ?ym=, prev/next/Today ----------
