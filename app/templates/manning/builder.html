@@ -44,31 +44,12 @@
       <span>{{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
         {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
         {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
-      <form method="post" action="{{ url_for('manning.reassign', period_id=period.id) }}" class="cell-assign">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="slot_id" value="{{ s.id }}">
-        <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="{{ s.slot.ui_label }}">
-          {{ person_options(candidates[s.slot], s.person_id) }}
-        </select>
-        <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
-      </form>
-      <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="slot_id" value="{{ s.id }}">
-        <button type="submit" class="linklike">remove</button>
-      </form>
-    </li>
-    {% endfor %}
-    {% for det, rows in dets.items() %}
-      {% for s in rows %}
-      <li>
-        <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
-          {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
-          {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
+      <details class="cell-edit">
+        <summary aria-label="Change {{ s.slot.ui_label }}">&#9998;</summary>
         <form method="post" action="{{ url_for('manning.reassign', period_id=period.id) }}" class="cell-assign">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="slot_id" value="{{ s.id }}">
-          <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="TU {{ det }} {{ s.slot.ui_label }}">
+          <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="{{ s.slot.ui_label }}">
             {{ person_options(candidates[s.slot], s.person_id) }}
           </select>
           <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
@@ -78,6 +59,31 @@
           <input type="hidden" name="slot_id" value="{{ s.id }}">
           <button type="submit" class="linklike">remove</button>
         </form>
+      </details>
+    </li>
+    {% endfor %}
+    {% for det, rows in dets.items() %}
+      {% for s in rows %}
+      <li>
+        <span>TU {{ det }} · {{ s.slot.ui_label }} — {{ s.person.rank.value }} {{ s.person.display_name }}
+          {% if s.is_manual %}<span class="chip plain">manual</span>{% endif %}
+          {% for reason in checks[s.person_id][1] %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}</span>
+        <details class="cell-edit">
+          <summary aria-label="Change TU {{ det }} {{ s.slot.ui_label }}">&#9998;</summary>
+          <form method="post" action="{{ url_for('manning.reassign', period_id=period.id) }}" class="cell-assign">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="slot_id" value="{{ s.id }}">
+            <select name="person_id" data-autosubmit data-slot="{{ s.slot.value }}" aria-label="TU {{ det }} {{ s.slot.ui_label }}">
+              {{ person_options(candidates[s.slot], s.person_id) }}
+            </select>
+            <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+          </form>
+          <form method="post" action="{{ url_for('manning.remove', period_id=period.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="slot_id" value="{{ s.id }}">
+            <button type="submit" class="linklike">remove</button>
+          </form>
+        </details>
       </li>
       {% endfor %}
     {% endfor %}
@@ -85,16 +91,19 @@
     <li>
       <span>{% if det %}TU {{ det }} · {% endif %}{{ slot.ui_label }} — <em class="muted">open</em></span>
       {% if candidates[slot] %}
-      <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}" class="cell-assign">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="slot" value="{{ slot.value }}">
-        <input type="hidden" name="det_number" value="{{ det if det else '' }}">
-        <select name="person_id" required data-autosubmit data-slot="{{ slot.value }}" aria-label="Fill {{ slot.ui_label }}">
-          <option value="" disabled selected>— assign —</option>
-          {{ person_options(candidates[slot], None) }}
-        </select>
-        <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
-      </form>
+      <details class="cell-edit">
+        <summary aria-label="Fill {% if det %}TU {{ det }} {% endif %}{{ slot.ui_label }}">&#9998;</summary>
+        <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}" class="cell-assign">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="slot" value="{{ slot.value }}">
+          <input type="hidden" name="det_number" value="{{ det if det else '' }}">
+          <select name="person_id" required data-autosubmit data-slot="{{ slot.value }}" aria-label="Fill {{ slot.ui_label }}">
+            <option value="" disabled selected>— assign —</option>
+            {{ person_options(candidates[slot], None) }}
+          </select>
+          <button type="submit" class="btn secondary" data-autosubmit-fallback>Set</button>
+        </form>
+      </details>
       {% else %}
       <span class="badge rejected">&#9888; Nobody is eligible for {{ slot.ui_label }} — the appointment rule, not the app, may be the problem.</span>
       {% endif %}
@@ -108,40 +117,18 @@
 
 <section class="card">
   <h2>Manage</h2>
-  <form method="post" action="{{ url_for('manning.generate', period_id=period.id) }}" class="inline-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn">Auto-generate (keeps manual picks)</button>
-  </form>
-  <p class="muted">Fills the fixed structure &mdash; HQ plus dets 1 and 2 &mdash; from people with no known conflict. Manual picks are kept; only auto-planned slots are replaced.</p>
-</section>
-
-{# The escape hatch from the fixed structure (decision (aa): auto-generation
-   sizes to HQ + dets 1-2, but a hand-built period of ANY shape renders). The
-   lines above can only express the structure's own positions, so a det 3 or a
-   fourth man in det 1 is keyed here. The person list is grouped by slot but not
-   filtered by the chosen slot: the server hard-blocks a mismatched pair. #}
-<section class="card">
-  <h2>Add extra slot</h2>
-  <form method="post" action="{{ url_for('manning.assign', period_id=period.id) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Slot
-      <select name="slot">
-        {% for slot in ManningSlotType %}<option value="{{ slot.value }}">{{ slot.ui_label }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Det <input type="number" name="det_number" min="1" value="{{ next_det }}"></label>
-    <label>Person
-      <select name="person_id">
-        {% for slot in ManningSlotType %}
-        <optgroup label="{{ slot.ui_label }}" data-slot="{{ slot.value }}">
-          {{ person_options(candidates[slot], None) }}
-        </optgroup>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="submit" class="btn">Add</button>
-  </form>
-  <p class="muted">Leave Det blank for the two HQ slots.</p>
+  <div style="display:flex; gap:1rem; flex-wrap:wrap">
+    <form method="post" action="{{ url_for('manning.generate', period_id=period.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn">Generate</button>
+    </form>
+    <form method="post" action="{{ url_for('manning.delete', period_id=period.id) }}" class="inline-form"
+          onsubmit="return confirm('Delete this manning period?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn danger">Delete period</button>
+    </form>
+  </div>
+  <p class="muted">Manual picks are kept &mdash; only auto-planned slots are replaced.</p>
 </section>
 
 {# Priority: who is owed the next activation period. Display only — generation
@@ -161,13 +148,5 @@
   <p class="muted">Nobody is eligible for {{ slot.ui_label }}.</p>
   {% endif %}
   {% endfor %}
-</section>
-
-<section class="card">
-  <h2>Danger</h2>
-  <form method="post" action="{{ url_for('manning.delete', period_id=period.id) }}" class="inline-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn secondary">Delete period</button>
-  </form>
 </section>
 {% endblock %}

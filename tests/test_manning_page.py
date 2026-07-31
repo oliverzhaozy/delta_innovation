@@ -266,14 +266,18 @@ def test_existing_rows_get_a_preselected_dropdown_and_open_positions_a_placehold
     assert re.search(
         r'<option value="%d" selected>' % pid(app, "opr1"), form
     ) is not None
-    # The four stacked "Assign <slot>" cards are gone; one compact escape hatch
-    # for shapes the structure cannot express remains.
+    # The four stacked "Assign <slot>" cards are gone, and so is the escape-hatch
+    # card (owner 2026-07-31: the structure is fixed; the route stays for the
+    # open positions that post to it).
     assert "<h2>Assign Det Personnel (Det Comd/Opr)</h2>" not in html
     assert "<h2>Manual assignment</h2>" not in html
-    assert "<h2>Add extra slot</h2>" in html
+    assert "<h2>Add extra slot</h2>" not in html
     # The structure's remaining positions each render their own placeholder line.
     assert html.count("— assign —") == 8   # 9 structural slots, one now filled
     assert "<em class=\"muted\">open</em>" in html
+    # Every picker on the page — the filled row's and the open positions' — is
+    # folded behind the ✎.
+    assert html.count('<details class="cell-edit">') == html.count('class="cell-assign"')
 
 
 def test_reassign_swaps_the_holder_through_the_route(app, client, make_person):
