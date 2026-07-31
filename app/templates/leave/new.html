@@ -9,8 +9,7 @@
     <span class="chip">OFF: {{ balances[BalanceKind.OFF] | days }}</span>
     <span class="chip">OIL: {{ balances[BalanceKind.OIL] | days }}</span>
   </div>
-  <p class="muted">Goes to {{ "the OC" if current_user.appointment.value == "PC" else "your PC, then the OC" }}.
-     Weekends and public holidays inside the range don't consume balance.</p>
+  <p class="muted">Weekends and public holidays inside the range don't consume balance.</p>
 </div>
 
 <form method="post" class="card">
