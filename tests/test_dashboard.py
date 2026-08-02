@@ -36,7 +36,13 @@ from app.models import (
     Person,
     StatusEntry,
 )
-from app.services import dashboard_service, duty_service, leave_service, manning_service
+from app.services import (
+    dashboard_service,
+    duty_service,
+    leave_service,
+    manning_service,
+    overseas_service,
+)
 from tests.conftest import login
 
 TODAY = today_sgt()
@@ -70,12 +76,16 @@ def make_cast(make_person):
 
 
 def plant_leave(app, person_id, start, end, *, status=RequestStatus.APPROVED,
-                type_=LeaveType.OFF):
+                type_=LeaveType.OFF, remarks=None, pc_actor=None, oc_actor=None):
     with app.app_context():
         row = LeaveRequest(
             person_id=person_id, type=type_, start_date=start, end_date=end,
-            day_part=DayPart.FULL, status=status,
+            day_part=DayPart.FULL, status=status, remarks=remarks,
         )
+        if pc_actor is not None:
+            row.pc_actor_id = pid(app, pc_actor)
+        if oc_actor is not None:
+            row.oc_actor_id = pid(app, oc_actor)
         db.session.add(row)
         db.session.commit()
         return row.id
@@ -125,12 +135,14 @@ def plant_slot(app, period_id, person_id, slot, *, det_number=None):
 
 
 def plant_declaration(app, person_id, start, end, *, status=DeclarationStatus.PENDING,
-                      destination="Johor"):
+                      destination="Johor", remarks=None, pc_actor=None):
     with app.app_context():
         row = OverseasDeclaration(
             person_id=person_id, start_date=start, end_date=end,
-            destination=destination, status=status,
+            destination=destination, status=status, remarks=remarks,
         )
+        if pc_actor is not None:
+            row.pc_actor_id = pid(app, pc_actor)
         db.session.add(row)
         db.session.commit()
         return row.id
@@ -210,6 +222,58 @@ def test_pending_requests_filters_status_and_orders_by_start_then_created(app, m
         assert [r.id for r in rows] == [overdue, tie, late]
         oc_rows = leave_service.pending_requests(RequestStatus.PENDING_OC)
         assert [r.status for r in oc_rows] == [RequestStatus.PENDING_OC]
+
+
+def test_rejected_live_requests_keeps_only_the_current_rejections(app, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    by_oc = plant_leave(app, opr_id, TODAY + timedelta(days=6), TODAY + timedelta(days=6),
+                        status=RequestStatus.REJECTED_OC)
+    by_pc = plant_leave(app, opr_id, TODAY, TOMORROW, status=RequestStatus.REJECTED_PC)
+    elapsed = plant_leave(app, opr_id, TODAY - timedelta(days=3), YESTERDAY,
+                          status=RequestStatus.REJECTED_PC)
+    plant_leave(app, opr_id, TODAY, TODAY, status=RequestStatus.CANCELLED)
+    plant_leave(app, opr_id, TODAY, TODAY, status=RequestStatus.APPROVED)
+    plant_leave(app, pid(app, "ps2"), TODAY, TODAY, status=RequestStatus.REJECTED_PC)
+
+    with app.app_context():
+        assert [r.id for r in leave_service.rejected_live_requests(opr_id)] == [by_pc, by_oc]
+        # A second READ, not a move: every one of them is still in history, the
+        # elapsed one included (that row's only home from now on).
+        concluded = {r.id for r in leave_service.concluded_requests(opr_id)}
+        assert {by_pc, by_oc, elapsed} <= concluded
+
+
+def test_rejected_by_names_the_step_that_turned_it_down(app, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    at_pc = plant_leave(app, opr_id, TODAY, TODAY, status=RequestStatus.REJECTED_PC,
+                        pc_actor="pc1")
+    # Past the PC before the OC refused it, so both actors are stamped.
+    at_oc = plant_leave(app, opr_id, TOMORROW, TOMORROW, status=RequestStatus.REJECTED_OC,
+                        pc_actor="pc1", oc_actor="oc")
+
+    with app.app_context():
+        assert db.session.get(LeaveRequest, at_pc).rejected_by.username == "pc1"
+        assert db.session.get(LeaveRequest, at_oc).rejected_by.username == "oc"
+
+
+def test_rejected_declarations_for_scopes_person_status_and_date(app, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    mine = plant_declaration(app, opr_id, TOMORROW, TODAY + timedelta(days=4),
+                             status=DeclarationStatus.REJECTED)
+    elapsed = plant_declaration(app, opr_id, TODAY - timedelta(days=5), YESTERDAY,
+                                status=DeclarationStatus.REJECTED)
+    plant_declaration(app, opr_id, TOMORROW, TOMORROW)  # still PENDING
+    plant_declaration(app, pid(app, "ps2"), TOMORROW, TOMORROW,
+                      status=DeclarationStatus.REJECTED)
+
+    with app.app_context():
+        assert [d.id for d in overseas_service.rejected_declarations_for(opr_id)] == [mine]
+        # Filter, not purge: the declarant's own pages are read-only, so the
+        # elapsed row is skipped here and left for purge_expired to delete.
+        assert db.session.get(OverseasDeclaration, elapsed) is not None
 
 
 # --- build_dashboard: the always-on today panel --------------------------------

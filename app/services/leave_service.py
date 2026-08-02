@@ -62,6 +62,29 @@ def concluded_requests(person_id):
     )
 
 
+def rejected_live_requests(person_id):
+    """This person's rejected requests whose dates have not yet passed — what
+    the requester still needs to see, since a rejection drops out of
+    `live_requests` the moment it is decided.
+
+    These rows deliberately ALSO satisfy `concluded_requests`: this is a second
+    READ of the same rows, not a move, so history stays the complete record.
+    `end_date >= today` is the ONLY exit — nothing is stored to acknowledge.
+    """
+    return (
+        db.session.query(LeaveRequest)
+        .filter(
+            LeaveRequest.person_id == person_id,
+            LeaveRequest.status.in_(
+                (RequestStatus.REJECTED_PC, RequestStatus.REJECTED_OC)
+            ),
+            LeaveRequest.end_date >= today_sgt(),
+        )
+        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
+        .all()
+    )
+
+
 def pending_requests(status):
     """Every request awaiting one approval step, most upcoming first — the ONE
     query behind both approval queues and the dashboard's approver cards, so a

@@ -94,6 +94,26 @@ def pending_declarations():
     )
 
 
+def rejected_declarations_for(person_id):
+    """This person's rejected declarations whose dates have not yet passed —
+    the declarant-facing counterpart of `pending_declarations`.
+
+    Filtered, not purged: the pages that read this are read-only for a
+    non-PC viewer, so an elapsed row no overseas page has swept yet is skipped
+    here rather than deleted; `purge_expired()` stays the one place rows die.
+    """
+    return (
+        db.session.query(OverseasDeclaration)
+        .filter(
+            OverseasDeclaration.person_id == person_id,
+            OverseasDeclaration.status == DeclarationStatus.REJECTED,
+            OverseasDeclaration.end_date >= today_sgt(),
+        )
+        .order_by(OverseasDeclaration.start_date)
+        .all()
+    )
+
+
 def on_manning_ids(declarations):
     """IDs of declarations whose person holds a TU manning slot in a period
     overlapping the declared dates. Every period status counts — approval

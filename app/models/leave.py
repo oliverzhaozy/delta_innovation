@@ -57,5 +57,15 @@ class LeaveRequest(db.Model):
             return day if self.day_part is DayPart.FULL else f"{day} ({self.day_part.value})"
         return f"{self.start_date.strftime('%d %b')} – {self.end_date.strftime('%d %b')}"
 
+    @property
+    def rejected_by(self):
+        """The approver who turned this request down: the OC for REJECTED_OC,
+        otherwise the PC. Display glue only — two templates need "rejected by
+        whom", and the status-to-actor choice must not be re-derived in Jinja.
+        """
+        if self.status is RequestStatus.REJECTED_OC:
+            return self.oc_actor
+        return self.pc_actor
+
     def __repr__(self):
         return f"<LeaveRequest {self.id} p{self.person_id} {self.type.value} {self.status.value}>"
