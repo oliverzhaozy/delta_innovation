@@ -13,6 +13,7 @@
 {# One expression for "is there work here". Every collection must be named: a
    card missing from it would render a page that is silently blank. #}
 {% set has_todo = dash.my_cos_dates or dash.my_cdos_dates
+                  or dash.my_rejected_leave or dash.my_rejected_travel
                   or dash.pc_leave or dash.pc_travel or dash.pc_manning
                   or dash.oc_leave
                   or dash.s3_sent_back or dash.s3_conflicts or dash.s3_unfilled
@@ -33,6 +34,44 @@
 <p class="notice action">You are CDO/S on {{ day.strftime("%a %d %b") }} &mdash;
   <a href="{{ url_for('ro.view') }}">compile the RO</a>.</p>
 {% endfor %}
+
+{# The two refusals come FIRST, ahead of anything the viewer decides for others:
+   a rejected request is the one thing here that already happened TO them, and
+   until the dates elapse it is theirs to re-submit or drop. Same .notice shape
+   as "Manning sent back" below, so a refusal reads identically in all three
+   domains — the approver's own words, quoted rather than summarised. #}
+{% if dash.my_rejected_leave %}
+<section class="card">
+  <h2>OFF/OIL/Leave rejected ({{ dash.my_rejected_leave | length }})</h2>
+  {% for r in dash.my_rejected_leave %}
+  <p class="notice">
+    <a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.type.value }} &mdash; {{ r.when_label }}</a>
+    {# The badge is the only thing naming WHICH step refused it — a PC rejection
+       can be re-submitted differently, an OC one has already been past a PC. #}
+    <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+    &mdash; rejected{% if r.rejected_by %} by {{ r.rejected_by.rank.value }} {{ r.rejected_by.display_name }}{% endif %}:
+    <span class="notice-remark">{{ r.remarks }}</span>
+  </p>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if dash.my_rejected_travel %}
+<section class="card">
+  <h2>Travel rejected ({{ dash.my_rejected_travel | length }})</h2>
+  {# Links to the declarant's own list rather than a detail page: that page holds
+     the Retract button, which is this row's only exit before the dates elapse.
+     The remark clause is conditional — rejections have carried no remark since
+     2026-08-02, so only legacy rows still have one. #}
+  {% for d in dash.my_rejected_travel %}
+  <p class="notice">
+    <a href="{{ url_for('overseas.mine') }}">{{ d.destination }} &mdash; {{ d.when_label }}</a>
+    &mdash; rejected{% if d.pc_actor %} by {{ d.pc_actor.rank.value }} {{ d.pc_actor.display_name }}{% endif %}{% if d.remarks %}:
+    <span class="notice-remark">{{ d.remarks }}</span>{% endif %}
+  </p>
+  {% endfor %}
+</section>
+{% endif %}
 
 {% if dash.pc_leave %}
 <section class="card">

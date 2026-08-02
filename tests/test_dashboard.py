@@ -567,6 +567,31 @@ def test_pc_page_names_the_requester_and_flags_a_travelling_slot_holder(app, cli
     assert period_row.encode() in body
 
 
+def test_requester_page_carries_both_rejections_and_is_not_all_clear(app, client, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    refused = plant_leave(app, opr_id, TOMORROW, TOMORROW, status=RequestStatus.REJECTED_PC,
+                          remarks="Det 2 is thin that week", pc_actor="pc1")
+    plant_declaration(app, opr_id, TOMORROW, TODAY + timedelta(days=3),
+                      status=DeclarationStatus.REJECTED, destination="Bangkok",
+                      pc_actor="pc1")
+
+    login(client, "opr1")
+    body = client.get("/").data
+    assert b"<h2>OFF/OIL/Leave rejected (1)</h2>" in body
+    assert f'href="/leave/{refused}"'.encode() in body
+    assert b"Det 2 is thin that week" in body
+    assert b"rejected by LTA Quek Jing Yu" in body
+    # Which step refused it is the whole point of the badge.
+    assert b"Rejected (PC)" in body
+    assert b"<h2>Travel rejected (1)</h2>" in body
+    assert b"Bangkok" in body
+    assert b'href="/overseas/mine"' in body
+    # An Opr with nothing else open is the all-clear case (see the test below),
+    # so this pins that both cards are counted in has_todo.
+    assert b"Nothing needs your action." not in body
+
+
 def test_opr_page_shows_no_approval_cards(app, client, make_person):
     make_cast(make_person)
     opr_id = pid(app, "opr1")
