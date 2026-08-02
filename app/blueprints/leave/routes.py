@@ -121,14 +121,7 @@ def _may_view(request_row):
 @bp.route("/queue/pc")
 @require(policy.is_pc)
 def pc_queue():
-    pending = (
-        db.session.query(LeaveRequest)
-        .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
-        # Most upcoming leave first (past-dated pending rows are the most
-        # overdue, so they lead); submission time only breaks ties.
-        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
-        .all()
-    )
+    pending = leave_service.pending_requests(RequestStatus.PENDING_PC)
     return render_template(
         "leave/queue.html", pending=pending, title="Pending PC approvals"
     )
@@ -137,12 +130,7 @@ def pc_queue():
 @bp.route("/queue/oc")
 @require(policy.can_final_approve)
 def oc_queue():
-    pending = (
-        db.session.query(LeaveRequest)
-        .filter(LeaveRequest.status == RequestStatus.PENDING_OC)
-        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
-        .all()
-    )
+    pending = leave_service.pending_requests(RequestStatus.PENDING_OC)
     return render_template("leave/queue.html", pending=pending, title="Final approvals")
 
 

@@ -427,11 +427,43 @@ def pc_reject_period(period, actor, remarks):
 
 
 def pending_periods():
-    """PENDING periods, soonest first — the PC queue and its nav badge read this
-    one query, so the count and the list can never disagree."""
+    """PENDING periods, soonest first — the PC queue and the dashboard's PC card
+    read this one query, so the two surfaces can never disagree."""
     return (
         db.session.query(ManningPeriod)
         .filter(ManningPeriod.status == ManningStatus.PENDING)
+        .order_by(ManningPeriod.start_date)
+        .all()
+    )
+
+
+def sent_back_periods():
+    """Periods a PC sent back and the S3 has not yet reworked, soonest first.
+
+    DRAFT + remarks ⇔ sent back, not yet reworked; there is no REJECTED status
+    to query (decision (ff)). The predicate is exact because `pc_reject_period`
+    is the only writer of DRAFT-with-remarks, and both `confirm_period` and
+    `pc_approve_period` clear `remarks` — so a reworked period drops off this
+    list the moment it is re-confirmed.
+    """
+    return (
+        db.session.query(ManningPeriod)
+        .filter(
+            ManningPeriod.status == ManningStatus.DRAFT,
+            ManningPeriod.remarks.isnot(None),
+        )
+        .order_by(ManningPeriod.start_date)
+        .all()
+    )
+
+
+def periods_from(day):
+    """Periods still running or still to come on `day`, soonest first — what the
+    dashboard's S3 checks sweep. Ends-today counts as live: an activation is on
+    until its last date is over."""
+    return (
+        db.session.query(ManningPeriod)
+        .filter(ManningPeriod.end_date >= day)
         .order_by(ManningPeriod.start_date)
         .all()
     )

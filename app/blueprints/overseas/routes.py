@@ -88,14 +88,7 @@ def upcoming():
 @require(policy.can_approve_as_pc)
 def queue():
     overseas_service.purge_expired()
-    declarations = (
-        db.session.query(OverseasDeclaration)
-        .join(Person, OverseasDeclaration.person_id == Person.id)
-        .filter(OverseasDeclaration.status == DeclarationStatus.PENDING)
-        # Most upcoming travel first, matching the leave queues' ordering.
-        .order_by(OverseasDeclaration.start_date)
-        .all()
-    )
+    declarations = overseas_service.pending_declarations()
     return render_template(
         "overseas/queue.html",
         declarations=declarations,

@@ -62,6 +62,22 @@ def concluded_requests(person_id):
     )
 
 
+def pending_requests(status):
+    """Every request awaiting one approval step, most upcoming first — the ONE
+    query behind both approval queues and the dashboard's approver cards, so a
+    queue page and the Home card can never list different work.
+
+    Past-dated pending rows sort first because they are the most overdue;
+    submission time only breaks ties.
+    """
+    return (
+        db.session.query(LeaveRequest)
+        .filter(LeaveRequest.status == status)
+        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
+        .all()
+    )
+
+
 def overlapping_requests(person_id, start_date, end_date, exclude_id=None):
     """This person's pending/approved requests touching [start, end]."""
     q = (

@@ -13,7 +13,7 @@ from sqlalchemy import delete, update
 from app.domain.dates import now_sgt, today_sgt
 from app.domain.types import DeclarationStatus
 from app.extensions import db
-from app.models import ManningPeriod, ManningSlot, OverseasDeclaration
+from app.models import ManningPeriod, ManningSlot, OverseasDeclaration, Person
 from app.services.approval_service import TransitionError
 
 
@@ -75,6 +75,23 @@ def pc_reject(declaration, actor):
         pc_at=now_sgt(),
     )
     db.session.commit()
+
+
+def pending_declarations():
+    """Declarations awaiting a PC, most upcoming travel first (matching the
+    leave queues' ordering) — the ONE query behind the PC queue page and the
+    dashboard's travel card.
+
+    Callers run `purge_expired()` first: an elapsed declaration is deleted, not
+    filtered out, so the purge is what keeps this list honest.
+    """
+    return (
+        db.session.query(OverseasDeclaration)
+        .join(Person, OverseasDeclaration.person_id == Person.id)
+        .filter(OverseasDeclaration.status == DeclarationStatus.PENDING)
+        .order_by(OverseasDeclaration.start_date)
+        .all()
+    )
 
 
 def on_manning_ids(declarations):

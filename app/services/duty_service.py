@@ -421,6 +421,22 @@ def duties_on(day):
     )
 
 
+def assignments_for_person(person_id, *, start):
+    """This person's duties from `start` onwards, soonest first — the ONE fetch
+    behind every "your duty" surface, so the dashboard's next-duty line and its
+    COS/CDO-S banners read the same rows.
+
+    `start` is keyword-only with no default deliberately: a caller that forgot
+    the window would silently get every duty the person has ever held.
+    """
+    return (
+        db.session.query(DutyAssignment)
+        .filter(DutyAssignment.person_id == person_id, DutyAssignment.date >= start)
+        .order_by(DutyAssignment.date, DutyAssignment.duty)
+        .all()
+    )
+
+
 def _holder(day, duty):
     row = (
         db.session.query(DutyAssignment)
