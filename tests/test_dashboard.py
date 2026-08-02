@@ -287,6 +287,7 @@ def test_opr_gets_only_the_today_panel(app, make_person):
     with dashboard_for(app, "opr1") as dash:
         assert dash.my_cos_dates == []
         assert dash.my_cdos_dates == []
+        assert dash.my_rejected_leave == [] and dash.my_rejected_travel == []
         assert dash.pc_leave == [] and dash.pc_travel == [] and dash.pc_manning == []
         assert dash.travel_on_manning == set()
         assert dash.oc_leave == []
@@ -320,8 +321,8 @@ def test_today_panel_reports_holders_away_people_and_own_requests(app, make_pers
     plant_leave(app, opr_id, TODAY, TODAY)
     plant_leave(app, ps_id, TOMORROW, TOMORROW, status=RequestStatus.PENDING_PC)
     plant_leave(app, ps_id, TODAY + timedelta(days=3), TODAY + timedelta(days=3))
-    plant_leave(app, ps_id, TODAY + timedelta(days=4), TODAY + timedelta(days=4),
-                status=RequestStatus.REJECTED_PC)
+    rejected = plant_leave(app, ps_id, TODAY + timedelta(days=4), TODAY + timedelta(days=4),
+                           status=RequestStatus.REJECTED_PC)
 
     with dashboard_for(app, "ps2") as dash:
         assert dash.today.cos.username == "ps2"
@@ -329,9 +330,11 @@ def test_today_panel_reports_holders_away_people_and_own_requests(app, make_pers
         assert [row.person_id for row in dash.today.away] == [opr_id]
         assert [r.start_date for r in dash.today.my_pending] == [TOMORROW]
         assert [r.start_date for r in dash.today.my_leave] == [TODAY + timedelta(days=3)]
-        # The rejected row is neither pending nor approved — it is nowhere.
+        # The rejected row is neither pending nor approved, so it stays out of
+        # the panel — it surfaces as its own to-do card instead.
         assert all(r.status is not RequestStatus.REJECTED_PC
                    for r in dash.today.my_leave + dash.today.my_pending)
+        assert [r.id for r in dash.my_rejected_leave] == [rejected]
 
 
 def test_regular_never_gets_a_personal_leave_panel(app, make_person):
@@ -342,6 +345,31 @@ def test_regular_never_gets_a_personal_leave_panel(app, make_person):
     with dashboard_for(app, "oc") as dash:
         assert dash.today.my_leave == []
         assert dash.today.my_pending == []
+
+
+def test_requester_gets_their_own_rejected_leave_and_travel(app, make_person):
+    make_cast(make_person)
+    ps_id = pid(app, "ps2")
+    refused = plant_leave(app, ps_id, TOMORROW, TOMORROW, status=RequestStatus.REJECTED_PC,
+                          remarks="Det 2 is thin that week", pc_actor="pc1")
+    trip = plant_declaration(app, ps_id, TOMORROW, TODAY + timedelta(days=3),
+                             status=DeclarationStatus.REJECTED, pc_actor="pc1")
+
+    with dashboard_for(app, "ps2") as dash:
+        assert [r.id for r in dash.my_rejected_leave] == [refused]
+        assert dash.my_rejected_leave[0].remarks == "Det 2 is thin that week"
+        assert [d.id for d in dash.my_rejected_travel] == [trip]
+        # A requester is nobody's approver — the queue fields stay empty.
+        assert dash.pc_leave == [] and dash.pc_travel == [] and dash.oc_leave == []
+
+
+def test_regular_never_gets_a_rejected_leave_card(app, make_person):
+    make_cast(make_person)
+    # The can_request gate again: a regular's off/leave lives in ARCTIC FOE, so
+    # a planted rejection — which routing would never create — is not their work.
+    plant_leave(app, pid(app, "oc"), TOMORROW, TOMORROW, status=RequestStatus.REJECTED_OC)
+    with dashboard_for(app, "oc") as dash:
+        assert dash.my_rejected_leave == []
 
 
 # --- build_dashboard: the approver roles ---------------------------------------

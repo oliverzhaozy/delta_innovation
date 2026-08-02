@@ -37,7 +37,7 @@ from app.services import (
 # the template iterates unconditionally and shows a card only when it has rows.
 Dashboard = namedtuple(
     "Dashboard",
-    "my_cos_dates my_cdos_dates "
+    "my_cos_dates my_cdos_dates my_rejected_leave my_rejected_travel "
     "pc_leave pc_travel travel_on_manning pc_manning "
     "oc_leave "
     "s3_sent_back s3_conflicts s3_unfilled "
@@ -118,6 +118,17 @@ def build_dashboard(user) -> Dashboard:
     my_cdos_dates = [r.date for r in rows if r.duty is Duty.CDOS and r.date in window]
 
     my_leave, my_pending = _my_requests(user)
+    # Same gate as _my_requests, for the same reason: a regular is outside the
+    # request flow, so a planted row of theirs is not "your request was refused".
+    my_rejected_leave = (
+        leave_service.rejected_live_requests(user.id) if routing.can_request(user) else []
+    )
+    # Deliberately ungated: only a PS/Det Comd/Opr declaration is ever PENDING
+    # long enough to be rejected (routing.overseas_initial_status auto-approves
+    # everyone else's), so the query is naturally empty for the rest — a gate
+    # here would re-derive routing inside glue.
+    my_rejected_travel = overseas_service.rejected_declarations_for(user.id)
+
     today_panel = Today(
         date=today,
         cos=duty_service.cos_of_day(today),
@@ -183,6 +194,8 @@ def build_dashboard(user) -> Dashboard:
     return Dashboard(
         my_cos_dates=my_cos_dates,
         my_cdos_dates=my_cdos_dates,
+        my_rejected_leave=my_rejected_leave,
+        my_rejected_travel=my_rejected_travel,
         pc_leave=pc_leave,
         pc_travel=pc_travel,
         travel_on_manning=travel_on_manning,
