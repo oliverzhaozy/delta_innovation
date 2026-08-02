@@ -17,7 +17,10 @@
         <tr>
           <td>{{ d.person.rank.value }} {{ d.person.display_name }}</td>
           <td>{{ d.person.platoon or "—" }}</td>
-          <td>{{ d.when_label }}</td>
+          <td>
+            {{ d.when_label }}
+            {% if d.id in on_manning %}<span class="badge pending">On TU manning</span>{% endif %}
+          </td>
           <td>{{ d.destination }}</td>
           <td>
             <form action="{{ url_for('overseas.approve', declaration_id=d.id) }}" method="post" class="inline-form">
@@ -26,7 +29,6 @@
             </form>
             <form action="{{ url_for('overseas.reject', declaration_id=d.id) }}" method="post" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="text" name="remarks" maxlength="300" placeholder="Reason (required)" required>
               <button type="submit" class="btn danger">Reject</button>
             </form>
           </td>

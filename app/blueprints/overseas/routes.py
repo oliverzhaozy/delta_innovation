@@ -1,4 +1,4 @@
-from flask import abort, flash, redirect, render_template, request as http_request, url_for
+from flask import abort, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from app.authz import require
@@ -96,7 +96,11 @@ def queue():
         .order_by(OverseasDeclaration.start_date)
         .all()
     )
-    return render_template("overseas/queue.html", declarations=declarations)
+    return render_template(
+        "overseas/queue.html",
+        declarations=declarations,
+        on_manning=overseas_service.on_manning_ids(declarations),
+    )
 
 
 @bp.route("/<int:declaration_id>/approve", methods=["POST"])
@@ -115,12 +119,8 @@ def approve(declaration_id):
 @require(policy.can_approve_as_pc)
 def reject(declaration_id):
     row = db.session.get(OverseasDeclaration, declaration_id) or abort(404)
-    remark = (http_request.form.get("remarks") or "").strip()
-    if not remark:
-        flash("A short remark is required when rejecting.", "error")
-        return redirect(url_for("overseas.queue"))
     try:
-        overseas_service.pc_reject(row, current_user, remark)
+        overseas_service.pc_reject(row, current_user)
         flash("Rejected.", "success")
     except TransitionError as exc:
         flash(str(exc), "error")

@@ -6,12 +6,14 @@ two PCs clicking at once cannot both action one declaration. TransitionError is
 imported rather than redefined — the routes catch ONE exception type for both
 approval flows.
 """
+from collections import defaultdict
+
 from sqlalchemy import delete, update
 
 from app.domain.dates import now_sgt, today_sgt
 from app.domain.types import DeclarationStatus
 from app.extensions import db
-from app.models import OverseasDeclaration
+from app.models import ManningPeriod, ManningSlot, OverseasDeclaration
 from app.services.approval_service import TransitionError
 
 
@@ -62,16 +64,42 @@ def pc_approve(declaration, actor):
     db.session.commit()
 
 
-def pc_reject(declaration, actor, remarks):
+def pc_reject(declaration, actor):
+    # No remark (owner 2026-08-02, reversing part of decision (y)): the PC just
+    # rejects; the `remarks` column stays only so legacy rows keep displaying.
     _forbid_self_action(declaration, actor)
-    remark = (remarks or "").strip()
-    if not remark:
-        raise TransitionError("A short remark is required when rejecting.")
     _claim(
         declaration.id,
         status=DeclarationStatus.REJECTED,
         pc_actor_id=actor.id,
         pc_at=now_sgt(),
-        remarks=remark,
     )
     db.session.commit()
+
+
+def on_manning_ids(declarations):
+    """IDs of declarations whose person holds a TU manning slot in a period
+    overlapping the declared dates. Every period status counts — approval
+    gates nothing operationally (ManningStatus), so even a DRAFT assignment
+    is a commitment the deciding PC should see.
+    """
+    if not declarations:
+        return set()
+    periods = defaultdict(list)
+    rows = (
+        db.session.query(
+            ManningSlot.person_id, ManningPeriod.start_date, ManningPeriod.end_date
+        )
+        .join(ManningPeriod, ManningSlot.period_id == ManningPeriod.id)
+        .all()
+    )
+    for person_id, start, end in rows:
+        periods[person_id].append((start, end))
+    return {
+        d.id
+        for d in declarations
+        if any(
+            start <= d.end_date and d.start_date <= end
+            for start, end in periods.get(d.person_id, ())
+        )
+    }

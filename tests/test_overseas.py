@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.domain.dates import today_sgt
-from app.domain.types import Appointment, DeclarationStatus, Rank
+from app.domain.types import Appointment, DeclarationStatus, ManningSlotType, Rank
 from app.extensions import db
-from app.models import OverseasDeclaration, Person
+from app.models import ManningPeriod, ManningSlot, OverseasDeclaration, Person
 from app.services import overseas_service
 from app.services.approval_service import TransitionError
 from tests.conftest import login
@@ -131,8 +131,7 @@ def test_retract_works_on_a_rejected_row(app, client, make_person):
     client.post("/logout")
 
     login(client, "ovs_pc")
-    client.post(f"/overseas/{decl_id}/reject", data={"remarks": "Ops commitment"},
-                follow_redirects=True)
+    client.post(f"/overseas/{decl_id}/reject", follow_redirects=True)
     client.post("/logout")
 
     login(client, "ovs_rej_retract")
@@ -179,7 +178,8 @@ def test_pc_approves_from_the_queue(app, client, make_person):
         assert row.pc_at is not None
 
 
-def test_pc_reject_requires_a_remark_and_stores_it(app, client, make_person):
+def test_pc_reject_needs_no_remark(app, client, make_person):
+    # Owner 2026-08-02: the required reason box is gone — reject is one click.
     make_pc(make_person)
     login(client, make_person(username="ovs_rejectee"))
     declare(client, destination="Bali")
@@ -187,24 +187,58 @@ def test_pc_reject_requires_a_remark_and_stores_it(app, client, make_person):
     client.post("/logout")
 
     login(client, "ovs_pc")
-    blank = client.post(f"/overseas/{decl_id}/reject", data={"remarks": "  "},
-                        follow_redirects=True)
-    assert b"remark is required" in blank.data
-    assert status_of(app, decl_id) is DeclarationStatus.PENDING
-
-    client.post(f"/overseas/{decl_id}/reject", data={"remarks": "Clashes with the activation"},
-                follow_redirects=True)
+    resp = client.post(f"/overseas/{decl_id}/reject", follow_redirects=True)
+    assert b"Rejected." in resp.data
     with app.app_context():
         row = db.session.get(OverseasDeclaration, decl_id)
         assert row.status is DeclarationStatus.REJECTED
-        assert row.remarks == "Clashes with the activation"
+        assert row.remarks is None
+        assert row.pc_actor.username == "ovs_pc"
     client.post("/logout")
 
-    # The owner keeps seeing the row, badged, with the PC's reason.
+    # The owner keeps seeing the row, badged.
     login(client, "ovs_rejectee")
     mine = client.get("/overseas/mine").get_data(as_text=True)
     assert "Rejected" in mine
-    assert "Clashes with the activation" in mine
+
+
+def test_queue_flags_declarant_on_tu_manning_overlap(app, client, make_person):
+    make_pc(make_person)
+    login(client, make_person(username="ovs_manned"))
+    declare(client, destination="Batam")
+    client.post("/logout")
+    login(client, make_person(username="ovs_unmanned"))
+    declare(client, destination="Bintan")
+    client.post("/logout")
+
+    with app.app_context():
+        manned_id = db.session.query(Person.id).filter_by(username="ovs_manned").scalar()
+        unmanned_id = db.session.query(Person.id).filter_by(username="ovs_unmanned").scalar()
+        creator_id = db.session.query(Person.id).filter_by(username="ovs_pc").scalar()
+        overlapping = ManningPeriod(
+            start_date=NEXT_WEEK, end_date=NEXT_WEEK + timedelta(days=3),
+            created_by_id=creator_id,
+        )
+        elsewhere = ManningPeriod(
+            start_date=NEXT_WEEK + timedelta(days=10), end_date=NEXT_WEEK + timedelta(days=13),
+            created_by_id=creator_id,
+        )
+        db.session.add_all([overlapping, elsewhere])
+        db.session.flush()
+        db.session.add_all([
+            ManningSlot(period_id=overlapping.id, slot=ManningSlotType.DET_PERSONNEL,
+                        person_id=manned_id, det_number=1),
+            # A slot whose period misses the trip dates must NOT flag.
+            ManningSlot(period_id=elsewhere.id, slot=ManningSlotType.DET_PERSONNEL,
+                        person_id=unmanned_id, det_number=1),
+        ])
+        db.session.commit()
+
+    login(client, "ovs_pc")
+    html = client.get("/overseas/queue").get_data(as_text=True)
+    flagged_rows = [row for row in html.split("<tr>") if "On TU manning" in row]
+    assert len(flagged_rows) == 1
+    assert "Batam" in flagged_rows[0]
 
 
 def test_second_action_loses_the_claim(app, client, make_person):
@@ -234,7 +268,7 @@ def test_service_forbids_actioning_your_own_declaration(app, client, make_person
         with pytest.raises(TransitionError):
             overseas_service.pc_approve(row, actor)
         with pytest.raises(TransitionError):
-            overseas_service.pc_reject(row, actor, "mine")
+            overseas_service.pc_reject(row, actor)
 
 
 def test_non_pc_forbidden_on_queue_and_actions(app, client, make_person):
@@ -245,7 +279,7 @@ def test_non_pc_forbidden_on_queue_and_actions(app, client, make_person):
 
     assert client.get("/overseas/queue").status_code == 403
     assert client.post(f"/overseas/{decl_id}/approve").status_code == 403
-    assert client.post(f"/overseas/{decl_id}/reject", data={"remarks": "no"}).status_code == 403
+    assert client.post(f"/overseas/{decl_id}/reject").status_code == 403
 
 
 def test_pc_badge_counts_pending_declarations(app, client, make_person):
@@ -275,8 +309,7 @@ def test_pending_shows_on_upcoming_and_rejected_does_not(app, client, make_perso
     client.post("/logout")
 
     login(client, "ovs_pc")
-    client.post(f"/overseas/{decl_id}/reject", data={"remarks": "Duty that week"},
-                follow_redirects=True)
+    client.post(f"/overseas/{decl_id}/reject", follow_redirects=True)
     client.post("/logout")
 
     login(client, "s3_person4")
