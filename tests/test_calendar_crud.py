@@ -174,6 +174,24 @@ def test_month_view_hides_arctic_link_for_non_command_team(client, make_person):
     assert b"ARCTIC FOE" not in body
 
 
+def test_month_view_layer_toggles_are_rights_gated(client, make_person):
+    # The filter pills moved off Home with the grid (UI-25). TP and NSF
+    # OFF/LEAVE are everyone's; the ARCTIC pill follows the chips it hides, so
+    # only the command team gets it — the toggle is never the boundary itself.
+    login(client, make_person(username="cal_opr_toggle"))
+    body = client.get("/calendar/month").data
+    assert b'data-cal-toggle="tp"' in body
+    assert b'data-cal-toggle="off"' in body
+    assert b'data-cal-toggle="arctic"' not in body
+    client.post("/logout")
+
+    login(client, make_person(**make_pc("cal_pc_toggle")))
+    body = client.get("/calendar/month").data
+    assert b'data-cal-toggle="tp"' in body
+    assert b'data-cal-toggle="off"' in body
+    assert b'data-cal-toggle="arctic"' in body
+
+
 # ---------- UI-9: all-day, labels, toolbar ----------
 
 def test_all_day_event_stored_from_midnight_to_end_of_day(app, client, make_person):

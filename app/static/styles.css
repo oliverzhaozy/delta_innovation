@@ -298,6 +298,11 @@ h2 {
   margin: 1.2rem 0 0.6rem;
 }
 
+/* A sub-heading that is also the route to the thing it names (the home page's
+   per-period manning headings). */
+.card h3 a { color: var(--accent); text-decoration: none; }
+.card h3 a:hover { text-decoration: underline; }
+
 .muted { color: var(--muted); }
 
 /* ---------- Chips & tags ---------- */
@@ -865,11 +870,6 @@ table.list a:hover { text-decoration: underline; }
   background: var(--amber-bg);
   color: var(--amber-ink);
 }
-
-/* A card sub-heading that is also the route to the thing it names (the home
-   page's per-period manning headings). */
-.card h3 a { color: var(--accent); text-decoration: none; }
-.card h3 a:hover { text-decoration: underline; }
 
 .neg { color: var(--danger); font-weight: 700; }
 

@@ -51,7 +51,8 @@ def test_approval_cards_are_role_gated(app, client, make_person):
                 display_name="Quek Jing Yu")
     login(client, "pc_home")
     body = client.get("/").data
-    assert b"OFF/OIL/Leave approvals (1)" in body
+    # Scoped to the card heading: the PC's nav renders the same counted label.
+    assert b"<h2>OFF/OIL/Leave approvals (1)</h2>" in body
     assert b"Ang Cheng Ze" in body
 
 

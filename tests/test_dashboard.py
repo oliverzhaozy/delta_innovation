@@ -462,11 +462,17 @@ def test_pc_page_names_the_requester_and_flags_a_travelling_slot_holder(app, cli
 
     login(client, "pc1")
     body = client.get("/").data
-    assert b"OFF/OIL/Leave approvals (1)" in body
+    # Card headings, not bare labels: base.html renders the SAME strings (with
+    # the same counts) in the PC's nav, so an unscoped match proves nothing.
+    assert b"<h2>OFF/OIL/Leave approvals (1)</h2>" in body
     assert b"Ang Cheng Ze" in body
-    assert b"Travel approvals (1)" in body
+    assert b"<h2>Travel approvals (1)</h2>" in body
     assert b"On TU manning" in body
-    assert b"Manning approvals (1)" in body
+    assert b"<h2>Manning approvals (1)</h2>" in body
+    # The manning card's own row — the nav link carries no dates.
+    period_row = (f"TU manning &mdash; {TODAY.strftime('%d %b')} &ndash; "
+                  f"{(TODAY + timedelta(days=6)).strftime('%d %b %Y')}")
+    assert period_row.encode() in body
 
 
 def test_opr_page_shows_no_approval_cards(app, client, make_person):
@@ -556,10 +562,12 @@ def test_today_panel_lists_the_away_and_the_viewers_own_pending_request(app, cli
     assert b"key the parade" in body
     assert b"compile the RO" in body
     assert b"Away today (1)" in body
-    assert b"Ang Cheng Ze" in body
-    assert b"MC" in body
+    # The whole rendered line: a bare "MC" matches the nav's "Declare MC".
+    assert b"CPL Ang Cheng Ze &mdash; MC" in body
     assert b"Pending PC" in body
-    assert b"COS on" in body  # the panel's own next-duty line
+    # The panel's next-duty line, not the banner above it — the banner reads
+    # "You are COS on ...", so only the wrapped <p> isolates the panel.
+    assert f"<p>COS on {TODAY.strftime('%a %d %b')}</p>".encode() in body
 
 
 def test_spread_violations_never_reach_the_page(app, client, make_person):
