@@ -122,12 +122,26 @@ def test_deposed_or_expired_cos_loses_rights(app, client, make_person):
     assert keying_status(client) == 403
 
 
-def test_cdos_gets_no_parade_keying(app, client, make_person):
-    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.P2IC, platoon=2)
-    plant_cos(app, "ps2", today_sgt(), duty=Duty.CDOS)
-    login(client, "ps2")
-    # CDO/S edits the RO (P5) — different duty, different surface.
+def test_cdos_duty_itself_grants_no_parade_keying(app, client, make_person):
+    # CDO/S edits the RO (P5) — different duty, different surface. The wrapper
+    # reads COS rows only, so an Opr holding CDO/S is still refused; this is
+    # where the rule lives now that every CDO/S-ELIGIBLE appointment (PC/P2IC/PS)
+    # is command team and therefore admin by appointment (owner 2026-08-02).
+    make_opr(make_person)
+    plant_cos(app, "opr1", today_sgt(), duty=Duty.CDOS)
+    login(client, "opr1")
+    with app.app_context():
+        person = db.session.query(Person).filter_by(username="opr1").one()
+        assert duty_service.can_key_parade_today(person) is False
     assert keying_status(client) == 403
+    client.post("/logout")
+
+    # The P2IC holding the same duty DOES key — from command-team admin, not
+    # from the CDO/S assignment. (Tomorrow's slot: one CDO/S per date.)
+    make_person(username="ps2", rank=Rank.TWO_SG, appointment=Appointment.P2IC, platoon=2)
+    plant_cos(app, "ps2", today_sgt() + timedelta(days=1), duty=Duty.CDOS)
+    login(client, "ps2")
+    assert keying_status(client) == 302
 
 
 def test_cos_of_day_and_cdos_of_day(app, make_person):

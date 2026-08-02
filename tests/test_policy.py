@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.domain import policy
-from app.domain.types import Appointment, CompanyRole, Rank
+from app.domain.types import COMMAND_TEAM, Appointment, CompanyRole, Rank
 
 
 def person(appointment, rank=Rank.PTE, company_role=None, platoon=1, is_admin=False):
@@ -49,9 +49,23 @@ def test_s3_powers():
     assert not policy.can_manage_meals(s3)
 
 
-def test_roster_is_ps_territory():
+def test_command_team_is_always_admin():
+    # Owner directive 2026-08-02: PS and above get the whole admin bundle from
+    # their appointment, with no checkbox ticked anywhere.
+    for appt in Appointment:
+        assert policy.is_admin(person(appt)) == (appt in COMMAND_TEAM)
+    # Outside the command team the stored flag is still the only way in.
+    assert policy.is_admin(person(Appointment.OPR, is_admin=True))
+    assert policy.is_admin(person(Appointment.DET_COMD, is_admin=True))
+
+
+def test_roster_is_ps_or_admin_territory():
+    # A PS owns the roster by appointment; the rest of the command team reaches
+    # it through the automatic admin grant (2026-08-02). Det Comd/Opr are out.
     assert policy.can_manage_roster(person(Appointment.PS))
-    assert not policy.can_manage_roster(person(Appointment.PC))
+    assert policy.can_manage_roster(person(Appointment.PC))
+    assert not policy.can_manage_roster(person(Appointment.DET_COMD))
+    assert not policy.can_manage_roster(person(Appointment.OPR))
 
 
 def test_admin_flag_unlocks_admin_and_s3_pages_but_not_approval():

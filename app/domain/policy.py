@@ -11,7 +11,9 @@ from app.domain.types import COMMAND_TEAM, Appointment, CompanyRole
 
 
 def is_admin(person) -> bool:
-    return bool(person.is_admin)
+    # Owner directive 2026-08-02: command team (PS and above) is always admin;
+    # the stored flag remains the manual grant for everyone else.
+    return bool(person.is_admin) or person.appointment in COMMAND_TEAM
 
 
 def is_command_team(person) -> bool:

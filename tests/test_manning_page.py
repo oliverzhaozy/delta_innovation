@@ -44,13 +44,18 @@ def period_id(app):
         return db.session.query(ManningPeriod.id).scalar()
 
 
-def test_manning_is_s3_only(app, client, make_person):
+def test_manning_is_s3_or_admin(app, client, make_person):
+    # The builder is S3's surface plus admin — and command team is admin by
+    # appointment since 2026-08-02, so the PS reaches it and the Opr does not.
     make_cast(make_person)
-    # A PS manages the duty roster but NOT manning (S3's surface).
-    login(client, "ps2")
+    login(client, "opr1")
     assert client.get("/manning").status_code == 403
     assert client.post("/manning/new", data={}).status_code == 403
     assert client.post("/manning/1/generate", data={}).status_code == 403
+    client.post("/logout")
+
+    login(client, "ps2")
+    assert client.get("/manning").status_code == 200
 
 
 def test_create_period_and_builder_renders_document(app, client, make_person):
@@ -354,9 +359,9 @@ def test_reassign_ineligible_is_400_duplicate_flashes_foreign_slot_404s(
         assert db.session.get(ManningSlot, personnel_id).person_id == pid(app, "opr1")
 
 
-def test_reassign_is_s3_only(app, client, make_person):
+def test_reassign_is_s3_or_admin(app, client, make_person):
     make_cast(make_person)
-    login(client, "ps2")
+    login(client, "opr1")
     assert client.post("/manning/1/reassign", data={}).status_code == 403
 
 
@@ -412,7 +417,12 @@ def make_pc(make_person, username="mpc"):
                        display_name="Quek Jing Yu")
 
 
-def test_building_is_s3_only_and_approving_is_pc_only(app, client, make_person):
+def status_of(app, period_id_):
+    with app.app_context():
+        return db.session.get(ManningPeriod, period_id_).status
+
+
+def test_building_is_s3_or_admin_and_deciding_stays_pc_only(app, client, make_person):
     make_cast(make_person)
     make_pc(make_person)
     login(client, "s3")
@@ -420,19 +430,26 @@ def test_building_is_s3_only_and_approving_is_pc_only(app, client, make_person):
     pid_ = period_id(app)
     client.post("/logout")
 
-    # A PS runs the duty roster; manning is not theirs to hand over.
+    # Confirm/withdraw ride the BUILDER gate (can_manage_manning), which command
+    # team passes by appointment since 2026-08-02 — so the transition, not RBAC,
+    # decides the outcome, and both routes redirect either way.
     login(client, "ps2")
-    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 403
-    assert client.post(f"/manning/{pid_}/withdraw", data={}).status_code == 403
+    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 302
+    assert status_of(app, pid_) is ManningStatus.PENDING
+    assert client.post(f"/manning/{pid_}/withdraw", data={}).status_code == 302
+    assert status_of(app, pid_) is ManningStatus.DRAFT
     client.post("/logout")
 
-    # A PC decides but never builds...
+    # A PC may build too now, but still cannot decide on what they confirmed
+    # themselves: self-approval stays structurally forbidden.
     login(client, "mpc")
-    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 403
-    assert client.post(f"/manning/{pid_}/withdraw", data={}).status_code == 403
+    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 302
+    client.post(f"/manning/{pid_}/approve", data={}, follow_redirects=True)
+    assert status_of(app, pid_) is ManningStatus.PENDING
     client.post("/logout")
 
-    # ...and the S3 builds but never decides.
+    # The S3 builds but never decides — the queue and both decisions gate on
+    # can_approve_as_pc, an appointment check no admin grant reaches.
     login(client, "s3")
     assert client.get("/manning/queue").status_code == 403
     assert client.post(f"/manning/{pid_}/approve", data={}).status_code == 403

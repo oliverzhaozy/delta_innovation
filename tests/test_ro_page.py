@@ -80,13 +80,18 @@ def test_command_team_edits_messages_and_extra_items(app, client, make_person):
     assert "SBA" not in resp.get_data(as_text=True)
 
 
-def test_boilerplate_page_is_s3_only_and_feeds_the_document(app, client, make_person):
+def test_boilerplate_page_is_s3_or_admin_and_feeds_the_document(app, client, make_person):
     make_cast(make_person)
-    # A PS is command team (daily edits) but NOT S3: standing text is staff work.
-    login(client, "ps2")
+    # Standing text is staff work: S3's, or admin's — and command team is admin
+    # by appointment since 2026-08-02, so the PS reaches it and an Opr does not.
+    login(client, "opr1")
     assert client.get("/ro/boilerplate").status_code == 403
-
     client.post("/logout")  # /login short-circuits for an authenticated session
+
+    login(client, "ps2")
+    assert client.get("/ro/boilerplate").status_code == 200
+    client.post("/logout")
+
     login(client, "s3")
     resp = client.post(
         "/ro/boilerplate",

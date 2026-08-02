@@ -514,4 +514,37 @@ function initEventForm() {
   }
 }
 
+// Person form: command team (PS and above) is admin by appointment since
+// 2026-08-02, so the manual "Admin access" box is meaningless for them — hide the
+// row, untick it, and say why. The untick is load-bearing: _apply_form writes
+// whatever the box submits, so clearing it is what makes a later demotion to
+// Det Comd/Opr start back at no-admin. No-JS leaves the plain checkbox, which is
+// harmless — policy.is_admin derives the command team's access server-side either
+// way, and the stored flag only ever ADDS access.
+function initPersonForm() {
+  const form = document.querySelector("form[data-command-team]");
+  if (!form) return;
+  const appointment = document.getElementById("appointment");
+  const row = form.querySelector("[data-admin-row]");
+  const note = form.querySelector("[data-admin-note]");
+  const box = document.getElementById("is_admin");
+  if (!appointment || !row || !note || !box) return;
+  let team = [];
+  try {
+    team = JSON.parse(form.dataset.commandTeam || "[]");
+  } catch {
+    team = [];
+  }
+
+  const syncAdmin = () => {
+    const automatic = team.includes(appointment.value);
+    row.hidden = automatic;
+    note.hidden = !automatic;
+    if (automatic) box.checked = false;
+  };
+  appointment.addEventListener("change", syncAdmin);
+  syncAdmin();
+}
+
 document.addEventListener("DOMContentLoaded", initEventForm);
+document.addEventListener("DOMContentLoaded", initPersonForm);

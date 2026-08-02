@@ -688,6 +688,10 @@ textarea:focus-visible {
 
 .check label { margin: 0; font-weight: 500; }
 
+/* The person form hides the Admin row for command team via the hidden
+   attribute; .check's display would otherwise beat the UA [hidden] rule. */
+.check[hidden] { display: none; }
+
 /* Bulk-remove rows (parade FP list): the whole row IS the checkbox's label, so
    it takes .check's layout instead of the stacked form-label defaults. */
 .toollist label.check { margin: 0; font-size: 0.95rem; font-weight: 500; }

@@ -331,12 +331,13 @@ def test_route_authz_and_success(app, client, make_person):
         db.session.commit()
         rid_a, rid_b = req_a.id, req_b.id
 
-    # Opr and PC are denied; the guard aborts before any mutation.
-    for who in ("er_opr", "er_pc"):
-        login(client, who)
-        resp = client.post(f"/leave/{rid_a}/early-return", data={"new_end_date": THU.isoformat()})
-        assert resp.status_code == 403
-        client.post("/logout")
+    # The Opr is denied; the guard aborts before any mutation. (The PC is not:
+    # early return rides can_cancel_approved_leave, and command team is admin by
+    # appointment since 2026-08-02 — so ledger-reversing rights come with it.)
+    login(client, "er_opr")
+    resp = client.post(f"/leave/{rid_a}/early-return", data={"new_end_date": THU.isoformat()})
+    assert resp.status_code == 403
+    client.post("/logout")
     with app.app_context():
         assert db.session.get(LeaveRequest, rid_a).end_date == MON
         assert ledger_service.balance(_pid("er_opr"), BalanceKind.OFF) == -12

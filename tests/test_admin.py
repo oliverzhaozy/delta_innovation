@@ -1,7 +1,10 @@
 import datetime
+import json
+import re
 
 from app.domain.types import (
-    Appointment, DayPart, LeaveType, PlatoonCategory, Rank, RequestStatus,
+    COMMAND_TEAM, Appointment, DayPart, LeaveType, PlatoonCategory, Rank,
+    RequestStatus,
 )
 from app.extensions import db
 from app.models import LeaveRequest, Person
@@ -21,6 +24,27 @@ def make_s3(make_person):
 def test_opr_cannot_reach_people_admin(client, make_person):
     login(client, make_person(username="opr_a"))
     assert client.get("/admin/people").status_code == 403
+
+
+def test_command_team_reaches_people_admin_without_the_flag(client, make_person):
+    # Owner directive 2026-08-02: PS and above are admin by appointment, so a PS
+    # with is_admin unset still gets the admin pages (Opr above is the negative).
+    login(client, make_person(username="ps_a", rank=Rank.TWO_SG,
+                              appointment=Appointment.PS, platoon=2))
+    assert client.get("/admin/people").status_code == 200
+
+
+def test_person_form_carries_the_command_team_hook(client, make_person):
+    # The checkbox row is hidden client-side from this list, so the list has to
+    # survive in the markup — a broken Jinja expression here fails only at render.
+    login(client, make_s3(make_person))
+    html = client.get("/admin/people/new").get_data(as_text=True)
+    assert "data-admin-row" in html
+    assert "Command team — admin access is automatic" in html
+    # The attribute alone, not the page: every appointment also appears as an
+    # <option value>. Compared as a set — COMMAND_TEAM is an unordered frozenset.
+    shipped = json.loads(re.search(r"data-command-team='([^']*)'", html).group(1))
+    assert set(shipped) == {a.value for a in COMMAND_TEAM}
 
 
 def test_s3_lists_people(client, make_person):

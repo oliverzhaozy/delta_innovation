@@ -80,8 +80,11 @@ def test_can_key_parade_is_ps_s3_or_admin():
         _person(Appointment.OPR, company_role=CompanyRole.S3), is_cos_of_day=False
     )
     assert policy.can_key_parade(_person(Appointment.OPR, is_admin=True), is_cos_of_day=False)
+    # Command team is admin by appointment (owner 2026-08-02), which deliberately
+    # gives the OC the keying fallback it used to be denied.
+    assert policy.can_key_parade(_person(Appointment.OC), is_cos_of_day=False)
     assert not policy.can_key_parade(_person(Appointment.OPR), is_cos_of_day=False)
-    assert not policy.can_key_parade(_person(Appointment.OC), is_cos_of_day=False)
+    assert not policy.can_key_parade(_person(Appointment.DET_COMD), is_cos_of_day=False)
 
 
 # --- criterion 1: an Opr declares their own MC -> list + morning parade ------

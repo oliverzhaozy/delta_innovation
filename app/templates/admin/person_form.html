@@ -7,7 +7,8 @@
   {% if person %}<p class="muted">@{{ person.username }}</p>{% endif %}
 </div>
 
-<form method="post" class="card">
+<form method="post" class="card"
+      data-command-team='{{ policy.COMMAND_TEAM|map(attribute="value")|list|tojson }}'>
   {{ form.hidden_tag() }}
   <p>{{ form.username.label }}{{ form.username() }}</p>
   <p>{{ form.display_name.label }}{{ form.display_name() }}</p>
@@ -20,7 +21,8 @@
   <p class="check">{{ form.stay_out() }} {{ form.stay_out.label }}</p>
   <p class="check">{{ form.duty_exempt() }} {{ form.duty_exempt.label }}</p>
   <p class="check">{{ form.meals_opt_in() }} {{ form.meals_opt_in.label }}</p>
-  <p class="check">{{ form.is_admin() }} {{ form.is_admin.label }}</p>
+  <p class="check" data-admin-row>{{ form.is_admin() }} {{ form.is_admin.label }}</p>
+  <p class="muted" data-admin-note hidden>Command team — admin access is automatic</p>
   {% for field in form if field.errors %}
     {% for error in field.errors %}<p class="error">{{ field.label.text }}: {{ error }}</p>{% endfor %}
   {% endfor %}
