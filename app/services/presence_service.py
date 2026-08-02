@@ -249,7 +249,8 @@ def presence_inputs(day, *, duty_day=None):
     covers start=end=`day` (the resolution day), because `covers()` compares
     against the day being resolved (A3): roll call labeled D covers the night
     D−1→D, so its build passes duty_day=D−1 but the duty must count ON day D.
-    Default None means the duty of `day` itself (morning parade, COS message).
+    The COS message for D covers that same night, so it passes D−1 too (owner
+    2026-08-02). Default None means the duty of `day` itself (morning parade).
     """
     leaves, statuses, courses = fetch_absence_rows(day, day)
     duty_rows = (

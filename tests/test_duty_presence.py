@@ -119,19 +119,38 @@ def test_roll_call_reads_duty_of_previous_day(app, make_person):
         assert person_id not in strength_ids(built)
 
 
-def test_morning_and_cos_read_duty_of_own_day(app, make_person):
+def test_morning_reads_duty_of_own_day(app, make_person):
     make_stay_out_opr(make_person)
-    make_person(username="greeter", rank=Rank.TWO_SG, appointment=Appointment.DET_COMD)
     plant_duty(app, "cos_guy", D)
 
     with app.app_context():
         built = parade_service.build_doc(D, ParadeVariant.MORNING)
         assert pid(app, "cos_guy") in strength_ids(built)
+
+
+def test_cos_message_reads_duty_of_previous_day(app, make_person):
+    # Owner rule (2026-08-02): holding COS/CDO-S on D never drops a person from
+    # the COS message for D — that message covers the night D−1→D, when D's
+    # incoming crew still stays out. So the build reads the duty of D−1, the
+    # same night the roll call labeled D covers.
+    make_stay_out_opr(make_person)
+    make_person(username="greeter", rank=Rank.TWO_SG, appointment=Appointment.DET_COMD)
+    plant_duty(app, "cos_guy", D)
+
+    with app.app_context():
         greeter = db.session.query(Person).filter_by(username="greeter").one()
+        person_id = pid(app, "cos_guy")
+        # COS message for D: his duty is D's, not D−1's — stay-out flag wins.
         built = parade_service.build_doc(
             D, ParadeVariant.COS_MESSAGE, cos_display=parade_line(greeter)
         )
-        # DUTY people are omitted like PRESENT — this document requests statuses.
+        assert person_id in [p.id for p in built.doc.stay_out_people]
+        # COS message for D+1 covers the night D→D+1 — now he IS the duty crew
+        # in camp, omitted like PRESENT (this document requests statuses).
+        built = parade_service.build_doc(
+            D + timedelta(days=1), ParadeVariant.COS_MESSAGE,
+            cos_display=parade_line(greeter),
+        )
         assert "Cos Guy" not in built.text
 
 

@@ -621,9 +621,12 @@ def compute_cos_message(day, cos_display, pairs) -> CosDoc:
 
     Inclusion (a request, not a parade): ABSENT → its category by the SAME kind
     mapping as `categorize` (`_absent_category`); STAY_OUT → STAY OUT (where
-    every regular lands by engine default unless an absence overrode it); a
+    every flagged stay-out lands unless an absence overrode it); a
     ranged absence inherits purely by date coverage upstream in `resolve`.
     PRESENT / DUTY are omitted entirely (clean NSFs aren't in this message).
+    DUTY here is the duty of D−1 — build_doc feeds this doc the same night the
+    roll call labeled D covers (owner 2026-08-02), so D's own incoming COS/CDO-S
+    resolve by their stay-out flag and list under STAY OUT like anyone else.
     `in_camp_rows` are ignored — Message 1 has no OTHERS IN CAMP, and single-day
     in-camp artifacts on D-1 don't cover D anyway.
     """

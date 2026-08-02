@@ -39,8 +39,15 @@ def build_doc(day, variant, *, cos_display=None) -> BuiltDoc:
         raise ValueError("COS_MESSAGE needs a cos_display for its greeting")
     # The duty_day convention lives HERE and nowhere else (A2): the roll call
     # labeled `day` covers the night day−1 → day, so it reads the duty of
-    # day−1; morning parade and the COS message read the duty of their own day.
-    duty_day = day - timedelta(days=1) if variant is ParadeVariant.ROLL_CALL else None
+    # day−1. The COS message for `day` is compiled that same evening and covers
+    # that same night, so it too reads day−1 (owner 2026-08-02): day's own
+    # incoming COS/CDO-S stay out that night like anyone else and must list
+    # under STAY OUT, never vanish as DUTY. Morning parade reads its own day.
+    duty_day = (
+        day - timedelta(days=1)
+        if variant in (ParadeVariant.ROLL_CALL, ParadeVariant.COS_MESSAGE)
+        else None
+    )
     pairs = presence_service.presence_inputs(day, duty_day=duty_day)
     # Stored drags are applied INSIDE this try, between categorize and render,
     # so a pathological override still surfaces as `imbalance` (never a raise)
