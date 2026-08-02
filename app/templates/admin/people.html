@@ -46,9 +46,8 @@
 </section>
 
 {% for section in groups.sections %}
-{% set pool_state = "In COS pool" if section.in_cos_pool else "Excluded from COS pool" %}
 <section class="card">
-  <h2>{{ section.category.value }}{% if section.platoon %} &mdash; Platoon {{ section.platoon }} &middot; {{ pool_state }}{% endif %}</h2>
+  <h2>{{ section.category.value }}{% if section.platoon %} &mdash; Platoon {{ section.platoon }}{% endif %}</h2>
   {% if section.platoon is none %}
     <p class="muted">No platoon assigned.</p>
   {% elif not section.people %}

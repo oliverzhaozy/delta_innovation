@@ -118,9 +118,9 @@ def test_people_page_groups_by_platoon_category(app, client, make_person):
     body = client.get("/admin/people").get_data(as_text=True)
     headers = (
         "<h2>Command</h2>",
-        "STC &mdash; Platoon 2 &middot; Excluded from COS pool",
-        "Senior &mdash; Platoon 3 &middot; In COS pool",
-        "Junior &mdash; Platoon 1 &middot; In COS pool",
+        "STC &mdash; Platoon 2",
+        "Senior &mdash; Platoon 3",
+        "Junior &mdash; Platoon 1",
         "<h2>Baby</h2>",
     )
     # Sections in PlatoonCategory declaration order, command first.
