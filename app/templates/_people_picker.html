@@ -45,7 +45,4 @@
   </details>
   {% endfor %}
 
-  {% if legacy_excludes %}
-  <p class="muted" style="font-size:0.8rem">This event has old &quot;except&quot; exclusions ({{ legacy_excludes | map(attribute="display_name") | join(", ") }}); saving will drop them.</p>
-  {% endif %}
 </fieldset>

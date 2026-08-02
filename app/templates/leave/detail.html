@@ -85,7 +85,6 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn danger">Cancel &amp; reverse deduction</button>
   </form>
-  <p class="muted" style="margin-top:0.6rem">Writes a compensating credit and removes the absence from every view.</p>
 </section>
 {% endif %}
 
@@ -99,7 +98,6 @@
        {{ early_return_form.new_end_date(type="date", min=r.start_date.isoformat(), max=early_return_max.isoformat()) }}</p>
     <button type="submit">Record early return &amp; credit balance</button>
   </form>
-  <p class="muted" style="margin-top:0.6rem">Shortens the absence and credits the balance for the working days no longer taken.</p>
 </section>
 {% endif %}
 

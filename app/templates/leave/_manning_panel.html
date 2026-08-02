@@ -7,7 +7,6 @@
         <span>{{ s.slot.ui_label }}{% if s.det_number %} (TU {{ s.det_number }}){% endif %}</span></li>
     {% endfor %}
   </ul>
-  <p class="muted">Approving does not remove them from the manning — the S3 resolves it on the manning builder.</p>
   {% else %}
   <p class="muted">No manning membership on these dates.</p>
   {% endif %}

@@ -417,7 +417,7 @@ def test_invalid_people_id_rejected_as_form_error(app, client, make_person):
 
 # ---------- Legacy person-except rows warn on edit and are dropped on save ----------
 
-def test_legacy_except_rows_warn_on_edit_and_drop_on_save(app, client, make_person):
+def test_legacy_except_rows_drop_on_save(app, client, make_person):
     login(client, make_person(**make_pc()))
     make_person(username="p2_leg", display_name="Legacy Ex", rank=Rank.PTE, platoon=2)
     with app.app_context():
@@ -439,10 +439,10 @@ def test_legacy_except_rows_warn_on_edit_and_drop_on_save(app, client, make_pers
         db.session.commit()
         event_id = event.id
 
-    # Edit GET: the warning names the excluded person.
+    # Edit GET renders without a legacy-exclusions warning (owner 2026-08-02:
+    # the note was removed; the drop-on-save behavior below is unchanged).
     body = client.get(f"/calendar/{event_id}/edit").data.decode()
-    assert "saving will drop them" in body
-    assert "exclusions (Legacy Ex)" in body
+    assert "saving will drop them" not in body
 
     # Detail before save still shows the "- Legacy Ex" chip and excludes them.
     body = client.get(f"/calendar/{event_id}").data.decode()

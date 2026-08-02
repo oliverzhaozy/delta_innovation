@@ -164,9 +164,9 @@
   <p class="muted">Manual picks are kept &mdash; only auto-planned slots are replaced.</p>
   <p class="muted">
     {%- if period.status.value == "DRAFT" -%}
-      Confirm sends this period to the PCs. You can keep editing either way.
+      Confirm sends this to PCs. You can keep editing.
     {%- elif period.status.value == "PENDING" -%}
-      Waiting for a PC. Withdraw pulls it back to draft.
+      Waiting for a PC.
     {%- else -%}
       Approved{% if period.pc_actor %} by {{ period.pc_actor.rank.value }} {{ period.pc_actor.display_name }}{% endif %}{% if period.pc_at %} on {{ period.pc_at.strftime("%d %b %Y") }}{% endif %}.
     {%- endif -%}
@@ -178,7 +178,6 @@
    rule. Top of each list has waited longest. #}
 <section class="card">
   <h2>Priority</h2>
-  <p class="muted">Longest since their last activation period, first.</p>
   {% for slot in ManningSlotType %}
   <h3>{{ slot.ui_label }} ({{ priority[slot]|length }})</h3>
   <ul class="toollist">
