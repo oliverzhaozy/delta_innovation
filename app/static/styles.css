@@ -873,6 +873,52 @@ table.list a:hover { text-decoration: underline; }
 
 .neg { color: var(--danger); font-weight: 700; }
 
+/* ---------- Read-only impersonation bar ---------- */
+
+/* Full-bleed and sticky, unlike .notice and .flash which scroll away with the
+   page: this one states whose account the reader is looking at, which stays
+   true for every screen below it. Amber for the app's "waiting on you /
+   not-normal" register rather than danger red — nothing is wrong, the view is
+   just not the reader's own. */
+.viewing-as {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.55rem 1.25rem;
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+  border-bottom: 1px solid rgba(138, 90, 0, 0.22);
+  font-size: 0.92rem;
+}
+
+.viewing-as p { margin: 0; }
+
+/* Beats the app-wide `button[type="submit"]:not(.linklike)` indigo fill on
+   specificity (0,2,2 vs 0,2,1) — the bar's control has to read as part of the
+   band, not as the page's primary action. */
+.viewing-as form button[type="submit"] {
+  width: auto;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.88rem;
+  font-weight: 650;
+  font-family: inherit;
+  color: var(--amber-ink);
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.viewing-as form button[type="submit"]:hover {
+  background: rgba(138, 90, 0, 0.1);
+}
+
 /* ---------- Flash & errors ---------- */
 
 .flash {

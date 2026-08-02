@@ -68,6 +68,14 @@ def can_admin_accounts(person) -> bool:
     return is_admin(person)
 
 
+def can_impersonate(person) -> bool:
+    # "View as" is READ-ONLY (the write block lives in the admin blueprint):
+    # approval authority comes from appointment, never from admin, so an
+    # impersonated write would forge a decision the approval chain would then
+    # treat as that person's own.
+    return is_admin(person)
+
+
 def can_cancel_approved_leave(person) -> bool:
     # Reversing the ledger is S3's or the OC's call, never the requester's.
     return can_manage_ledger(person) or can_final_approve(person)

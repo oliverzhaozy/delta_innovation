@@ -116,6 +116,21 @@
       </nav>
     {% endif %}
   </header>
+  {% if impersonator %}
+    {# Sticky on purpose: every page below this bar shows someone else's view,
+       and a reader who scrolls past the notice would misread all of it. The
+       way back lives inside the bar so it is never more than one click away. #}
+    <div class="viewing-as">
+      <p>
+        Viewing as <strong>{{ current_user.rank.value }} {{ current_user.display_name }}</strong>
+        &mdash; read-only. Nothing can be keyed, approved, or changed from here.
+      </p>
+      <form action="{{ url_for('admin.impersonate_stop') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Return to my account</button>
+      </form>
+    </div>
+  {% endif %}
   <main class="content {% block main_class %}{% endblock %}">
     {% for category, message in get_flashed_messages(with_categories=true) %}
       <p class="flash flash-{{ category }}">{{ message }}</p>

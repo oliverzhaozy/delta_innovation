@@ -80,6 +80,9 @@ def _force_password_change():
         and not (
             current_app.config["DEV_LOGIN_SWITCHER"] and session.get("dev_login_switch")
         )
+        # An impersonated session is read-only, so it could not set the password
+        # even if sent to the form — the redirect would be a dead end.
+        and not session.get("impersonator_id")
         and request.endpoint
         and request.endpoint not in {"auth.change_password", "auth.logout", "static"}
     ):

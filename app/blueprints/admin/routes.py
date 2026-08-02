@@ -1,8 +1,17 @@
 import secrets
 from enum import Enum
 
-from flask import abort, flash, redirect, render_template, request, url_for
-from flask_login import current_user
+from flask import (
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.orm import joinedload
 
 from app.authz import require
@@ -271,3 +280,91 @@ def _issue_temp_password(person):
     person.set_password(temp_password)
     person.must_change_pw = True
     return temp_password
+
+
+# The two ways out of an impersonated session. Everything else that writes is
+# refused while one is active, so these must never be.
+_IMPERSONATION_EXITS = frozenset({"admin.impersonate_stop", "auth.logout"})
+
+
+@bp.app_context_processor
+def inject_impersonator():
+    # base.html renders the viewing-as bar off this; absent key = not
+    # impersonating, so the bar cannot appear on an ordinary session.
+    actor_id = session.get("impersonator_id")
+    if actor_id is None:
+        return {}
+    return {"impersonator": db.session.get(Person, actor_id)}
+
+
+@bp.before_app_request
+def _block_impersonated_writes():
+    """Impersonation is read-only, enforced app-wide rather than per route.
+
+    An admin viewing as someone else must not be able to ACT as them: approval
+    authority comes from appointment (policy.can_approve_as_pc /
+    can_final_approve), so a write from an impersonated session would enter the
+    chain indistinguishable from that person's own decision, and the structural
+    ban on self-approval would become bypassable via a detour through admin.
+    Blocking by method — not by an allow-list of write routes — is what keeps
+    that true for routes added later.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if not session.get("impersonator_id"):
+        return
+    if request.endpoint is None:  # unrouted URL: let the 404 stand
+        return
+    if request.endpoint in _IMPERSONATION_EXITS:
+        return
+    abort(403)
+
+
+@bp.route("/people/<int:person_id>/view-as", methods=["POST"])
+@require(policy.can_impersonate)
+def impersonate(person_id):
+    person = db.session.get(Person, person_id) or abort(404)
+    if person.id == current_user.id:
+        flash("You are already signed in as yourself.", "error")
+        return redirect(url_for("admin.people"))
+    actor_id, actor_name = current_user.id, current_user.display_name
+    # No audit ROW: person_audit is an append-only trail of edits to a person's
+    # fields, and a read-only view changes none. The server log is the trail.
+    current_app.logger.warning(
+        "impersonation started: %s (id=%s) viewing as %s (id=%s)",
+        actor_name,
+        actor_id,
+        person.display_name,
+        person.id,
+    )
+    session.clear()  # rotate the session at the auth boundary (fixation)
+    login_user(person)
+    session["impersonator_id"] = actor_id
+    return redirect(url_for("main.dashboard"))
+
+
+@bp.route("/people/view-as/stop", methods=["POST"])
+@login_required
+def impersonate_stop():
+    # Only @login_required: the session is the impersonated person by now, who
+    # is usually not an admin — gating this on can_impersonate would strand
+    # them. Holding the marker IS the authorisation to return.
+    actor_id = session.get("impersonator_id")
+    if actor_id is None:
+        abort(404)
+    actor = db.session.get(Person, actor_id)
+    if actor is None:
+        # The admin's own row was hard-deleted mid-session (decision (dd)):
+        # there is no account to return to, so end the session instead.
+        session.clear()
+        logout_user()
+        flash("Your account no longer exists. Please sign in again.", "error")
+        return redirect(url_for("auth.login"))
+    current_app.logger.warning(
+        "impersonation ended: %s (id=%s) returned to their own account",
+        actor.display_name,
+        actor.id,
+    )
+    session.clear()
+    login_user(actor)
+    return redirect(url_for("admin.people"))
