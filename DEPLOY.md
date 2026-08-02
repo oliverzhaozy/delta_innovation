@@ -1,14 +1,21 @@
 # DEPLOY — coyadmin.duckdns.org on GCP (P0.8, decision (w))
 
 Deployed 2026-07-27. Host: GCP always-free e2-micro `coyadmin` (us-west1-b,
-Debian 12, 30 GB pd-standard) in project `coyadmin-app`. The public instance
-runs the **sanitized demo roster only** (decision (k)); real personnel data
-never ships to it — enforced by the whitelist tarball build below, and by
-keeping git off the VM entirely (a clone would carry `seed/people.csv` and
-`instance/delta.db` in history).
+Debian 12, 30 GB pd-standard) in project `coyadmin-app`.
 
-Demo login for smoke tests: `demo_dc1a` / `ChangeMe123!` (S3, admin; forced
-password change at first login).
+`[REVISED 2026-08-02 — decision (gg)]` The organisation has approved the
+project, so the instance now runs the **real roster**, its DB seeded from a
+copy of the dev DB so the host is a 1-to-1 replica (people plus leave,
+ledger, statuses, duties, manning and overrides). The tarball is still a
+**whitelist**: it ships `seed/people.csv` in place of `seed/demo_people.csv`
+and nothing else changed. Git stays off the VM.
+
+Two things this revision does NOT change, both load-bearing now that real
+data is live: `.flaskenv` stays out of the tarball (its `FLASK_DEBUG=1`
+trips ProdConfig's refuse-to-boot guard), and **`DEV_LOGIN_SWITCHER` stays
+off** — `/dev/switch/<id>` has no `@login_required` by design, so enabling it
+here would let any visitor log in as anyone. `ProdConfig.validate` refuses to
+boot on either; do not relax those checks.
 
 ## Topology
 
@@ -65,22 +72,40 @@ Windows gotcha: OpenSSH refuses the key until ACLs are tightened —
 ## Ship a release (redeploy)
 
 From the repo root on Windows (Git Bash). The tarball is a **whitelist** —
-runtime code + demo/holiday seeds only. Never widen it: the repo's other
-files include the real roster, the committed dev DB, and the unit's real
-document samples in `docs/`. `.flaskenv` must also stay out (its
+runtime code + roster/holiday seeds only. Widen it only by decision: `.git`,
+`tests/`, and the unit's real document samples in `docs/` have no reason to
+sit on an internet-facing host, and `.flaskenv` must stay out (its
 FLASK_DEBUG=1 would trip ProdConfig's refuse-to-boot guard).
 
 ```
 stage=$(mktemp -d) && mkdir -p "$stage/seed"
 cp -r app migrations config.py wsgi.py requirements.txt "$stage/"
-cp seed/demo_people.csv seed/holidays_sg.csv "$stage/seed/"
+cp seed/people.csv seed/holidays_sg.csv "$stage/seed/"
 find "$stage" -type d -name __pycache__ -prune -exec rm -rf {} \;
 tar -czf delta-app.tar.gz -C "$stage" .
-tar -tzf delta-app.tar.gz | grep -Ei 'people\.csv|instance|\.git|\.db$|flaskenv|docs/' | grep -v demo_people
+tar -tzf delta-app.tar.gz | grep -Ei 'instance|\.git|\.db$|flaskenv|docs/|tests/'
 # ^ MUST print nothing. Then:
 scp -i ~/.ssh/google_compute_engine delta-app.tar.gz Oliver@<ip>:/tmp/
 scp -i ~/.ssh/google_compute_engine -r deploy Oliver@<ip>:/tmp/deploy
 ssh -i ~/.ssh/google_compute_engine Oliver@<ip> "sudo sed -i 's/\r\$//' /tmp/deploy/* && sudo bash /tmp/deploy/setup.sh"
+```
+
+## Replicate the dev DB onto the host (decision (gg))
+
+Ships the live data, not just the roster. Checkpoint the WAL first so the
+`.db` file is current, then hand it over with the service stopped. `setup.sh`
+runs `db upgrade` afterwards, and `seed-people` skips usernames that already
+exist, so the copy survives the redeploy untouched.
+
+```
+.venv/Scripts/python -c "import sqlite3; sqlite3.connect('instance/delta.db').execute('PRAGMA wal_checkpoint(TRUNCATE)')"
+scp -i ~/.ssh/google_compute_engine instance/delta.db Oliver@<ip>:/tmp/delta.db
+ssh -i ~/.ssh/google_compute_engine Oliver@<ip> "
+  sudo systemctl stop delta.service
+  sudo cp -a /var/lib/delta/delta.db /var/lib/delta/delta.db.bak-\$(date +%F)   # previous DB, kept
+  sudo install -o delta -g delta -m 600 /tmp/delta.db /var/lib/delta/delta.db
+  sudo rm -f /var/lib/delta/delta.db-wal /var/lib/delta/delta.db-shm /tmp/delta.db
+  sudo systemctl start delta.service"
 ```
 
 `setup.sh` is re-runnable: it replaces `/opt/delta/app` wholesale, keeps the

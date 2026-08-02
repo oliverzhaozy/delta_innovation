@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot (re-runnable) server setup for the coyadmin VM — Debian 12 on GCE.
 # Expects, before running as root:
-#   /tmp/delta-app.tar.gz    sanitized release tarball (see DEPLOY.md build step)
+#   /tmp/delta-app.tar.gz    whitelist release tarball (see DEPLOY.md build step)
 #   /tmp/deploy/             this directory's files
 #   /etc/duckdns/token       DuckDNS token, mode 600
 #   /etc/delta/age.recipient age PUBLIC key, mode 644
@@ -69,7 +69,8 @@ EOF
     chmod 600 /etc/delta/env
 fi
 
-# Migrations + demo seed. Both seed commands skip rows that already exist.
+# Migrations + roster seed. Both seed commands skip rows that already exist,
+# so they leave the replicated dev DB (decision (gg)) untouched on a redeploy.
 # Explicit env: gunicorn never reads .flaskenv, and the tarball excludes it
 # (its FLASK_DEBUG=1 would trip ProdConfig's refuse-to-boot guard).
 run_flask() {
@@ -77,7 +78,7 @@ run_flask() {
         /opt/delta/venv/bin/python -m flask "$@")
 }
 run_flask db upgrade
-run_flask seed-people seed/demo_people.csv
+run_flask seed-people seed/people.csv
 run_flask seed-holidays seed/holidays_sg.csv
 
 install -m 755 /tmp/deploy/delta-backup.sh /usr/local/bin/delta-backup.sh
