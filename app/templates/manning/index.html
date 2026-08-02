@@ -27,6 +27,11 @@
       </a>
       <span>
         <span class="badge {{ p.status.badge }}">{{ p.status.label }}</span>
+        {# A period a PC returned is DRAFT like any other, so the status badge
+           alone cannot tell rework from a period nobody has submitted yet. This
+           is exactly the predicate manning_service.sent_back_periods owns; the
+           remark itself waits on the builder, one click away. #}
+        {% if p.status.value == "DRAFT" and p.remarks %}<span class="badge rejected">Sent back</span>{% endif %}
         <span class="chip plain">{{ p.slots|length }} slot(s)</span>
       </span>
     </li>

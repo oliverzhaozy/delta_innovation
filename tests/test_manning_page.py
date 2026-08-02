@@ -497,6 +497,8 @@ def test_confirm_then_send_back_leaves_the_remark_on_the_s3s_builder(app, client
     assert "Sent back by LTA Quek Jing Yu" in html
     assert "Det 2 is short" in html
     assert "Draft — not sent for approval yet" in html
+    # ...and the list marks it apart from a draft nobody has submitted yet.
+    assert 'badge rejected">Sent back' in client.get("/manning").get_data(as_text=True)
 
 
 def test_the_queue_holds_only_confirmed_periods(app, client, make_person):
@@ -525,8 +527,9 @@ def test_approving_empties_the_queue_and_badges_the_period(app, client, make_per
     login(client, "s3")
     create_period(client)
     pid_ = period_id(app)
-    assert '<span class="badge draft">Draft</span>' in client.get(
-        "/manning").get_data(as_text=True)
+    fresh = client.get("/manning").get_data(as_text=True)
+    assert '<span class="badge draft">Draft</span>' in fresh
+    assert "Sent back" not in fresh   # never decided, so nothing was returned
     client.post(f"/manning/{pid_}/confirm", data={}, follow_redirects=True)
     client.post("/logout")
 
