@@ -20,7 +20,8 @@ def cast(app, make_person):
     return ids
 
 
-def add_request(app, person_id, status, start, end=None, created_at=None, type_="OFF"):
+def add_request(app, person_id, status, start, end=None, created_at=None, type_="OFF",
+                remarks=None):
     """Insert one request and return its when_label (the marker asserted on)."""
     with app.app_context():
         row = LeaveRequest(
@@ -29,6 +30,7 @@ def add_request(app, person_id, status, start, end=None, created_at=None, type_=
             start_date=start,
             end_date=end or start,
             status=status,
+            remarks=remarks,
         )
         if created_at is not None:
             row.created_at = created_at
@@ -51,6 +53,10 @@ def split_rows(app, cast):
         "upcoming": add_request(app, opr, RequestStatus.APPROVED, days_from_today(10)),
         "elapsed": add_request(app, opr, RequestStatus.APPROVED, days_from_today(-20)),
         "rejected": add_request(app, opr, RequestStatus.REJECTED_PC, days_from_today(-25)),
+        "rejected_current": add_request(
+            app, opr, RequestStatus.REJECTED_PC, days_from_today(5),
+            remarks="Platoon is short that day",
+        ),
         "cancelled": add_request(app, opr, RequestStatus.CANCELLED, days_from_today(-30)),
     }
 
@@ -63,6 +69,11 @@ def test_index_shows_only_live_requests(client, cast, split_rows):
     assert split_rows["elapsed"] not in html
     assert split_rows["rejected"] not in html
     assert split_rows["cancelled"] not in html
+    # The one exception to "only live requests": a rejection whose dates have
+    # not passed is stated above the table, remark and all, so the page cannot
+    # answer "where did my request go?" by omission.
+    assert split_rows["rejected_current"] in html
+    assert "Platoon is short that day" in html
 
 
 def test_history_shows_only_concluded_requests(client, cast, split_rows):
@@ -71,6 +82,9 @@ def test_history_shows_only_concluded_requests(client, cast, split_rows):
     assert split_rows["elapsed"] in html
     assert split_rows["rejected"] in html
     assert split_rows["cancelled"] in html
+    # Also on the index right now — the overlap is deliberate: showing a
+    # rejection to the requester is a second READ, never a move out of history.
+    assert split_rows["rejected_current"] in html
     assert split_rows["pending"] not in html
     assert split_rows["upcoming"] not in html
 

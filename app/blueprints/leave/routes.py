@@ -35,6 +35,7 @@ def index():
     return render_template(
         "leave/index.html",
         requests=leave_service.live_requests(current_user.id),
+        rejected=leave_service.rejected_live_requests(current_user.id),
         balances=ledger_service.balances(current_user.id),
         deduction_note=leave_service.deduction_note,
     )

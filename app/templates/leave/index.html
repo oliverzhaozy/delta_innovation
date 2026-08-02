@@ -15,6 +15,20 @@
   <a class="btn secondary" href="{{ url_for('leave.history') }}">History</a>
 </p>
 
+{# A rejection leaves the table below the moment it is decided, so this is the
+   page that would otherwise answer "where did my request go?" by omission.
+   Notice lines rather than rows: nothing here is left to cancel and the
+   deduction column is moot. They stop when the dates pass — History keeps them
+   from then on. #}
+{% for r in rejected %}
+<p class="notice">
+  <a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.type.value }} &mdash; {{ r.when_label }}</a>
+  <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+  &mdash; rejected{% if r.rejected_by %} by {{ r.rejected_by.rank.value }} {{ r.rejected_by.display_name }}{% endif %}:
+  <span class="notice-remark">{{ r.remarks }}</span>
+</p>
+{% endfor %}
+
 <section class="card">
   <h2>Requests</h2>
   {% if requests %}
