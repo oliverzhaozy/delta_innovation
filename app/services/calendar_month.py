@@ -1,7 +1,7 @@
-"""Builds the month-grid context shared by the calendar month view and the
-home page ("/"). Extracted so both endpoints render ONE overlay (TP + ARCTIC
-events + the derived NSF OFF/LEAVE layer) from one code path — no drift, and
-no logic duplicated between the two routes.
+"""Builds the month-grid context for the calendar month view — the ONE overlay
+(TP + ARCTIC events + the derived NSF OFF/LEAVE layer) the grid renders from.
+Kept a module of its own now that `calendar.month` is the single caller,
+because the geometry below is the whole of the page and none of the route.
 
 The grid is a stack of WEEK rows, not 42 independent day cells: an event or a
 contiguous OFF/LEAVE run becomes one spanning bar per week (UI-23), so nothing

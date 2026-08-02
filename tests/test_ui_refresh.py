@@ -70,9 +70,10 @@ def test_nav_highlights_the_current_section(app, client, make_person):
     assert match and match.group(1) == "Duty"
 
 
-def test_home_calendar_renders_for_every_role(app, client, make_person):
-    # Home is the calendar. Rendering IS the test: a broken url_for throws at
-    # render. Cover the widest role (admin) and the narrowest (a plain Opr).
+def test_home_and_month_view_render_for_every_role(app, client, make_person):
+    # Rendering IS the test: a broken url_for throws at render. Cover the widest
+    # role (admin) and the narrowest (a plain Opr) on both pages — the month
+    # calendar moved off Home to calendar.month (UI-25).
     make_person(username="admin", company_role="S3", is_admin=True)
     make_viewer(make_person, username="opr_only")
 
@@ -80,8 +81,9 @@ def test_home_calendar_renders_for_every_role(app, client, make_person):
         client.post("/logout")
         login(client, username)
         html = client.get("/").get_data(as_text=True)
-        assert "month-grid" in html  # the calendar overlay, not the old tiles
+        assert "<h2>Today</h2>" in html  # the to-do dashboard, not the calendar
         assert "Phase 4" not in html
+        assert "month-grid" in client.get("/calendar/month").get_data(as_text=True)
 
     # Staff-only nav surfaces reach the admin (nav is on every page)...
     client.post("/logout")

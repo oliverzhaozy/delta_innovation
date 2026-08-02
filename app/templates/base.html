@@ -53,7 +53,7 @@
               <a href="{{ url_for('leave.index') }}">My OFF/OIL</a>
             {% endif %}
             {% if policy.is_pc(current_user) %}
-              <a href="{{ url_for('leave.pc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
+              <a href="{{ url_for('leave.pc_queue') }}">OFF/OIL/Leave approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
             {% elif policy.can_final_approve(current_user) %}
               <a href="{{ url_for('leave.oc_queue') }}">Approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
             {% endif %}
@@ -72,6 +72,7 @@
         <details class="navgroup" {% if section == "calendar" %}data-here{% endif %}>
           <summary>Calendar</summary>
           <div class="navmenu">
+            <a href="{{ url_for('calendar.month') }}">Month view</a>
             <a href="{{ url_for('calendar.tp_list') }}">TP events</a>
             {% if policy.can_view_arctic(current_user) %}
               <a href="{{ url_for('calendar.arctic_list') }}">ARCTIC FOE</a>

@@ -159,18 +159,18 @@ def test_new_rejects_end_dt_equal_start_dt(app, client, make_person):
         assert db.session.query(Event).filter_by(title="Zero length").count() == 0
 
 
-# ---------- Criterion 6: dashboard ARCTIC link is live for command team ----------
+# ---------- Criterion 6: month-view ARCTIC link is live for command team ----------
 
-def test_dashboard_arctic_link_is_live_for_command_team(client, make_person):
+def test_month_view_arctic_link_is_live_for_command_team(client, make_person):
     login(client, make_person(**make_pc()))
-    body = client.get("/").data
+    body = client.get("/calendar/month").data
     assert b'href="/calendar/arctic"' in body
     assert b"ARCTIC FOE" in body
 
 
-def test_dashboard_hides_arctic_link_for_non_command_team(client, make_person):
+def test_month_view_hides_arctic_link_for_non_command_team(client, make_person):
     login(client, make_person(username="cal_opr2"))
-    body = client.get("/").data
+    body = client.get("/calendar/month").data
     assert b"ARCTIC FOE" not in body
 
 
@@ -258,7 +258,7 @@ def test_new_event_form_renders_with_label_select_and_map(client, make_person):
 
 def test_toolbar_shows_nav_and_create_for_editor(client, make_person):
     login(client, make_person(**make_pc()))
-    body = client.get("/").data
+    body = client.get("/calendar/month").data
     assert b"Today" in body
     assert b"cal-step" in body       # prev/next chevrons
     assert b"+ New event" in body
@@ -266,7 +266,7 @@ def test_toolbar_shows_nav_and_create_for_editor(client, make_person):
 
 def test_toolbar_hides_create_for_non_editor(client, make_person):
     login(client, make_person(username="cal_opr_tb"))
-    body = client.get("/").data
+    body = client.get("/calendar/month").data
     assert b"Today" in body
     assert b"+ New event" not in body
 

@@ -851,6 +851,26 @@ table.list a:hover { text-decoration: underline; }
 
 .notice .notice-remark { color: var(--ink); }
 
+/* A notice carries its own route to the fix, so its link takes the band's ink
+   rather than the accent — one sentence, not a sentence with a button in it. */
+.notice a { color: inherit; font-weight: 650; }
+
+/* Amber variant for a notice that is a call to action rather than a fault (the
+   home page's "you are COS today"). Amber is already what this app means by
+   "waiting on you" (.badge.pending, .sheet-state.is-pending); spending the
+   danger red on a normal duty turn would teach the reader that red means
+   nothing. */
+.notice.action {
+  border-left-color: var(--amber-ink);
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+}
+
+/* A card sub-heading that is also the route to the thing it names (the home
+   page's per-period manning headings). */
+.card h3 a { color: var(--accent); text-decoration: none; }
+.card h3 a:hover { text-decoration: underline; }
+
 .neg { color: var(--danger); font-weight: 700; }
 
 /* ---------- Flash & errors ---------- */

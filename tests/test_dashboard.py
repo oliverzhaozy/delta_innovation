@@ -37,6 +37,7 @@ from app.models import (
     StatusEntry,
 )
 from app.services import dashboard_service, duty_service, leave_service, manning_service
+from tests.conftest import login
 
 TODAY = today_sgt()
 TOMORROW = TODAY + timedelta(days=1)
@@ -443,3 +444,134 @@ def test_ps_absent_duty_flags_a_holder_away_on_their_own_duty_date(app, make_per
     with dashboard_for(app, "ps2") as dash:
         assert [row.id for row in dash.ps_absent_duty] == [flagged]
         assert past not in [row.id for row in dash.ps_absent_duty]
+
+
+# --- Task B: the page itself ("/") ---------------------------------------------
+# Same planting helpers as above, driven through HTTP: these pin what the
+# dashboard TEMPLATE puts on the screen for a role, not what the service returns.
+
+
+def test_pc_page_names_the_requester_and_flags_a_travelling_slot_holder(app, client, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    plant_leave(app, opr_id, TOMORROW, TOMORROW, status=RequestStatus.PENDING_PC)
+    plant_declaration(app, opr_id, TOMORROW, TODAY + timedelta(days=4))
+    period_id = plant_period(app, TODAY, TODAY + timedelta(days=6),
+                             status=ManningStatus.PENDING, confirmed_by="s3")
+    plant_slot(app, period_id, opr_id, ManningSlotType.TU_PLANNER)
+
+    login(client, "pc1")
+    body = client.get("/").data
+    assert b"OFF/OIL/Leave approvals (1)" in body
+    assert b"Ang Cheng Ze" in body
+    assert b"Travel approvals (1)" in body
+    assert b"On TU manning" in body
+    assert b"Manning approvals (1)" in body
+
+
+def test_opr_page_shows_no_approval_cards(app, client, make_person):
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    plant_leave(app, pid(app, "ps2"), TOMORROW, TOMORROW, status=RequestStatus.PENDING_PC)
+    plant_declaration(app, opr_id, TOMORROW, TODAY + timedelta(days=4))
+    period_id = plant_period(app, TODAY, TODAY + timedelta(days=6),
+                             status=ManningStatus.PENDING, confirmed_by="s3")
+    plant_slot(app, period_id, opr_id, ManningSlotType.TU_PLANNER)
+
+    login(client, "opr1")
+    body = client.get("/").data
+    assert b"OFF/OIL/Leave approvals" not in body
+    assert b"Travel approvals" not in body
+    assert b"On TU manning" not in body
+    assert b"Manning approvals" not in body
+
+
+def test_s3_page_carries_the_send_back_remark_the_conflicts_and_the_gaps(app, client,
+                                                                        make_person):
+    make_cast(make_person)
+    plant_period(app, TODAY + timedelta(days=2), TODAY + timedelta(days=5),
+                 remarks="TU Comd is on leave", confirmed_by="s3")
+    # A second period with one conflicted holder and one unfilled HQ slot: the
+    # three S3 cards are separate template branches, so each needs a render.
+    opr_id = pid(app, "opr1")
+    period_id = plant_period(app, TODAY, TODAY + timedelta(days=4))
+    plant_slot(app, period_id, opr_id, ManningSlotType.TU_COMD)
+    plant_leave(app, opr_id, TODAY + timedelta(days=1), TODAY + timedelta(days=2))
+
+    login(client, "s3")
+    body = client.get("/").data
+    assert b"Manning sent back (1)" in body
+    assert b"TU Comd is on leave" in body
+    assert b"TU manning conflicts" in body
+    assert b"Ang Cheng Ze" in body
+    assert b"Unfilled TU slots" in body
+    assert ManningSlotType.TU_PLANNER.label.encode() in body
+
+
+def test_blank_duty_days_within_a_day_are_marked_as_affecting_the_ro(app, client, make_person,
+                                                                    monkeypatch):
+    """Pinned to a fixed mid-week Wednesday: against the real date the badge
+    count depends on where in the week the suite happens to run."""
+    make_cast(make_person)
+    frozen = date(2026, 9, 16)
+    monkeypatch.setattr("app.services.dashboard_service.today_sgt", lambda: frozen)
+
+    login(client, "ps2")
+    body = client.get("/").data
+    assert b"Duty days without a holder" in body
+    # Wed 16th and Thu 17th, both duties each — the 18th onwards is planning.
+    assert body.count(b"affects the RO") == 4
+
+
+def test_nav_links_the_month_view_and_home_never_renders_the_grid(app, client, make_person):
+    make_cast(make_person)
+    login(client, "opr1")
+    body = client.get("/").data
+    assert b'href="/calendar/month"' in body
+    assert b"month-grid" not in body
+    # ...and the grid is still there, one click away.
+    assert b"month-grid" in client.get("/calendar/month").data
+
+
+def test_all_clear_card_renders_when_nothing_is_open(app, client, make_person):
+    make_cast(make_person)
+    login(client, "opr1")
+    body = client.get("/").data
+    assert b"Nothing needs your action." in body
+    # The Today panel is not a to-do, so it renders regardless.
+    assert b"<h2>Today</h2>" in body
+
+
+def test_today_panel_lists_the_away_and_the_viewers_own_pending_request(app, client, make_person):
+    make_cast(make_person)
+    ps_id = pid(app, "ps2")
+    plant_status(app, pid(app, "opr1"), TODAY, TODAY)  # MC
+    plant_leave(app, ps_id, TOMORROW, TOMORROW, status=RequestStatus.PENDING_PC)
+    # The viewer's own duty rows: the two banners above the cards.
+    plant_assignment(app, ps_id, TODAY, Duty.COS)
+    plant_assignment(app, ps_id, TOMORROW, Duty.CDOS)
+
+    login(client, "ps2")
+    body = client.get("/").data
+    assert b"key the parade" in body
+    assert b"compile the RO" in body
+    assert b"Away today (1)" in body
+    assert b"Ang Cheng Ze" in body
+    assert b"MC" in body
+    assert b"Pending PC" in body
+    assert b"COS on" in body  # the panel's own next-duty line
+
+
+def test_spread_violations_never_reach_the_page(app, client, make_person):
+    """Deliberately omitted (dashboard_service._month_todos): a max−min gap over
+    a 21-day month is the normal state of a small pool, so the line would fire
+    constantly and teach the reader to ignore the card."""
+    make_cast(make_person)
+    opr_id = pid(app, "opr1")
+    active = current_month_active(app)
+    for day in active[:4]:
+        plant_assignment(app, opr_id, day, Duty.COS)
+
+    login(client, "ps2")
+    body = client.get("/").data.lower()
+    assert b"spread" not in body

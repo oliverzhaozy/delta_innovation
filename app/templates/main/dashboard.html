@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+
+{# Three tiers, in triage order: what the VIEWER has to be somewhere for, what
+   the viewer has to decide for OTHERS, then the read-only state of the company.
+   A to-do card exists only while it holds work — an empty card would train the
+   reader to scroll past the full ones — which is what makes the all-clear line
+   below mean something. The Today panel is the deliberate exception: it keeps a
+   stable shape (muted empties, never hidden rows) because it is a reference
+   surface, read by position. #}
+{% block content %}
+{% set t = dash.today %}
+{# One expression for "is there work here". Every collection must be named: a
+   card missing from it would render a page that is silently blank. #}
+{% set has_todo = dash.my_cos_dates or dash.my_cdos_dates
+                  or dash.pc_leave or dash.pc_travel or dash.pc_manning
+                  or dash.oc_leave
+                  or dash.s3_sent_back or dash.s3_conflicts or dash.s3_unfilled
+                  or dash.ps_blanks or dash.ps_absent_duty
+                  or dash.parade_imbalance %}
+
+<div class="page-head">
+  <h1>Home</h1>
+  <p class="muted">{{ t.date.strftime("%A %d %B %Y") }}</p>
+</div>
+
+{# Amber, not the .notice red: being on duty is a call to action, not a fault. #}
+{% for day in dash.my_cos_dates %}
+<p class="notice action">You are COS on {{ day.strftime("%a %d %b") }} &mdash;
+  <a href="{{ url_for('parade.cos_message') }}">key the parade</a>.</p>
+{% endfor %}
+{% for day in dash.my_cdos_dates %}
+<p class="notice action">You are CDO/S on {{ day.strftime("%a %d %b") }} &mdash;
+  <a href="{{ url_for('ro.view') }}">compile the RO</a>.</p>
+{% endfor %}
+
+{% if dash.pc_leave %}
+<section class="card">
+  <h2>OFF/OIL/Leave approvals ({{ dash.pc_leave | length }})</h2>
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Who</th><th>When</th><th>Type</th></tr></thead>
+      <tbody>
+        {% for r in dash.pc_leave %}
+        <tr>
+          <td><a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.person.rank.value }} {{ r.person.display_name }}</a></td>
+          <td>{{ r.when_label }}</td>
+          <td>{{ r.type.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if dash.pc_travel %}
+<section class="card">
+  <h2>Travel approvals ({{ dash.pc_travel | length }})</h2>
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Who</th><th>When</th><th>Destination</th></tr></thead>
+      <tbody>
+        {% for d in dash.pc_travel %}
+        <tr>
+          <td><a href="{{ url_for('overseas.queue') }}">{{ d.person.rank.value }} {{ d.person.display_name }}</a></td>
+          <td>
+            {{ d.when_label }}
+            {% if d.id in dash.travel_on_manning %}<span class="badge pending">On TU manning</span>{% endif %}
+          </td>
+          <td>{{ d.destination }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if dash.pc_manning %}
+<section class="card">
+  <h2>Manning approvals ({{ dash.pc_manning | length }})</h2>
+  <ul class="toollist">
+    {% for p in dash.pc_manning %}
+    <li>
+      <a href="{{ url_for('manning.queue') }}">TU manning &mdash; {{ p.start_date.strftime("%d %b") }} &ndash; {{ p.end_date.strftime("%d %b %Y") }}</a>
+      <span class="badge {{ p.status.badge }}">{{ p.status.label }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if dash.oc_leave %}
+<section class="card">
+  <h2>Final approvals ({{ dash.oc_leave | length }})</h2>
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Who</th><th>When</th><th>Type</th></tr></thead>
+      <tbody>
+        {% for r in dash.oc_leave %}
+        <tr>
+          <td><a href="{{ url_for('leave.detail', request_id=r.id) }}">{{ r.person.rank.value }} {{ r.person.display_name }}</a></td>
+          <td>{{ r.when_label }}</td>
+          <td>{{ r.type.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if dash.s3_sent_back %}
+<section class="card">
+  <h2>Manning sent back ({{ dash.s3_sent_back | length }})</h2>
+  {# Same wording as manning/builder.html: the remark the S3 reads here is the
+     remark waiting on the period, not a summary of it. #}
+  {% for p in dash.s3_sent_back %}
+  <p class="notice">
+    <a href="{{ url_for('manning.builder', period_id=p.id) }}">TU manning &mdash; {{ p.start_date.strftime("%d %b") }} &ndash; {{ p.end_date.strftime("%d %b %Y") }}</a>
+    &mdash; sent back{% if p.pc_actor %} by {{ p.pc_actor.rank.value }} {{ p.pc_actor.display_name }}{% endif %}:
+    <span class="notice-remark">{{ p.remarks }}</span>
+  </p>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if dash.s3_conflicts %}
+<section class="card">
+  <h2>TU manning conflicts</h2>
+  {% for period, conflicted in dash.s3_conflicts %}
+  <h3><a href="{{ url_for('manning.builder', period_id=period.id) }}">{{ period.start_date.strftime("%d %b") }} &ndash; {{ period.end_date.strftime("%d %b %Y") }}</a></h3>
+  <ul class="toollist">
+    {% for slot, reasons in conflicted %}
+    <li>
+      <span>{{ slot.person.rank.value }} {{ slot.person.display_name }} &mdash; {{ slot.slot.ui_label }}</span>
+      <span class="chips">
+        {% for reason in reasons %}<span class="badge rejected">&#9888; {{ reason }}</span>{% endfor %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if dash.s3_unfilled %}
+<section class="card">
+  <h2>Unfilled TU slots</h2>
+  {% for period, labels in dash.s3_unfilled %}
+  <h3><a href="{{ url_for('manning.builder', period_id=period.id) }}">{{ period.start_date.strftime("%d %b") }} &ndash; {{ period.end_date.strftime("%d %b %Y") }}</a></h3>
+  <ul class="toollist">
+    {% for label in labels %}
+    <li><span>{{ label }}</span><span class="badge rejected">&#9888; unfilled</span></li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if dash.ps_blanks %}
+<section class="card">
+  <h2>Duty days without a holder ({{ dash.ps_blanks | length }})</h2>
+  <ul class="toollist">
+    {% for day, duty in dash.ps_blanks %}
+    <li>
+      <a href="{{ url_for('duty.roster', month=day.strftime('%Y-%m')) }}">{{ day.strftime("%a %d %b") }} &mdash; {{ duty.label }}</a>
+      {# The RO for a day is compiled the evening before, so a gap today or
+         tomorrow is already late — every other blank is still planning. #}
+      {% if (day - t.date).days <= 1 %}<span class="badge pending">affects the RO</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if dash.ps_absent_duty %}
+<section class="card">
+  <h2>Duty holders now absent ({{ dash.ps_absent_duty | length }})</h2>
+  <ul class="toollist">
+    {% for row in dash.ps_absent_duty %}
+    <li>
+      <a href="{{ url_for('duty.roster', month=row.date.strftime('%Y-%m')) }}">{{ row.date.strftime("%a %d %b") }} &mdash; {{ row.duty.label }} &mdash; {{ row.person.rank.value }} {{ row.person.display_name }}</a>
+      <span class="badge rejected">&#9888; holder absent</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if dash.parade_imbalance %}
+<p class="notice">{{ dash.parade_imbalance }}
+  <a href="{{ url_for('parade.morning') }}">Open the morning parade state</a>.</p>
+{% endif %}
+
+{% if not has_todo %}
+<section class="card">
+  <p class="muted">Nothing needs your action.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Today</h2>
+  <ul class="toollist">
+    <li>
+      <span>COS</span>
+      <span>{% if t.cos %}{{ t.cos.rank.value }} {{ t.cos.display_name }}{% else %}<em class="muted">none keyed</em>{% endif %}</span>
+    </li>
+    <li>
+      <span>CDO/S</span>
+      <span>{% if t.cdos %}{{ t.cdos.rank.value }} {{ t.cdos.display_name }}{% else %}<em class="muted">none keyed</em>{% endif %}</span>
+    </li>
+  </ul>
+
+  <h3>Away today ({{ t.away | length }})</h3>
+  {% if t.away %}
+  <ul class="toollist">
+    {% for row in t.away %}
+    <li><span>{{ row.person.rank.value }} {{ row.person.display_name }} &mdash; {{ row.label }}{% if row.day_part.value != 'FULL' %} ({{ row.day_part.value }}){% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Everyone is in.</p>
+  {% endif %}
+
+  <h3>Your upcoming leave</h3>
+  {% if t.my_leave %}
+  <ul class="toollist">
+    {% for r in t.my_leave %}
+    <li><span>{{ r.type.value }} &mdash; {{ r.when_label }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing approved ahead.</p>
+  {% endif %}
+
+  <h3>Awaiting decision</h3>
+  {% if t.my_pending %}
+  <ul class="toollist">
+    {% for r in t.my_pending %}
+    <li>
+      <span>{{ r.type.value }} &mdash; {{ r.when_label }}</span>
+      <span class="badge {{ r.status.badge }}">{{ r.status.label }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing waiting on a decision.</p>
+  {% endif %}
+
+  <h3>Your next duty</h3>
+  {% if t.my_next_duty %}
+  <p>{{ t.my_next_duty.duty.label }} on {{ t.my_next_duty.date.strftime("%a %d %b") }}</p>
+  {% else %}
+  <p class="muted">None rostered.</p>
+  {% endif %}
+</section>
+{% endblock %}
