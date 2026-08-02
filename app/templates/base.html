@@ -31,13 +31,18 @@
             <a href="{{ url_for('parade.mc_list') }}">Declare MC</a>
           </div>
         </details>
+        {# Manning approvals carry their OWN count, separate from the Leave
+           group's badge: the work lives in this menu, so the number has to. #}
         <details class="navgroup" {% if section == "duty" %}data-here{% endif %}>
-          <summary>Duty</summary>
+          <summary>Duty{% if pending_manning %} ({{ pending_manning }}){% endif %}</summary>
           <div class="navmenu">
             <a href="{{ url_for('duty.roster') }}">Duty roster</a>
             <a href="{{ url_for('ro.view') }}">Routine Orders</a>
             {% if policy.can_manage_manning(current_user) %}
               <a href="{{ url_for('manning.index') }}">TU manning</a>
+            {% endif %}
+            {% if policy.is_pc(current_user) %}
+              <a href="{{ url_for('manning.queue') }}">Manning approvals{% if pending_manning %} ({{ pending_manning }}){% endif %}</a>
             {% endif %}
           </div>
         </details>

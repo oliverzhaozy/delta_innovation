@@ -87,16 +87,19 @@ def create_app(config_class=None):
         # No notifications by design — the nav badge is how approvers find work.
         from flask_login import current_user
 
-        from app.domain.types import DeclarationStatus, RequestStatus
-        from app.models import LeaveRequest, OverseasDeclaration
+        from app.domain.types import DeclarationStatus, ManningStatus, RequestStatus
+        from app.models import LeaveRequest, ManningPeriod, OverseasDeclaration
 
         if not current_user.is_authenticated:
             return {}
         if policy.is_pc(current_user):
             # Any PC may approve any PENDING_PC request (owner decision
             # 2026-07-09), so the badge counts all of them, not just own-platoon.
-            # A PC's badge covers BOTH queues — leave and travel declarations —
-            # so it must stay in lockstep with leave.pc_queue AND overseas.queue.
+            # A PC's badge covers the two queues living in the LEAVE nav group —
+            # leave and travel declarations — so it must stay in lockstep with
+            # leave.pc_queue AND overseas.queue. Manning approvals live in the
+            # DUTY group and are counted separately below; folding them in here
+            # would put a number on a menu that does not contain the work.
             count = (
                 db.session.query(LeaveRequest.id)
                 .filter(LeaveRequest.status == RequestStatus.PENDING_PC)
@@ -106,15 +109,20 @@ def create_app(config_class=None):
                 .filter(OverseasDeclaration.status == DeclarationStatus.PENDING)
                 .count()
             )
-        elif policy.can_final_approve(current_user):
+            manning_count = (
+                db.session.query(ManningPeriod.id)
+                .filter(ManningPeriod.status == ManningStatus.PENDING)
+                .count()
+            )
+            return {"pending_approvals": count, "pending_manning": manning_count}
+        if policy.can_final_approve(current_user):
             count = (
                 db.session.query(LeaveRequest.id)
                 .filter(LeaveRequest.status == RequestStatus.PENDING_OC)
                 .count()
             )
-        else:
-            return {}
-        return {"pending_approvals": count}
+            return {"pending_approvals": count}
+        return {}
 
     @app.errorhandler(403)
     def forbidden(error):

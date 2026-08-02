@@ -6,16 +6,26 @@ check — leave, direct absences, and OUT-OF-CAMP statuses all flag the same
 way, plus non-cancelled overseas declarations. Conflicted people are FLAGGED
 and sorted last, never hidden: the pick list IS the eligible-and-available
 replacement list, and the S3 decides from one screen.
+
+The approval transitions at the bottom (owner decision (ff) 2026-08-02) borrow
+overseas_service's posture wholesale: each one claims the row with a
+conditional UPDATE, and TransitionError is imported rather than redefined so
+routes catch ONE exception type across every approval flow in the app. They are
+deliberately separate from the slot mutators above — editing a period never
+touches its status, at any status.
 """
 from collections import defaultdict, namedtuple
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 
 from app.domain import manning, roster
-from app.domain.types import ManningSlotType
+from app.domain.dates import now_sgt
+from app.domain.types import ManningSlotType, ManningStatus
 from app.extensions import db
 from app.models import ManningPeriod, ManningSlot, OverseasDeclaration
 from app.services import event_service, presence_service
+from app.services.approval_service import TransitionError
 
 
 class IneligibleSlot(Exception):
@@ -243,9 +253,13 @@ def generate_period(period):
 
 def assign_slot(period, slot, person, *, det_number):
     """Fill one slot. Eligibility is LAW (hard block); conflicts are judgment
-    (the flag rides the pick list — no confirm step, the S3 saw it). The
-    UNIQUE(period, person) constraint is the duplicate guard: no pre-check
-    SELECT, the commit decides."""
+    (the flag rides the pick list — nothing prompts for confirmation, the S3
+    saw it). The UNIQUE(period, person) constraint is the duplicate guard: no
+    pre-check SELECT, the commit decides.
+
+    Deliberately status-blind (decision (ff)): assigning into an APPROVED period
+    is legal and leaves it APPROVED — the PC's approval is a point-in-time
+    acknowledgement, not a lock."""
     if not manning.slot_eligible(slot, person):
         raise IneligibleSlot(
             f"{person.display_name} can never hold {slot.ui_label} — appointment rule."
@@ -321,3 +335,103 @@ def build_document(period) -> manning.ManningDoc:
         for row in period.slots
     ]
     return manning.render_manning(period.start_date, period.end_date, slots=shaped)
+
+
+# --- approval lifecycle: DRAFT -> PENDING -> APPROVED (decision (ff)) ----------------
+
+def _claim_status(period_id, from_status, **values):
+    """Atomically move the period out of from_status; fail if someone got there
+    first. Same conditional-UPDATE idiom as approval_service._claim — two PCs
+    clicking at once cannot both action one period."""
+    result = db.session.execute(
+        update(ManningPeriod)
+        .where(ManningPeriod.id == period_id, ManningPeriod.status == from_status)
+        .values(**values)
+    )
+    if result.rowcount != 1:
+        db.session.rollback()
+        raise TransitionError("This period was already actioned by someone else.")
+
+
+def _forbid_self_action(period, actor):
+    # A PC who also holds company_role S3 could otherwise confirm and approve
+    # their own period; self-approval is structurally forbidden project-wide.
+    if period.confirmed_by_id == actor.id:
+        raise TransitionError("You cannot approve a period you confirmed yourself.")
+
+
+def confirm_period(period, actor):
+    """S3 hands the period to the PCs. Clears any earlier PC decision: a
+    re-confirm after a send-back must not leave the stale rejection remark
+    showing next to a period that has since been reworked.
+
+    No structural completeness check — decision (aa) says any shape renders,
+    and the PC sees exactly the document the S3 saw."""
+    _claim_status(
+        period.id,
+        ManningStatus.DRAFT,
+        status=ManningStatus.PENDING,
+        confirmed_by_id=actor.id,
+        confirmed_at=now_sgt(),
+        pc_actor_id=None,
+        pc_at=None,
+        remarks=None,
+    )
+    db.session.commit()
+
+
+def withdraw_period(period, actor):
+    """The S3's mis-click escape hatch: pull a PENDING period back to DRAFT.
+    `actor` is unused — the gate is the route's can_manage_manning — but the
+    signature matches its siblings so the routes read the same."""
+    _claim_status(
+        period.id,
+        ManningStatus.PENDING,
+        status=ManningStatus.DRAFT,
+        confirmed_by_id=None,
+        confirmed_at=None,
+    )
+    db.session.commit()
+
+
+def pc_approve_period(period, actor):
+    _forbid_self_action(period, actor)
+    _claim_status(
+        period.id,
+        ManningStatus.PENDING,
+        status=ManningStatus.APPROVED,
+        pc_actor_id=actor.id,
+        pc_at=now_sgt(),
+        remarks=None,
+    )
+    db.session.commit()
+
+
+def pc_reject_period(period, actor, remarks):
+    """Send the period back to DRAFT with the PC's reason. `confirmed_*` is kept
+    on purpose: together with the remark it is the record of what was sent back
+    and to whom — there is no REJECTED status to hold that."""
+    _forbid_self_action(period, actor)
+    remark = (remarks or "").strip()
+    if not remark:
+        raise TransitionError("A short remark is required when rejecting.")
+    _claim_status(
+        period.id,
+        ManningStatus.PENDING,
+        status=ManningStatus.DRAFT,
+        pc_actor_id=actor.id,
+        pc_at=now_sgt(),
+        remarks=remark,
+    )
+    db.session.commit()
+
+
+def pending_periods():
+    """PENDING periods, soonest first — the PC queue and its nav badge read this
+    one query, so the count and the list can never disagree."""
+    return (
+        db.session.query(ManningPeriod)
+        .filter(ManningPeriod.status == ManningStatus.PENDING)
+        .order_by(ManningPeriod.start_date)
+        .all()
+    )

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Manning approvals{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Manning approvals</h1>
+  <p class="muted">{{ periods | length }} awaiting your decision.</p>
+</div>
+
+{# The whole period is on this page: 0–1 are ever pending, so there is no list
+   view to drill down from. The document below each header is the SAME
+   build_document render the S3 confirmed — the PC decides on what was sent,
+   never on a summary of it. #}
+{% for p in periods %}
+<section class="card sheet">
+  <div class="sheet-rule">
+    <span>TU manning &mdash; {{ p.start_date.strftime("%d %b") }} &ndash; {{ p.end_date.strftime("%d %b %Y") }}</span>
+    <span class="badge pending">{{ p.status.label }}</span>
+  </div>
+  <p class="sheet-state is-pending" style="margin:0">
+    Confirmed{% if p.confirmed_by %} by {{ p.confirmed_by.rank.value }} {{ p.confirmed_by.display_name }}{% endif %}{% if p.confirmed_at %} on {{ p.confirmed_at.strftime("%d %b %Y") }}{% endif %}
+  </p>
+  <pre style="white-space:pre-wrap; margin:0">{{ documents[p.id].text }}</pre>
+</section>
+
+<section class="card">
+  {% if documents[p.id].unfilled %}
+    <p class="flash flash-error">Unfilled: {{ documents[p.id].unfilled|join(", ") }}</p>
+  {% endif %}
+  <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-start">
+    <form action="{{ url_for('manning.approve', period_id=p.id) }}" method="post" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn">Approve</button>
+    </form>
+    <form action="{{ url_for('manning.reject', period_id=p.id) }}" method="post" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="remarks" maxlength="300" required
+             aria-label="Reason for sending back"
+             placeholder="What needs changing (required)">
+      <button type="submit" class="btn danger">Send back</button>
+    </form>
+  </div>
+  <p class="muted">Sending back returns the period to the S3 as a draft, with your reason attached.</p>
+</section>
+{% else %}
+<section class="card">
+  <p class="muted">Nothing pending.</p>
+</section>
+{% endfor %}
+{% endblock %}

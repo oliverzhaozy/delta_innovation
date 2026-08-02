@@ -17,7 +17,15 @@
 {% block content %}
 <div class="page-head">
   <h1>TU manning — {{ period.start_date.strftime("%d %b") }} – {{ period.end_date.strftime("%d %b %Y") }}</h1>
+  <span class="badge {{ period.status.badge }}">{{ period.status.label }}</span>
 </div>
+
+{# A remark on a DRAFT period IS the rejection record — there is no REJECTED
+   status — so it stays on the page until the S3 confirms again. #}
+{% if period.status.value == "DRAFT" and period.remarks %}
+  <p class="notice">Sent back{% if period.pc_actor %} by {{ period.pc_actor.rank.value }} {{ period.pc_actor.display_name }}{% endif %}:
+    <span class="notice-remark">{{ period.remarks }}</span></p>
+{% endif %}
 
 {% if doc.unfilled %}
   <p class="flash flash-error">Unfilled: {{ doc.unfilled|join(", ") }}</p>
@@ -28,6 +36,17 @@
     <span>TU manning — {{ period.start_date.strftime("%d %b") }} – {{ period.end_date.strftime("%d %b %Y") }}</span>
     <button type="button" class="btn secondary" data-copy="#manningtext">Copy</button>
   </div>
+  {# Approval is advisory (decision (ff)): the band says what the document is
+     waiting for, Copy stays live, and the <pre> is untouched either way. #}
+  {% if period.status.value != "APPROVED" %}
+  <p class="sheet-state{% if period.status.value == "PENDING" %} is-pending{% endif %}" style="margin:0">
+    {%- if period.status.value == "PENDING" -%}
+      Pending PC approval
+    {%- else -%}
+      Draft — not sent for approval yet
+    {%- endif -%}
+  </p>
+  {% endif %}
   <pre id="manningtext" style="white-space:pre-wrap; margin:0">{{ doc.text }}</pre>
 </section>
 
@@ -35,7 +54,10 @@
    still-open positions. Changing a holder is a state edit, so the current man
    IS preselected; an open position starts on its placeholder. Conflicted people
    stay in every list, flagged — the pick list IS the replacement list, and the
-   S3 decides from one screen (there is no confirm step here, deliberately). #}
+   S3 decides from one screen (nothing here prompts for confirmation,
+   deliberately). Editing is legal at every status and never changes it: the
+   Confirm/Withdraw pair in the Manage card is the only thing that moves a
+   period through DRAFT → PENDING → APPROVED. #}
 <section class="card">
   <h2>Slots</h2>
   <ul class="toollist">
@@ -122,6 +144,17 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn">Generate</button>
     </form>
+    {% if period.status.value == "DRAFT" %}
+    <form method="post" action="{{ url_for('manning.confirm', period_id=period.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn">Confirm</button>
+    </form>
+    {% elif period.status.value == "PENDING" %}
+    <form method="post" action="{{ url_for('manning.withdraw', period_id=period.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn secondary">Withdraw</button>
+    </form>
+    {% endif %}
     <form method="post" action="{{ url_for('manning.delete', period_id=period.id) }}" class="inline-form"
           onsubmit="return confirm('Delete this manning period?')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -129,6 +162,15 @@
     </form>
   </div>
   <p class="muted">Manual picks are kept &mdash; only auto-planned slots are replaced.</p>
+  <p class="muted">
+    {%- if period.status.value == "DRAFT" -%}
+      Confirm sends this period to the PCs. You can keep editing either way.
+    {%- elif period.status.value == "PENDING" -%}
+      Waiting for a PC. Withdraw pulls it back to draft.
+    {%- else -%}
+      Approved{% if period.pc_actor %} by {{ period.pc_actor.rank.value }} {{ period.pc_actor.display_name }}{% endif %}{% if period.pc_at %} on {{ period.pc_at.strftime("%d %b %Y") }}{% endif %}.
+    {%- endif -%}
+  </p>
 </section>
 
 {# Priority: who is owed the next activation period. Display only — generation

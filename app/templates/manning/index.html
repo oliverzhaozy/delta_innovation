@@ -25,7 +25,10 @@
       <a href="{{ url_for('manning.builder', period_id=p.id) }}">
         {{ p.start_date.strftime("%d %b") }} – {{ p.end_date.strftime("%d %b %Y") }}
       </a>
-      <span class="chip plain">{{ p.slots|length }} slot(s)</span>
+      <span>
+        <span class="badge {{ p.status.badge }}">{{ p.status.label }}</span>
+        <span class="chip plain">{{ p.slots|length }} slot(s)</span>
+      </span>
     </li>
     {% endfor %}
   </ul>

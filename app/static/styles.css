@@ -811,6 +811,41 @@ table.list a:hover { text-decoration: underline; }
 .badge.approved { background: var(--accent-tint); color: var(--accent); }
 .badge.rejected { background: var(--danger-bg); color: var(--danger); }
 .badge.cancelled { background: #eef0f2; color: var(--muted); }
+/* Draft is deliberately the quietest of the four: an unfinished manning period
+   is normal, not a warning, so it must not compete with pending amber. */
+.badge.draft { background: #eef0f2; color: var(--muted); }
+
+/* A band under a document's .sheet-rule saying what the document is still
+   waiting for. It belongs to the artifact, not the page, which is why it sits
+   inside the sheet and borrows the rule's stencilled caps rather than looking
+   like a flash message. Never shown once approved — the badge carries that. */
+.sheet-state {
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--display);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #eef0f2;
+  color: var(--muted);
+}
+
+.sheet-state.is-pending { background: var(--amber-bg); color: var(--amber-ink); }
+
+/* Persistent sibling of .flash: state that stays on the page across reloads
+   (a PC's send-back remark), rather than a one-shot message. */
+.notice {
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 1rem;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+
+.notice .notice-remark { color: var(--ink); }
 
 .neg { color: var(--danger); font-weight: 700; }
 

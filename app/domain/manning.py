@@ -79,8 +79,10 @@ def render_manning(start_date, end_date, *, slots) -> ManningDoc:
     """The document text + unfilled-HQ report (docs/MANNING_FORMATS.md).
 
     `slots`: shaped rows with .slot/.det_number/.name/.phone (the service
-    formats names and owns the CONFIRMED... nothing — manning has no draft
-    state; whatever is assigned renders). Grouping is derived here: HQ block
+    formats names). Status is not an input and never will be: a period's
+    DRAFT/PENDING/APPROVED state (decision (ff)) is chrome around this text,
+    so whatever is assigned renders identically at every status. Grouping is
+    derived here: HQ block
     (TU COMD then TU PLANNER), then dets ascending by det_number, DET COMD
     line first within each det, personnel in given order. Unfilled HQ slots
     are REPORTED, never silently absent; det completeness is the S3's

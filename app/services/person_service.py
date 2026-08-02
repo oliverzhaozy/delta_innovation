@@ -62,8 +62,14 @@ def delete_person(person, *, actor):
     # Sub-selects for the two parent tables whose children must go first. Both
     # are evaluated inside the child DELETE, before the parent rows are removed.
     events_created = db.session.query(Event.id).filter(Event.created_by_id == person_id)
-    periods_created = db.session.query(ManningPeriod.id).filter(
-        ManningPeriod.created_by_id == person_id
+    # A period goes if they built it OR decided on it — the same "records they
+    # actioned on others" rule that takes leave they approved (decision (dd)).
+    doomed_periods = db.session.query(ManningPeriod.id).filter(
+        db.or_(
+            ManningPeriod.created_by_id == person_id,
+            ManningPeriod.confirmed_by_id == person_id,
+            ManningPeriod.pc_actor_id == person_id,
+        )
     )
 
     # 1. Ledger — their own rows, rows they posted for others, and rows hanging
@@ -137,10 +143,18 @@ def delete_person(person, *, actor):
         ManningSlot,
         db.or_(
             ManningSlot.person_id == person_id,
-            ManningSlot.period_id.in_(periods_created),
+            ManningSlot.period_id.in_(doomed_periods),
         ),
     )
-    _delete("manning_period", ManningPeriod, ManningPeriod.created_by_id == person_id)
+    _delete(
+        "manning_period",
+        ManningPeriod,
+        db.or_(
+            ManningPeriod.created_by_id == person_id,
+            ManningPeriod.confirmed_by_id == person_id,
+            ManningPeriod.pc_actor_id == person_id,
+        ),
+    )
 
     # 8. Overseas declarations they made or decided.
     _delete(

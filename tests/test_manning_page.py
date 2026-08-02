@@ -6,8 +6,8 @@ import re
 from datetime import date
 
 from app.domain.types import (
-    Appointment, DayPart, LeaveType, ManningSlotType, Rank, RequestStatus,
-    Service,
+    Appointment, DayPart, LeaveType, ManningSlotType, ManningStatus, Rank,
+    RequestStatus, Service,
 )
 from app.extensions import db
 from app.models import LeaveRequest, ManningPeriod, ManningSlot, Person
@@ -403,3 +403,161 @@ def test_priority_card_ranks_eligible_people_per_slot(app, client, make_person):
     assert names == ["2SG Dylan Chey", "CPL Second Operator", "CPL Ang Cheng Ze"]
     assert chips[:2] == ["never", "never"]
     assert chips[2].endswith("d ago") or chips[2].startswith("sched")
+
+
+# --- approval: the S3 confirms, a PC decides (decision (ff)) -------------------------
+
+def make_pc(make_person, username="mpc"):
+    return make_person(username=username, rank=Rank.LTA, appointment=Appointment.PC,
+                       display_name="Quek Jing Yu")
+
+
+def test_building_is_s3_only_and_approving_is_pc_only(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    client.post("/logout")
+
+    # A PS runs the duty roster; manning is not theirs to hand over.
+    login(client, "ps2")
+    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 403
+    assert client.post(f"/manning/{pid_}/withdraw", data={}).status_code == 403
+    client.post("/logout")
+
+    # A PC decides but never builds...
+    login(client, "mpc")
+    assert client.post(f"/manning/{pid_}/confirm", data={}).status_code == 403
+    assert client.post(f"/manning/{pid_}/withdraw", data={}).status_code == 403
+    client.post("/logout")
+
+    # ...and the S3 builds but never decides.
+    login(client, "s3")
+    assert client.get("/manning/queue").status_code == 403
+    assert client.post(f"/manning/{pid_}/approve", data={}).status_code == 403
+    assert client.post(
+        f"/manning/{pid_}/reject", data={"remarks": "no"}
+    ).status_code == 403
+
+
+def test_confirm_then_send_back_leaves_the_remark_on_the_s3s_builder(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    client.post(f"/manning/{pid_}/assign", data={
+        "slot": "TU_COMD", "person_id": str(pid(app, "oc")), "det_number": "",
+    }, follow_redirects=True)
+
+    html = client.get(f"/manning/{pid_}").get_data(as_text=True)
+    assert "Draft — not sent for approval yet" in html
+    assert 'data-copy="#manningtext"' in html   # approval gates nothing, Copy included
+
+    html = client.post(f"/manning/{pid_}/confirm", data={},
+                       follow_redirects=True).get_data(as_text=True)
+    assert "Sent for PC approval." in html
+    assert "Pending PC approval" in html
+    client.post("/logout")
+
+    login(client, "mpc")
+    queue = client.get("/manning/queue").get_data(as_text=True)
+    # The PC decides on the SAME document the S3 confirmed, not a summary.
+    assert "TASK UNIT (TU) MANNING FOR" in queue
+    assert "TU COMD: CPT WONG LI XUAN" in queue
+    assert "Confirmed by 2SG Dylan Chey" in queue
+    # Manning has its own badge on the Duty group; the Leave badge is untouched.
+    assert "Duty (1)" in queue
+    assert "Leave (" not in queue
+
+    client.post(f"/manning/{pid_}/reject", data={"remarks": "Det 2 is short"},
+                follow_redirects=True)
+    client.post("/logout")
+
+    login(client, "s3")
+    html = client.get(f"/manning/{pid_}").get_data(as_text=True)
+    assert "Sent back by LTA Quek Jing Yu" in html
+    assert "Det 2 is short" in html
+    assert "Draft — not sent for approval yet" in html
+
+
+def test_the_queue_holds_only_confirmed_periods(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)                              # left as a draft
+    client.post("/manning/new", data={
+        "start_date": "2026-09-01", "end_date": "2026-09-05",
+    }, follow_redirects=True)
+    with app.app_context():
+        pending = db.session.query(ManningPeriod.id).filter_by(
+            start_date=date(2026, 9, 1)).scalar()
+    client.post(f"/manning/{pending}/confirm", data={}, follow_redirects=True)
+    client.post("/logout")
+
+    login(client, "mpc")
+    html = client.get("/manning/queue").get_data(as_text=True)
+    assert "010926 - 050926" in html      # the confirmed period's document
+    assert "050726 - 130726" not in html  # the draft is nobody's work yet
+
+
+def test_approving_empties_the_queue_and_badges_the_period(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    assert '<span class="badge draft">Draft</span>' in client.get(
+        "/manning").get_data(as_text=True)
+    client.post(f"/manning/{pid_}/confirm", data={}, follow_redirects=True)
+    client.post("/logout")
+
+    login(client, "mpc")
+    html = client.post(f"/manning/{pid_}/approve", data={},
+                       follow_redirects=True).get_data(as_text=True)
+    assert "Approved." in html
+    assert "Nothing pending." in html
+    assert "Duty (" not in html           # the count goes with the work
+    client.post("/logout")
+
+    login(client, "s3")
+    assert '<span class="badge approved">Approved</span>' in client.get(
+        "/manning").get_data(as_text=True)
+    builder = client.get(f"/manning/{pid_}").get_data(as_text=True)
+    # No band on an approved document — the badge alone carries the state.
+    assert "sheet-state" not in builder
+
+
+def test_withdraw_pulls_a_confirmed_period_back_to_draft(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    client.post(f"/manning/{pid_}/confirm", data={}, follow_redirects=True)
+    html = client.post(f"/manning/{pid_}/withdraw", data={},
+                       follow_redirects=True).get_data(as_text=True)
+    assert "Withdrawn — back to draft." in html
+    assert "Draft — not sent for approval yet" in html
+    client.post("/logout")
+
+    login(client, "mpc")
+    assert "Nothing pending." in client.get("/manning/queue").get_data(as_text=True)
+
+
+def test_rejecting_without_a_remark_changes_nothing(app, client, make_person):
+    make_cast(make_person)
+    make_pc(make_person)
+    login(client, "s3")
+    create_period(client)
+    pid_ = period_id(app)
+    client.post(f"/manning/{pid_}/confirm", data={}, follow_redirects=True)
+    client.post("/logout")
+
+    login(client, "mpc")
+    html = client.post(f"/manning/{pid_}/reject", data={"remarks": "  "},
+                       follow_redirects=True).get_data(as_text=True)
+    assert "A short remark is required when rejecting." in html
+    with app.app_context():
+        assert db.session.get(ManningPeriod, pid_).status is ManningStatus.PENDING

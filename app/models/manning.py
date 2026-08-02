@@ -2,9 +2,14 @@
 are never stored (A8: derived at render from the shared fetch + overseas
 declarations); there is no manning snapshot by design (the pasted list is the
 record).
+
+`status` and its actor columns (owner decision (ff) 2026-08-02) are an approval
+TRAIL, not a snapshot: they record who confirmed the period and which PC
+approved it. The pasted list is still the record — the document is re-derived
+from the slots on every request, whatever the status says.
 """
 from app.domain.dates import now_sgt
-from app.domain.types import ManningSlotType
+from app.domain.types import ManningSlotType, ManningStatus
 from app.extensions import db
 
 
@@ -24,8 +29,23 @@ class ManningPeriod(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("person.id"), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=now_sgt)
+    status = db.Column(
+        db.Enum(ManningStatus, values_callable=_values, name="manning_status"),
+        nullable=False,
+        index=True,
+        default=ManningStatus.DRAFT,
+    )
+    confirmed_by_id = db.Column(db.Integer, db.ForeignKey("person.id"))
+    confirmed_at = db.Column(db.DateTime)
+    pc_actor_id = db.Column(db.Integer, db.ForeignKey("person.id"))
+    pc_at = db.Column(db.DateTime)
+    # The PC's remark, required when rejecting. On a DRAFT row it IS the
+    # send-back record — there is no REJECTED status to carry it.
+    remarks = db.Column(db.String(300))
 
     created_by = db.relationship("Person", foreign_keys=[created_by_id])
+    confirmed_by = db.relationship("Person", foreign_keys=[confirmed_by_id])
+    pc_actor = db.relationship("Person", foreign_keys=[pc_actor_id])
     slots = db.relationship(
         "ManningSlot", cascade="all, delete-orphan", back_populates="period",
         order_by="ManningSlot.id",

@@ -20,6 +20,7 @@ from app.domain.types import (
     LeaveType,
     LedgerSource,
     ManningSlotType,
+    ManningStatus,
     OverrideCategory,
     ParadeVariant,
     ParticipantCategory,
@@ -316,6 +317,51 @@ def test_manning_slots_are_removed_from_surviving_periods(app, make_person):
         assert [s.slot for s in period.slots] == [ManningSlotType.TU_PLANNER]
     assert counts["manning_period"] == 1
     assert counts["manning_slot"] == 2  # the leaver's slot + the doomed period's
+
+
+def test_periods_the_person_confirmed_or_approved_go_too(app, make_person):
+    # Decision (ff) meeting decision (dd): the approval trail is a record they
+    # actioned on someone else's period, so the period goes with them — the same
+    # blast radius as leave they approved.
+    make_person(username="confirmer")
+    make_person(username="builder_ps", appointment=Appointment.PS, platoon=2)
+    make_person(username="slot_holder", platoon=3)
+    with app.app_context():
+        confirmer_id = _pid("confirmer")
+        builder_id = _pid("builder_ps")
+        holder_id = _pid("slot_holder")
+        confirmed = ManningPeriod(
+            start_date=DAY, end_date=DAY, created_by_id=builder_id,
+            status=ManningStatus.PENDING, confirmed_by_id=confirmer_id,
+        )
+        approved = ManningPeriod(
+            start_date=DAY, end_date=DAY, created_by_id=builder_id,
+            status=ManningStatus.APPROVED, confirmed_by_id=builder_id,
+            pc_actor_id=confirmer_id,
+        )
+        untouched = ManningPeriod(
+            start_date=DAY, end_date=DAY, created_by_id=builder_id,
+        )
+        db.session.add_all([confirmed, approved, untouched])
+        db.session.flush()
+        # A slot belonging to a SURVIVOR, on a period that is doomed anyway.
+        db.session.add(ManningSlot(
+            period_id=confirmed.id, slot=ManningSlotType.TU_PLANNER,
+            person_id=holder_id,
+        ))
+        db.session.commit()
+        untouched_id = untouched.id
+        assert untouched.status is ManningStatus.DRAFT
+
+        counts = person_service.delete_person(
+            _person("confirmer"), actor=_person("builder_ps")
+        )
+
+    with app.app_context():
+        assert [p.id for p in db.session.query(ManningPeriod).all()] == [untouched_id]
+        assert db.session.query(ManningSlot).count() == 0
+    assert counts["manning_period"] == 2
+    assert counts["manning_slot"] == 1
 
 
 # --- the self-delete backstop -------------------------------------------------

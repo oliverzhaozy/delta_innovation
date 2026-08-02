@@ -419,3 +419,34 @@ class ManningSlotType(str, enum.Enum):
             "TU_DET_COMD": "TU Det Comd (P2IC/PS)",
             "DET_PERSONNEL": "Det Personnel (Det Comd/Opr)",
         }[self.value]
+
+
+class ManningStatus(str, enum.Enum):
+    """A manning period's approval state (owner decision (ff) 2026-08-02).
+
+    One approval step: the S3 builds a DRAFT, confirms it to PENDING, and any
+    PC approves — the OC is never in this chain, same shape as
+    DeclarationStatus. Rejection sends the period BACK to DRAFT for rework, so
+    there is deliberately no REJECTED member: the PC's `remarks` sitting on a
+    DRAFT row IS the rejection record. Approval gates nothing operationally —
+    slot edits are legal at every status and never change it."""
+
+    DRAFT = "DRAFT"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+
+    @property
+    def label(self) -> str:
+        return {
+            "DRAFT": "Draft",
+            "PENDING": "Pending PC approval",
+            "APPROVED": "Approved",
+        }[self.value]
+
+    @property
+    def badge(self) -> str:
+        return {
+            "DRAFT": "draft",
+            "PENDING": "pending",
+            "APPROVED": "approved",
+        }[self.value]

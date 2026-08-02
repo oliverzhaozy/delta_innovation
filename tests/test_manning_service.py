@@ -8,8 +8,8 @@ import pytest
 from app.domain import manning
 from app.domain.manning import ManningConflict
 from app.domain.types import (
-    Appointment, DayPart, DeclarationStatus, LeaveType, ManningSlotType, Rank,
-    RequestStatus, Service, StatusType,
+    Appointment, DayPart, DeclarationStatus, LeaveType, ManningSlotType,
+    ManningStatus, Rank, RequestStatus, Service, StatusType,
 )
 from app.extensions import db
 from app.models import (
@@ -17,6 +17,7 @@ from app.models import (
     StatusEntry,
 )
 from app.services import manning_service
+from app.services.approval_service import TransitionError
 
 START, END = date(2026, 7, 5), date(2026, 7, 13)
 
@@ -519,3 +520,161 @@ def test_open_positions_is_the_structure_minus_what_is_already_there(app, make_p
         )
         db.session.refresh(period)
         assert len(manning_service.open_positions(period)) == STRUCTURE_TOTAL - 1
+
+
+# --- approval lifecycle: DRAFT -> PENDING -> APPROVED (decision (ff)) ----------------
+
+def status_of(period_id):
+    return db.session.query(ManningPeriod.status).filter_by(id=period_id).scalar()
+
+
+def test_a_new_period_is_a_draft_and_confirm_stamps_who_sent_it(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        assert period.status is ManningStatus.DRAFT     # the model's default
+
+        manning_service.confirm_period(period, get_person("oc"))
+        row = db.session.get(ManningPeriod, period_id)
+        assert row.status is ManningStatus.PENDING
+        assert row.confirmed_by_id == pid(app, "oc")
+        assert isinstance(row.confirmed_at, datetime)
+
+
+def test_withdraw_returns_a_pending_period_to_draft(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("oc"))
+        manning_service.withdraw_period(period, get_person("oc"))
+
+        row = db.session.get(ManningPeriod, period_id)
+        assert row.status is ManningStatus.DRAFT
+        assert (row.confirmed_by_id, row.confirmed_at) == (None, None)
+
+
+def test_pc_approval_stamps_the_pc_and_ends_the_chain(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("oc"))
+        manning_service.pc_approve_period(period, get_person("pc1"))
+
+        row = db.session.get(ManningPeriod, period_id)
+        assert row.status is ManningStatus.APPROVED
+        assert row.pc_actor_id == pid(app, "pc1")
+        assert isinstance(row.pc_at, datetime)
+        assert row.remarks is None
+        # The OC is never in this chain — unlike leave, one PC ends it.
+        assert row.confirmed_by_id == pid(app, "oc")
+
+
+def test_reject_needs_a_remark_sends_it_back_and_a_reconfirm_clears_it(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("oc"))
+
+        with pytest.raises(TransitionError, match="remark is required"):
+            manning_service.pc_reject_period(period, get_person("pc1"), "   ")
+        assert status_of(period_id) is ManningStatus.PENDING
+
+        manning_service.pc_reject_period(period, get_person("pc1"), "Det 2 is short")
+        row = db.session.get(ManningPeriod, period_id)
+        assert row.status is ManningStatus.DRAFT
+        assert row.remarks == "Det 2 is short"
+        assert row.pc_actor_id == pid(app, "pc1")
+        # Who sent it survives the send-back: with the remark it IS the record
+        # of what was rejected, since there is no REJECTED status to hold it.
+        assert row.confirmed_by_id == pid(app, "oc")
+
+        manning_service.confirm_period(row, get_person("oc"))
+        row = db.session.get(ManningPeriod, period_id)
+        assert row.status is ManningStatus.PENDING
+        assert (row.remarks, row.pc_actor_id, row.pc_at) == (None, None, None)
+
+
+def test_the_second_action_on_a_period_loses_the_claim(app, make_person):
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("oc"))
+        with pytest.raises(TransitionError, match="already actioned"):
+            manning_service.confirm_period(period, get_person("oc"))
+
+        manning_service.pc_approve_period(period, get_person("pc1"))
+        with pytest.raises(TransitionError, match="already actioned"):
+            manning_service.pc_approve_period(period, get_person("pc1"))
+        with pytest.raises(TransitionError, match="already actioned"):
+            manning_service.pc_reject_period(period, get_person("pc1"), "too late")
+        assert status_of(period_id) is ManningStatus.APPROVED
+
+
+def test_the_person_who_confirmed_can_never_decide_the_period(app, make_person):
+    # Reachable in practice: a PC who also holds company_role S3 both builds
+    # and approves. Self-approval is structurally forbidden project-wide.
+    make_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("pc1"))
+
+        with pytest.raises(TransitionError, match="confirmed yourself"):
+            manning_service.pc_approve_period(period, get_person("pc1"))
+        with pytest.raises(TransitionError, match="confirmed yourself"):
+            manning_service.pc_reject_period(period, get_person("pc1"), "mine")
+        assert status_of(period_id) is ManningStatus.PENDING
+
+
+def test_slot_edits_never_move_an_approved_period(app, make_person):
+    # Decision (ff) point 2: approval is a point-in-time acknowledgement, not a
+    # lock. Every mutator must leave the status exactly where it found it.
+    make_generation_cast(make_person)
+    period_id = make_period(app)
+    with app.app_context():
+        period = db.session.get(ManningPeriod, period_id)
+        manning_service.confirm_period(period, get_person("oc"))
+        manning_service.pc_approve_period(period, get_person("pc1"))
+
+        manning_service.generate_period(period)
+        assert status_of(period_id) is ManningStatus.APPROVED
+
+        taken = {row.person_id for row in slots_of(period_id)}
+        spare = next(
+            get_person(f"opr{n}") for n in range(1, 7)
+            if pid(app, f"opr{n}") not in taken
+        )
+        det_row = next(
+            r for r in slots_of(period_id)
+            if r.slot is ManningSlotType.DET_PERSONNEL
+        )
+        manning_service.reassign_slot(period, det_row.id, spare)
+        assert status_of(period_id) is ManningStatus.APPROVED
+
+        manning_service.remove_slot(det_row.id)
+        assert status_of(period_id) is ManningStatus.APPROVED
+
+        manning_service.assign_slot(
+            period, ManningSlotType.DET_PERSONNEL, spare, det_number=1,
+        )
+        assert status_of(period_id) is ManningStatus.APPROVED
+
+
+def test_pending_periods_is_the_queue_and_the_badge(app, make_person):
+    make_cast(make_person)
+    later = make_period(app)
+    earlier = make_period_between(app, date(2026, 3, 2), date(2026, 3, 8))
+    drafted = make_period_between(app, date(2026, 9, 1), date(2026, 9, 5))
+    with app.app_context():
+        for period_id in (later, earlier):
+            manning_service.confirm_period(
+                db.session.get(ManningPeriod, period_id), get_person("oc")
+            )
+        # Soonest first, and a DRAFT period is not work for anybody.
+        assert [p.id for p in manning_service.pending_periods()] == [earlier, later]
+        assert drafted not in {p.id for p in manning_service.pending_periods()}

@@ -1,7 +1,8 @@
-"""TU manning pages (P6.4). Everything is S3/admin (`can_manage_manning`) —
-manning is the S3's working tool, like meals, not broadcast information.
-Views stay thin: manning_service owns candidates, transactions, and the
-document build; routes translate typed exceptions to 4xx/flash.
+"""TU manning pages (P6.4). Building is S3/admin (`can_manage_manning`) —
+manning is the S3's working tool, like meals, not broadcast information — and
+the approval half (decision (ff)) is PC-only, the same split the overseas
+blueprint uses. Views stay thin: manning_service owns candidates, transactions,
+and the document build; routes translate typed exceptions to 4xx/flash.
 """
 from datetime import date
 
@@ -16,6 +17,7 @@ from app.domain.types import ManningSlotType
 from app.extensions import db
 from app.models import ManningPeriod, Person
 from app.services import manning_service
+from app.services.approval_service import TransitionError
 
 
 def _get_period(period_id):
@@ -183,3 +185,71 @@ def delete(period_id):
     db.session.commit()
     flash("Period deleted.", "success")
     return redirect(url_for("manning.index"))
+
+
+# --- approval: the S3 hands over, a PC decides (decision (ff)) -----------------------
+
+@bp.route("/<int:period_id>/confirm", methods=["POST"])
+@require(policy.can_manage_manning)
+def confirm(period_id):
+    period = _get_period(period_id)
+    try:
+        manning_service.confirm_period(period, current_user)
+        flash("Sent for PC approval.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("manning.builder", period_id=period.id))
+
+
+@bp.route("/<int:period_id>/withdraw", methods=["POST"])
+@require(policy.can_manage_manning)
+def withdraw(period_id):
+    period = _get_period(period_id)
+    try:
+        manning_service.withdraw_period(period, current_user)
+        flash("Withdrawn — back to draft.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("manning.builder", period_id=period.id))
+
+
+@bp.route("/queue")
+@require(policy.can_approve_as_pc)
+def queue():
+    # Each period is rendered inline: 0–1 are pending at a time, so a separate
+    # detail page would be a click for nothing. The PC reads the SAME document
+    # build_document gives the S3 — there is no second rendering.
+    periods = manning_service.pending_periods()
+    return render_template(
+        "manning/queue.html",
+        periods=periods,
+        documents={p.id: manning_service.build_document(p) for p in periods},
+    )
+
+
+@bp.route("/<int:period_id>/approve", methods=["POST"])
+@require(policy.can_approve_as_pc)
+def approve(period_id):
+    period = _get_period(period_id)
+    try:
+        manning_service.pc_approve_period(period, current_user)
+        flash("Approved.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("manning.queue"))
+
+
+@bp.route("/<int:period_id>/reject", methods=["POST"])
+@require(policy.can_approve_as_pc)
+def reject(period_id):
+    period = _get_period(period_id)
+    remark = (request.form.get("remarks") or "").strip()
+    if not remark:
+        flash("A short remark is required when rejecting.", "error")
+        return redirect(url_for("manning.queue"))
+    try:
+        manning_service.pc_reject_period(period, current_user, remark)
+        flash("Sent back to the S3.", "success")
+    except TransitionError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("manning.queue"))
