@@ -5,6 +5,7 @@ from flask import abort, redirect, session, url_for
 from flask_login import current_user, login_user
 
 from app.blueprints.dev import bp
+from app.domain import policy
 from app.domain.parade import parade_sort_key
 from app.extensions import db
 from app.models import Person
@@ -14,14 +15,16 @@ from app.services import event_service
 def _profile_key(person):
     # What testing cares about is the permission profile, not the individual:
     # appointment plus the orthogonal S3/S4 and admin grants. Names are noise.
-    return (person.appointment, person.company_role, person.is_admin)
+    # Admin is the EFFECTIVE grant (policy.is_admin): command team is admin by
+    # appointment, so their stored flag doesn't make a distinct profile.
+    return (person.appointment, person.company_role, policy.is_admin(person))
 
 
 def _profile_label(person):
     extras = []
     if person.company_role is not None:
         extras.append(person.company_role.value)
-    if person.is_admin:
+    if policy.is_admin(person) and not policy.is_command_team(person):
         extras.append("admin")
     label = person.appointment.label
     return f"{label} ({', '.join(extras)})" if extras else label

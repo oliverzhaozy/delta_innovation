@@ -2,6 +2,7 @@
 import pytest
 
 from app import create_app
+from app.domain.types import Appointment, Rank
 from app.extensions import db
 from app.models import Person
 from config import ProdConfig, TestConfig
@@ -108,3 +109,15 @@ def test_dropdown_lists_profiles_not_names(client, make_person):
     assert ">Opr (admin)</button>" in html
     # Nobody holds PC, so that profile has no representative at all.
     assert ">PC</button>" not in html
+
+
+def test_dropdown_collapses_command_team_admin_variants(client, make_person):
+    # Command team is admin by appointment (policy.is_admin), so the stored
+    # flag is not a distinct profile: one PS entry, never "PS (admin)".
+    make_person(username="ps_plain", rank=Rank.SSG, appointment=Appointment.PS)
+    make_person(username="ps_flagged", rank=Rank.SSG, appointment=Appointment.PS, platoon=2, is_admin=True)
+    make_person(username="opr_admin", is_admin=True)  # non-command-team keeps the suffix
+    html = client.get("/login").data.decode()
+    assert html.count(">PS</button>") == 1
+    assert "PS (admin)" not in html
+    assert ">Opr (admin)</button>" in html
