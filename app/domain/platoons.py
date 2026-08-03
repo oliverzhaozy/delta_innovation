@@ -19,7 +19,7 @@ from app.domain.types import Appointment, PlatoonCategory
 # vocabulary — a shared constant there would couple two unrelated rules).
 PS_AND_BELOW = frozenset({Appointment.PS, Appointment.DET_COMD, Appointment.OPR})
 
-CategorySection = namedtuple("CategorySection", "category platoon in_cos_pool people")
+CategorySection = namedtuple("CategorySection", "category platoon people")
 PlatoonGroup = namedtuple("PlatoonGroup", "platoon people")
 Grouping = namedtuple("Grouping", "command sections uncategorised no_platoon")
 
@@ -72,7 +72,6 @@ def group_people(people, rows) -> Grouping:
             CategorySection(
                 category=category,
                 platoon=platoon,
-                in_cos_pool=row.in_cos_pool if row is not None else True,
                 people=list(per_platoon.get(platoon, ())) if platoon is not None else [],
             )
         )

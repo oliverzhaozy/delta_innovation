@@ -51,17 +51,6 @@ def _month_bounds(year, month):
     return start, end_exclusive
 
 
-def _dedupe_by_person(rows):
-    seen = set()
-    out = []
-    for row in rows:
-        if row.person_id in seen:
-            continue
-        seen.add(row.person_id)
-        out.append(row)
-    return out
-
-
 def _cal_key(event):
     """The client-side layer-toggle key an event's chip, its "+N" contribution
     and its panel entry all share — one owner, so a badge count can never
@@ -273,7 +262,10 @@ def build_month_context(user, ym_raw):
     off_leave_by_day = presence_service.nsf_leave_between(month_start, month_end_inclusive)
     # Deduped ONCE: the bars' runs and the panel's lines are the same people in
     # the same order, so neither can show a person the other drops.
-    off_by_day = {day: _dedupe_by_person(rows) for day, rows in off_leave_by_day.items()}
+    off_by_day = {
+        day: presence_service.dedupe_by_person(rows)
+        for day, rows in off_leave_by_day.items()
+    }
     off_runs = [
         (run.row, run.start, run.end) for run in monthgrid.merge_off_runs(off_by_day)
     ]

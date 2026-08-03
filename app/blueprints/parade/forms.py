@@ -1,11 +1,12 @@
 from flask_wtf import FlaskForm
 from wtforms import DateField, SelectMultipleField, StringField
-from wtforms.validators import DataRequired, Length, Optional, ValidationError
+from wtforms.validators import DataRequired, Length, Optional
 
+from app.blueprints.forms_shared import EndDateOrderMixin
 from app.domain.types import ParticipantCategory
 
 
-class McDeclarationForm(FlaskForm):
+class McDeclarationForm(EndDateOrderMixin, FlaskForm):
     """Self-declared MC (owner decision 2026-07-31): dates and an optional
     remark, nothing else. Who it is for is `current_user` in the route, and
     type/day part/in camp are fixed (MC / FULL / out of camp) — a form field
@@ -15,10 +16,6 @@ class McDeclarationForm(FlaskForm):
     start_date = DateField("From", validators=[DataRequired()])
     end_date = DateField("To", validators=[DataRequired()])
     remarks = StringField("Remarks (optional)", validators=[Optional(), Length(max=300)])
-
-    def validate_end_date(self, field):
-        if self.start_date.data and field.data and field.data < self.start_date.data:
-            raise ValidationError("End date is before start date.")
 
 
 class FpBulkAddForm(FlaskForm):

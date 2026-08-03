@@ -88,7 +88,7 @@ def test_opr_declares_and_it_appears_in_mine_and_s3_upcoming(app, client, make_p
         (Appointment.OC, DeclarationStatus.APPROVED),
     ],
 )
-def test_initial_status_by_appointment(app, client, make_person, appointment, expected):
+def test_initial_overseas_status_by_appointment(app, client, make_person, appointment, expected):
     username = f"ovs_init_{appointment.value.lower()}"
     login(client, make_person(username=username, appointment=appointment))
     resp = declare(client, destination="Taiwan")

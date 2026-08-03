@@ -91,7 +91,6 @@ def builder(period_id):
         priority=manning_service.slot_priority(last_done),
         last_done=last_done,
         today=today_sgt(),
-        next_det=(max(det_numbers) + 1) if det_numbers else 1,
         ManningSlotType=ManningSlotType,
     )
 

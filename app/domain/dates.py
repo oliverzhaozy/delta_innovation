@@ -87,3 +87,13 @@ def format_ddmmyy_range(start: date, end: date) -> str:
     if start == end:
         return format_ddmmyy(start)
     return f"{format_ddmmyy(start)} - {format_ddmmyy(end)}"
+
+
+def range_label(start: date, end: date, fmt: str = "%d %b") -> str:
+    # The ONE owner of an on-screen date range (leave/overseas labels, manning
+    # conflict reasons, the parade conflict panel): same collapse rule as
+    # format_ddmmyy_range above, but the separator is an EN DASH — the plain
+    # hyphen there belongs to the generated WhatsApp documents, not the pages.
+    if start == end:
+        return start.strftime(fmt)
+    return f"{start.strftime(fmt)} – {end.strftime(fmt)}"

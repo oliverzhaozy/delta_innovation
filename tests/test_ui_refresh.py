@@ -2,7 +2,6 @@
 row, the grouped nav's rights-gating, and dashboard link integrity."""
 import re
 
-from app.domain.types import Appointment, Rank
 from tests.conftest import login
 
 

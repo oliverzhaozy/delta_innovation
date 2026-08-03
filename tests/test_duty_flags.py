@@ -23,11 +23,6 @@ THU = date(2026, 8, 6)
 AUG = "2026-08"
 
 
-def pid(app, username):
-    with app.app_context():
-        return db.session.query(Person.id).filter_by(username=username).scalar()
-
-
 def make_cast(make_person):
     """Requester Opr + their PC (platoon 1) + the OC."""
     make_person(username="opr1", rank=Rank.THREE_SG, appointment=Appointment.OPR)

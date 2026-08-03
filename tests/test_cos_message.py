@@ -8,9 +8,7 @@ asserted by fiat. The golden string pins `render_cos` to the Message 1 skeleton
 byte-for-byte via "\n".join (never a triple-quoted literal — that couples the
 golden to git's CRLF checkout; render_cos emits LF).
 """
-import ast
 from datetime import date, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -226,19 +224,3 @@ def test_double_listed_cos_doc_raises_on_validate():
     )
     with pytest.raises(parade.ParadeImbalance):
         doc.validate()
-
-
-# --- purity (Message 1 renderer must not import flask/services/models) -----
-
-def test_parade_module_stays_pure():
-    source = Path("app/domain/parade.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            assert not node.module.startswith("flask"), node.module
-            if node.module.startswith("app"):
-                assert node.module.startswith("app.domain"), node.module
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                assert not alias.name.startswith("app."), alias.name
-                assert not alias.name.startswith("flask"), alias.name

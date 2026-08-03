@@ -15,11 +15,6 @@ from app.models import LeaveRequest, Person
 from app.services import ledger_service
 
 
-def person_id_of(app, username):
-    with app.app_context():
-        return db.session.query(Person.id).filter_by(username=username).scalar()
-
-
 def test_balance_is_sum_of_entries(app, make_person):
     make_person(username="bal1")
     with app.app_context():

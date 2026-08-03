@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from app.authz import require
 from app.blueprints.calendar import bp
 from app.blueprints.calendar.forms import EventForm
+from app.blueprints.forms_shared import set_people_choices
 from app.domain import events, policy
 from app.domain.types import ArcticLabel, Calendar, ParticipantCategory, TpLabel
 from app.extensions import db
@@ -24,17 +25,6 @@ def _events_for(calendar):
 
 def _list_endpoint(calendar):
     return "calendar.arctic_list" if calendar is Calendar.ARCTIC else "calendar.tp_list"
-
-
-def _set_people_choices(form):
-    # Request-time roster, not class-level — who's active/what platoon
-    # changes day to day, unlike the fixed category choices. Only sets the
-    # `people` choices so SelectMultipleField.pre_validate accepts the ids the
-    # grouped dropdowns render (an inactive/unknown id fails as a clean field
-    # error rather than reaching the DB).
-    form.people.choices = [
-        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
-    ]
 
 
 def _participant_rows_from(form):
@@ -162,7 +152,7 @@ def detail(event_id):
 @require(policy.can_edit_events)
 def new():
     form = EventForm()
-    _set_people_choices(form)
+    set_people_choices(form)
     _set_label_choices(form)
     if request.method == "GET":
         _prefill_date(form, request.args.get("date"))
@@ -199,7 +189,7 @@ def new():
 def edit(event_id):
     event = db.session.get(Event, event_id) or abort(404)
     form = EventForm(obj=event)
-    _set_people_choices(form)
+    set_people_choices(form)
     _set_label_choices(form)
     if not form.is_submitted():
         # obj= fills the calendar SelectField with the enum instance; it

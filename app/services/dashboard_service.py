@@ -52,20 +52,6 @@ Dashboard = namedtuple(
 Today = namedtuple("Today", "date cos cdos away my_leave my_pending my_next_duty")
 
 
-def _dedupe_by_person(rows):
-    """One line per person, first occurrence kept — the away strip counts
-    PEOPLE, not rows, and the service already returns parade order, so keeping
-    the first preserves it."""
-    seen = set()
-    kept = []
-    for row in rows:
-        if row.person_id in seen:
-            continue
-        seen.add(row.person_id)
-        kept.append(row)
-    return kept
-
-
 def _my_requests(user):
     """(approved, pending) of this person's live requests from ONE fetch.
 
@@ -133,7 +119,7 @@ def build_dashboard(user) -> Dashboard:
         date=today,
         cos=duty_service.cos_of_day(today),
         cdos=duty_service.cdos_of_day(today),
-        away=_dedupe_by_person(presence_service.absences_on(today)),
+        away=presence_service.dedupe_by_person(presence_service.absences_on(today)),
         my_leave=my_leave,
         my_pending=my_pending,
         my_next_duty=rows[0] if rows else None,

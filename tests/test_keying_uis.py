@@ -20,14 +20,12 @@ from app.domain.types import (
     Appointment,
     CompanyRole,
     DayPart,
-    ParadeVariant,
     Rank,
     Service,
     StatusType,
 )
 from app.extensions import db
 from app.models import Person, StatusEntry
-from app.services import parade_service
 from tests.conftest import login
 
 TODAY = today_sgt()
@@ -191,7 +189,7 @@ def test_opr_can_reach_every_mc_url(app, client, make_person):
         assert client.get(url).status_code == 200, url
 
 
-def test_editing_or_ending_someone_elses_mc_is_403(app, client, make_person):
+def test_editing_someone_elses_mc_is_403(app, client, make_person):
     # FABLE-BEHAVIOR's object-level rule: being logged in proves who they are,
     # never that THIS row is theirs.
     make_person(username="c2b_owner", display_name="Row Owner")
@@ -203,7 +201,6 @@ def test_editing_or_ending_someone_elses_mc_is_403(app, client, make_person):
     assert client.post(f"/parade/mc/{entry_id}/edit", data={
         "start_date": TODAY.isoformat(), "end_date": TODAY.isoformat(), "remarks": "",
     }).status_code == 403
-    assert client.post(f"/parade/mc/{entry_id}/end-today").status_code == 403
 
     with app.app_context():
         row = db.session.get(StatusEntry, entry_id)
@@ -219,7 +216,6 @@ def test_fp_quick_add_rows_are_not_addressable_as_mc(app, client, make_person):
     login(client, "c2c_opr")
 
     assert client.get(f"/parade/mc/{entry_id}/edit").status_code == 404
-    assert client.post(f"/parade/mc/{entry_id}/end-today").status_code == 404
 
 
 def test_list_shows_everyones_mcs_but_no_fp_other_rows(app, client, make_person):
@@ -233,9 +229,8 @@ def test_list_shows_everyones_mcs_but_no_fp_other_rows(app, client, make_person)
     body = client.get("/parade/mc").get_data(as_text=True)
     assert "Sick Guy" in body          # someone else's MC is visible
     assert "Fp Guy" not in body        # an FP quick-add row is not an MC
-    # The viewer owns neither row, so neither carries an edit link or an
-    # end-today button — the template offers only what the routes would allow.
-    assert "/end-today" not in body
+    # The viewer owns neither row, so neither carries an edit link — the
+    # template offers only what the routes would allow.
     assert "/edit" not in body
 
 
@@ -293,51 +288,6 @@ def test_owner_edits_own_mc_dates(app, client, make_person):
         assert row.type is StatusType.MC
         assert row.day_part is DayPart.FULL
         assert row.in_camp is False
-
-
-# --- criterion 5: end-today ------------------------------------------------
-
-def test_end_today_ends_ongoing_mc_stays_today_gone_tomorrow(app, client, make_person):
-    make_person(username="c5_mc", display_name="Ongoing Mc")
-    entry_id = plant_status(app, "c5_mc", type_=StatusType.MC, start=YESTERDAY,
-                             end=TODAY + timedelta(days=5), in_camp=False)
-    login(client, "c5_mc")
-
-    resp = client.post(f"/parade/mc/{entry_id}/end-today", follow_redirects=True)
-    assert resp.status_code == 200
-
-    with app.app_context():
-        row = db.session.get(StatusEntry, entry_id)
-        assert row.end_date == TODAY
-
-    today_absent = client.get("/parade/morning").data.split(b"NOT PRESENT IN CAMP")[1]
-    assert b"PTE ONGOING MC" in today_absent  # still absent (MC) today
-
-    # The live page is today-only now, so tomorrow's derivation is asserted
-    # through the same build_doc pipeline the page renders (page↔pipeline
-    # equality is pinned by test_doc_builder). Gone tomorrow — back present.
-    with app.app_context():
-        tomorrow_absent = parade_service.build_doc(
-            TOMORROW, ParadeVariant.MORNING
-        ).text.split("NOT PRESENT IN CAMP")[1]
-    assert "PTE ONGOING MC" not in tomorrow_absent
-
-
-def test_end_today_on_future_entry_errors_and_leaves_unchanged(app, client, make_person):
-    make_person(username="c5b_future")
-    future_start, future_end = TOMORROW, TOMORROW + timedelta(days=3)
-    entry_id = plant_status(app, "c5b_future", type_=StatusType.MC, start=future_start,
-                             end=future_end, in_camp=False)
-    login(client, "c5b_future")
-
-    resp = client.post(f"/parade/mc/{entry_id}/end-today", follow_redirects=True)
-    assert resp.status_code == 200
-    assert b"only entries covering today" in resp.data.lower()
-
-    with app.app_context():
-        row = db.session.get(StatusEntry, entry_id)
-        assert row.start_date == future_start
-        assert row.end_date == future_end
 
 
 # --- criterion 6: remarks are optional --------------------------------------

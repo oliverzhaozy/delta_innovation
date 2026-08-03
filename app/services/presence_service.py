@@ -54,6 +54,20 @@ class AbsenceRow:
     remarks: object = None
 
 
+def dedupe_by_person(rows):
+    """One row per person, first occurrence kept — the away surfaces count
+    PEOPLE, not rows, and every fetch here already returns parade order, so
+    keeping the first preserves it."""
+    seen = set()
+    kept = []
+    for row in rows:
+        if row.person_id in seen:
+            continue
+        seen.add(row.person_id)
+        kept.append(row)
+    return kept
+
+
 # A course absence has no table: this adapter gives a TP course event × one of its
 # participants the same duck-typed shape every other absence row has, so the pure
 # engine and _absence_row need no course-specific branch beyond the kind marker.

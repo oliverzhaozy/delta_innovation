@@ -13,6 +13,7 @@ conflict (an MC or a course from the TP calendar).
 import enum
 from collections import defaultdict, namedtuple
 
+from app.domain.dates import range_label
 from app.domain.eligibility import TU_SLOT_APPOINTMENTS
 from app.domain.types import DeclarationStatus, ManningSlotType
 
@@ -30,12 +31,6 @@ def slot_eligible(slot, person) -> bool:
     return person.appointment in TU_SLOT_APPOINTMENTS[slot.value]
 
 
-def _range_label(start, end) -> str:
-    if start == end:
-        return start.strftime("%d %b")
-    return f"{start.strftime('%d %b')} – {end.strftime('%d %b')}"
-
-
 def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
     """(ManningConflict, reasons) for one person over [start_date, end_date].
 
@@ -49,7 +44,7 @@ def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
     reasons = []
     for row in absence_rows:
         if row.start_date <= end_date and row.end_date >= start_date:
-            reasons.append(f"{row.label} {_range_label(row.start_date, row.end_date)}")
+            reasons.append(f"{row.label} {range_label(row.start_date, row.end_date)}")
     for row in overseas_rows:
         if (
             row.status is not DeclarationStatus.REJECTED
@@ -57,7 +52,7 @@ def conflict_check(start_date, end_date, *, absence_rows=(), overseas_rows=()):
             and row.end_date >= start_date
         ):
             reasons.append(
-                f"Overseas ({row.destination}) {_range_label(row.start_date, row.end_date)}"
+                f"Overseas ({row.destination}) {range_label(row.start_date, row.end_date)}"
             )
     status = ManningConflict.CONFLICT if reasons else ManningConflict.NO_KNOWN_CONFLICT
     return status, tuple(reasons)

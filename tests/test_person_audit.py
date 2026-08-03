@@ -4,7 +4,7 @@ Append-only, one row per changed field per save, written in the same
 transaction as the person edit. The Done criterion (an appointment change
 appears in the view) is asserted on the /admin/audit response bytes.
 """
-from app.domain.types import Appointment, CompanyRole, Rank, Service
+from app.domain.types import Appointment, Rank
 from app.extensions import db
 from app.models import Person, PersonAudit
 from tests.conftest import login

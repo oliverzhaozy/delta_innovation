@@ -98,7 +98,6 @@ def test_sections_are_all_four_categories_in_enum_order():
     groups = group_people(ROSTER, DEFAULT_ROWS)
     assert [s.category for s in groups.sections] == list(PlatoonCategory)
     assert [s.platoon for s in groups.sections] == [2, 3, 1, None]
-    assert [s.in_cos_pool for s in groups.sections] == [False, True, True, True]
     assert [usernames(s.people) for s in groups.sections] == [
         ["ps2", "det2"],   # STC = platoon 2, minus the P2IC (command)
         ["opr3"],          # Senior = platoon 3

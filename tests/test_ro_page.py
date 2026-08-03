@@ -5,9 +5,9 @@ were removed 2026-07-24 (key events derive from the TP calendar).
 from datetime import date, datetime
 
 from app.domain.dates import next_weekday, today_sgt
-from app.domain.types import Appointment, Calendar, Rank, RoSection, Service
+from app.domain.types import Appointment, Calendar, Rank, RoSection
 from app.extensions import db
-from app.models import Event, Person, RoDocument, RoExtraItem
+from app.models import Event, Person, RoExtraItem
 from tests.conftest import login
 
 THU = date(2026, 6, 18)

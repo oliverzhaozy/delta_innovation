@@ -1,4 +1,4 @@
-from app.domain.dates import now_sgt
+from app.domain.dates import now_sgt, range_label
 from app.domain.types import DayPart, LeaveType, RequestStatus
 from app.extensions import db
 
@@ -55,7 +55,7 @@ class LeaveRequest(db.Model):
         if self.start_date == self.end_date:
             day = self.start_date.strftime("%a %d %b")
             return day if self.day_part is DayPart.FULL else f"{day} ({self.day_part.value})"
-        return f"{self.start_date.strftime('%d %b')} – {self.end_date.strftime('%d %b')}"
+        return range_label(self.start_date, self.end_date)
 
     @property
     def rejected_by(self):

@@ -1,4 +1,4 @@
-from app.domain.dates import now_sgt
+from app.domain.dates import now_sgt, range_label
 from app.domain.types import DeclarationStatus
 from app.extensions import db
 
@@ -33,7 +33,10 @@ class OverseasDeclaration(db.Model):
     )
     pc_actor_id = db.Column(db.Integer, db.ForeignKey("person.id"))
     pc_at = db.Column(db.DateTime)
-    remarks = db.Column(db.String(300))  # PC's remark, required when rejecting
+    # Legacy display only: rejection carries no remark since 2026-08-02 (owner
+    # reversal of part of decision (y)), so nothing writes this column any more —
+    # it is kept so rows keyed before that date still render their reason.
+    remarks = db.Column(db.String(300))
 
     person = db.relationship("Person", foreign_keys=[person_id])
     pc_actor = db.relationship("Person", foreign_keys=[pc_actor_id])
@@ -46,7 +49,7 @@ class OverseasDeclaration(db.Model):
     def when_label(self) -> str:
         if self.start_date == self.end_date:
             return self.start_date.strftime("%a %d %b")
-        return f"{self.start_date.strftime('%d %b')} – {self.end_date.strftime('%d %b')}"
+        return range_label(self.start_date, self.end_date)
 
     def __repr__(self):
         return f"<OverseasDeclaration {self.id} p{self.person_id} {self.destination}>"

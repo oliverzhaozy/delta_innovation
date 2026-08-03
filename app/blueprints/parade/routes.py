@@ -4,10 +4,11 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.authz import require
+from app.blueprints.forms_shared import set_people_choices
 from app.blueprints.parade import bp
 from app.blueprints.parade.forms import FpBulkAddForm, McDeclarationForm
 from app.domain import participants, presence
-from app.domain.dates import today_sgt
+from app.domain.dates import range_label, today_sgt
 from app.domain.parade import parade_line, parade_sort_key, sheet_sections
 from app.domain.types import (
     ALLOWED_OVERRIDE_TARGETS,
@@ -54,15 +55,6 @@ def _variant_redirect(variant, cos_name=None):
     )
 
 
-def _set_fp_people_choices(form):
-    # Request-time roster, not class-level, same reasoning as calendar's
-    # _set_people_choices: the picker's person checkboxes must validate against
-    # today's roster, so an unknown id fails as a clean field error, never a write.
-    form.people.choices = [
-        (p.id, f"{p.rank.value} {p.display_name}") for p in event_service.active_roster()
-    ]
-
-
 COS_DISPLAY_MAX = 60
 
 
@@ -89,10 +81,7 @@ def _row_label(row) -> str:
 
 
 def _row_range(row) -> str:
-    start = row.start_date.strftime("%d %b")
-    if row.end_date == row.start_date:
-        return start
-    return f"{start} – {row.end_date.strftime('%d %b')}"
+    return range_label(row.start_date, row.end_date)
 
 
 def _conflict_lines(pairs):
@@ -184,7 +173,7 @@ def morning():
     command_ids = frozenset()
     if can_key:
         fp_form = FpBulkAddForm()
-        _set_fp_people_choices(fp_form)
+        set_people_choices(fp_form)
         fp_rows = _fp_rows(day)
         picker_groups = event_service.picker_groups()
         command_ids = event_service.command_person_ids()
@@ -214,7 +203,7 @@ def morning():
 def morning_fp_new():
     day = today_sgt()
     form = FpBulkAddForm()
-    _set_fp_people_choices(form)
+    set_people_choices(form)
     if not form.validate_on_submit():
         flash("Could not add — check the selection and reason.", "error")
         return redirect(url_for("parade.morning"))
@@ -454,7 +443,7 @@ def mc_list():
     # Parade order major so a person's entries sit together where a reader
     # expects to find them; their own rows stay chronological beneath.
     rows.sort(key=lambda row: (parade_sort_key(row.person), row.start_date, row.id))
-    return render_template("parade/mc_list.html", rows=rows, today=today)
+    return render_template("parade/mc_list.html", rows=rows)
 
 
 @bp.route("/mc/new", methods=["GET", "POST"])
@@ -492,19 +481,3 @@ def mc_edit(entry_id):
         flash("Saved.", "success")
         return redirect(url_for("parade.mc_list"))
     return render_template("parade/mc_form.html", form=form, row=row)
-
-
-@bp.route("/mc/<int:entry_id>/end-today", methods=["POST"])
-@login_required
-def mc_end_today(entry_id):
-    row = _own_mc(entry_id)
-    today = today_sgt()
-    if not (row.start_date <= today <= row.end_date):
-        # Decision (e): an entry is added, ended or overridden, never re-keyed —
-        # a future entry isn't "ending today", it hasn't started being true yet.
-        flash("Only entries covering today can be ended today.", "error")
-        return redirect(url_for("parade.mc_list"))
-    row.end_date = today
-    db.session.commit()
-    flash("Ended today — it will no longer cover tomorrow.", "success")
-    return redirect(url_for("parade.mc_list"))

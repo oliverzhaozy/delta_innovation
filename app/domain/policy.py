@@ -64,10 +64,6 @@ def can_manage_roster(person) -> bool:
     return person.appointment is Appointment.PS or is_admin(person)
 
 
-def can_admin_accounts(person) -> bool:
-    return is_admin(person)
-
-
 def can_impersonate(person) -> bool:
     # "View as" is READ-ONLY (the write block lives in the admin blueprint):
     # approval authority comes from appointment, never from admin, so an

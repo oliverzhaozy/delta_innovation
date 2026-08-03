@@ -70,7 +70,6 @@ def test_roster_is_ps_or_admin_territory():
 
 def test_admin_flag_unlocks_admin_and_s3_pages_but_not_approval():
     admin = person(Appointment.OPR, is_admin=True)
-    assert policy.can_admin_accounts(admin)
     assert policy.can_manage_ledger(admin)
     # Approval authority comes from appointment, never from the admin flag.
     assert not policy.can_final_approve(admin)
