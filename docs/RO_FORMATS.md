@@ -161,9 +161,10 @@ Fri - IPPT, Ranging Ops Order, Site Testing
   blob** (its internal quote/attribution structure is not parsed). Weekly:
   Key events (Mon–Fri, spellings `Mon/Tues/Wed/Thurs/Fri`), covering the week
   containing the RO's date; no separator line between the messages blob and
-  the key-events block. Duty Personnel is derived (CONFIRMED rows dated the
-  RO's date — A9; a missing duty renders an explicit placeholder, never a
-  silent blank).
+  the key-events block. Duty Personnel is derived (assigned rows dated the
+  RO's date — A9, read as decision (x) 2026-07-27 leaves it: rows are live on
+  write, so there is no CONFIRMED state to filter on; a date with no duty row
+  renders an explicit placeholder, never a silent blank).
 
 ## Revision 2026-07-24 — standing items removed, key events derived (A11)
 

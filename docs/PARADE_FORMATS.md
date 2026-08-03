@@ -32,7 +32,9 @@
 Key rules:
 - Does **not** include all personnel. NSFs without pre-reported statuses are omitted from the initial text.
 - All Regulars are automatically populated into the STAY OUT category as a default unless they have an active,
-  overriding status.
+  overriding status. **(Owner decision, 2026-07-31: the `stay_out` flag is now the sole source of this category.
+  Regulars ship with the flag ticked, so the default is unchanged in practice — but a regular whose flag is
+  unticked is omitted from this message like any present NSF, rather than forced into STAY OUT by service.)**
 - Inherit ongoing statuses (LEAVE, OFF, OIL, ON COURSE, MC) from the previous state only if their date range covers
   the next duty day.
 - Temporary statuses like OTHERS IN CAMP from the previous day are dropped and not copied over.
@@ -187,12 +189,16 @@ OTHERS ([J]):
 
 ## Derived mappings (how app data feeds the categories)
 
-- **STAY OUT** = `stay_out` flag OR service = REGULAR (regulars default to stay-out unless an absence/status overrides).
-- **LEAVE** = approved leave of type LL/OL + direct absences of type LEAVE (regulars). **OFF/OIL** = approved OFF/OIL leave.
-- **ON COURSE** = status COURSE. **MC** = status MC.
-- **OTHERS** (not present) = out-of-camp statuses (SITE_TESTING/OTHER, and BRIEFING when keyed out-of-camp) + direct
-  absences of type OTHER.
-- **OTHERS IN CAMP** = in-camp statuses (e.g. briefing, "not joining FP" entries) — morning parade only; roll call
+- **STAY OUT** = the `stay_out` flag alone (owner decision, 2026-07-31: service = REGULAR no longer forces it —
+  regulars ship flagged in the seed data, and a regular whose box is unticked parades PRESENT like anyone else).
+- **LEAVE** = approved leave of type LL/OL. **OFF/OIL** = approved OFF/OIL leave. (The direct-absence contribution
+  went with the `direct_absence` table on 2026-07-26 — regulars' off/leave lives in ARCTIC FOE, not in this app.)
+- **ON COURSE** = a TP calendar event labelled `Course` covering the date (owner decision, 2026-07-26: `StatusType`
+  has no COURSE member — the event is the sole source, and every DATE it covers counts, clock times ignored).
+  **MC** = status MC.
+- **OTHERS** (not present) = out-of-camp statuses, i.e. a status of type OTHER keyed out of camp (2026-07-26:
+  StatusType is MC/OTHER only — BRIEFING and SITE_TESTING were folded into OTHER, and direct absences are gone).
+- **OTHERS IN CAMP** = in-camp statuses (e.g. a briefing, "not joining FP" entries) — morning parade only; roll call
   shows `(0)`.
 - **Absent-line dates** = the winning absence row's own `start_date`/`end_date`, so the line reports when the person
   is back — never the date of the document they appear on.

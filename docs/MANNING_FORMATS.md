@@ -69,9 +69,14 @@ DET PERSONNEL: LCP SAMUEL LIM
 - **(q) Phone numbers ARE stored (owner decision 2026-07-07, revising the
   data-minimization rule):** `Person.phone` is an optional S3-keyed field
   ("9190 9702" free text); the document renders `(<phone>)` under each name,
-  and `( )` as the fill-in-WhatsApp placeholder when no phone is keyed. The
-  sanitized demo roster (`seed/demo_people.csv`) never carries real numbers.
-  CLAUDE.md's data-sensitivity rule is amended accordingly.
+  and `( )` as the fill-in-WhatsApp placeholder when no phone is keyed.
+  CLAUDE.md's data-sensitivity rule is amended accordingly: the number stays
+  OPTIONAL, S3-keyed, and used by this document alone — nothing else reads it.
+  `[REVISED 2026-08-02 by decision (gg)]` This decision originally added that
+  the sanitized demo roster never carried real numbers; that roster is gone
+  (`seed/demo_people.csv` deleted) — the public instance runs the real roster
+  from `seed/people.csv`, so real numbers do reach the host, and the
+  optional-and-single-purpose rule above is what keeps the field minimal.
 - **(r) Period naming:** periods are date-ranged in the document; the model
   keeps an OPTIONAL name for the S3's period list only — it never renders.
   `[SUPERSEDED 2026-07-28 by TECH_PLAN decision (aa): periods are date-ranged

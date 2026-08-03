@@ -1,3 +1,5 @@
+> **Frozen 2026-07-05.** This is the original product spec, kept as the problem statement the app was built against — not a description of the app as built. Where it and the current code disagree, `CLAUDE.md` and `docs/TECH_PLAN.md` win; their dated decisions supersede anything here. Two examples of the drift: `is_active` no longer exists (post-out hard-deletes the person and everything referencing them, decision (dd) 2026-07-30), and the deployed instance at coyadmin.duckdns.org runs the real roster (decision (gg) 2026-08-02). Nothing below has been edited.
+
 ## Context
 
 - A Singapore military company (here, **Delta**) is made up of NSFs (conscripts) and regulars.

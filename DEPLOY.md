@@ -7,15 +7,18 @@ Debian 12, 30 GB pd-standard) in project `coyadmin-app`.
 project, so the instance now runs the **real roster**, its DB seeded from a
 copy of the dev DB so the host is a 1-to-1 replica (people plus leave,
 ledger, statuses, duties, manning and overrides). The tarball is still a
-**whitelist**: it ships `seed/people.csv` in place of `seed/demo_people.csv`
-and nothing else changed. Git stays off the VM.
+**whitelist**: it ships `seed/people.csv`, the sanitized demo roster is gone
+from the repo, and nothing else changed. Git stays off the VM.
 
 Two things this revision does NOT change, both load-bearing now that real
 data is live: `.flaskenv` stays out of the tarball (its `FLASK_DEBUG=1`
 trips ProdConfig's refuse-to-boot guard), and **`DEV_LOGIN_SWITCHER` stays
 off** — `/dev/switch/<id>` has no `@login_required` by design, so enabling it
 here would let any visitor log in as anyone. `ProdConfig.validate` refuses to
-boot on either; do not relax those checks.
+boot on either; do not relax those checks. The supported way to see the app
+as someone else on this host is decision (hh)'s admin-gated, **read-only**
+"View as" (`/admin/people/<id>/view-as`): every non-GET is refused while the
+impersonation marker is set, so it can never forge a decision.
 
 ## Topology
 

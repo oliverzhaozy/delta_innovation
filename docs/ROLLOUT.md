@@ -5,9 +5,15 @@ earns trust in the first two weeks or never — hence the parallel run.
 
 ## Before go-live
 
-1. **Real roster.** Replace `seed/people.csv` with the actual 36 people
-   (same columns; set `is_admin=1` for S3 and the developer). On the server:
-   `flask seed-people seed/people.csv` — skips already-seeded usernames.
+1. **Real roster.** Done, and the instructions moved: `seed/people.csv` IS the
+   real 36-person roster, and the live host is seeded from a copy of the dev
+   DB rather than from CSV (decision (gg), 2026-08-02), so it carries the
+   movement data with the people. DEPLOY.md's "Replicate the dev DB onto the
+   host" is the current procedure; `flask seed-people seed/people.csv` stays
+   the CSV path and skips already-seeded usernames. No `is_admin=1` is needed
+   for the command team — `policy.is_admin` grants admin by appointment (owner
+   2026-08-02), and the stored flag is only the manual grant for a Det
+   Comd/Opr such as the S3 or the developer.
 2. **Opening balances.** Export S3's current OFF/OIL tracking into a CSV
    (`username,off_days,oil_days`, halves allowed), then:
    `flask seed-balances seed/opening_balances.csv --by <s3_username>`.
@@ -57,10 +63,15 @@ Phase 3 replaces the COS's nightly hand-assembly of the three WhatsApp
 documents. The stakes are byte-level: a parade state with a wrong count is
 worse than none, so this cutover is judged on exact output, not vibes.
 
-- **Before the parallel run:** PS/S3 key every live status (MC, courses,
-  briefings) and the regulars' absences into the app — the documents can only
-  be right about what's been keyed. Stay-out flags checked person by person
-  (People admin).
+- **Before the parallel run:** PS/S3 key every live status into the app — the
+  documents can only be right about what's been keyed. Two things are not
+  statuses (2026-07-26 revision): **ON COURSE** derives from a TP calendar
+  event labelled "Course", so key the course as an event, and BRIEFING /
+  SITE_TESTING are gone as types — MC and OTHER are the only ones left, with a
+  briefing keyed as an in-camp OTHER. The **regulars' off/leave is not keyed
+  here at all**; it lives in the external ARCTIC FOE system, so a regular with
+  nothing keyed is SUPPOSED to appear in CURRENT STRENGTH — that is not a
+  missing status. Stay-out flags checked person by person (People admin).
 - **Parallel-run nights (1–2 weeks):** each evening the COS compiles the COS
   message and roll call the old way AND opens the app's pages for the same
   dates; each morning likewise for the morning parade. The owner (or the COS)
@@ -68,9 +79,12 @@ worse than none, so this cutover is judged on exact output, not vibes.
   character** — categories, order, counts, headers. Every mismatch is either
   un-keyed data (key it) or a renderer bug (report it; the golden tests pin the
   format, so a mismatch is a real finding).
-- **Finalize is the record:** from day one of the parallel run, whoever copies
-  a document presses "Finalize & copy" — the snapshot archive is what settles
-  "what did we actually send that night".
+- **The sent message is the record (2026-07-26 revision):** there is no
+  "Finalize & copy" button and no snapshot archive — a parade document is
+  re-derived from live data on every request, so Copy is a plain copy. What
+  settles "what did we actually send that night" is the WhatsApp message
+  itself; re-opening an old date shows today's answer for it, not the text
+  that was sent.
 - **S4 counter:** S4 compares the month grid's expected number — the day count
   behind it, from each day's morning parade — against their own count for the
   same days (every NSF plus the regulars ticked as counted for meal indents in
@@ -128,8 +142,10 @@ content, so the pre-run setup matters most.
   `/ro` (it defaults to tomorrow), pastes the day's messages/QOTD blob, keys
   the day's timeline items, and compares the app's text against the real RO
   they assemble the old way — character by character. Duty Personnel must
-  match the confirmed roster; a `[NO CONFIRMED DUTY]` placeholder means the
-  month wasn't confirmed, not a bug. Mismatches are un-keyed data (key it)
+  match the duty roster, whose rows are live the moment they are written
+  (owner 2026-07-27); the `[NO CONFIRMED DUTY]` placeholder means no duty row
+  exists for that date — an unfilled slot or a blocked day — not a missing
+  confirmation step. Mismatches are un-keyed data (key it)
   or a renderer bug (report it — the golden pins the format).
 - **Known normalizations (owner decisions, not bugs):** uniform 12-➖
   separators, no trailing spaces, and the TBC block always renders last.
@@ -158,6 +174,15 @@ built in parallel.
   each is an approved absence, an out-of-camp status, or a live overseas
   declaration overlapping the period. "No known conflict" means exactly that
   and no more: the app cannot see undeclared travel.
+- **Second pair of eyes before it is pasted (decision (ff), 2026-08-02):** the
+  S3 builds the period as a DRAFT, presses **Confirm** (→ PENDING), and any PC
+  opens `/manning/queue` and **Approves** it, or sends it back with a required
+  remark — which returns the period to DRAFT for rework and re-confirm.
+  Whoever confirmed cannot also decide. Approval gates **nothing**: the
+  document, Copy, the leave-detail manning panel and the RO all work at every
+  status, and editing a period never changes its status. It is the agreed flow
+  all the same — the text goes to WhatsApp after a PC has approved it, not
+  before.
 - **Hard cutover:** from the next period on, the app's text IS the list
   (paste, don't retype). There is no manning snapshot by design — the pasted
   WhatsApp message remains the archival record.
