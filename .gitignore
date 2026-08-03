@@ -10,3 +10,6 @@ __pycache__/
 .pytest_cache/
 .idea/
 .vscode/
+# Deploy build artifact (DEPLOY.md regenerates it) and local screen recordings.
+delta-app.tar.gz
+recordings/
